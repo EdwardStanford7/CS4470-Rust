@@ -1,4 +1,4 @@
-mod ast_nodes;
+mod ast;
 mod lexer;
 mod parser;
 
@@ -70,4 +70,25 @@ fn main() {
     }
 
     // Parse the tokens
+    let commands = match parser::parse(&tokens, &args.file_name) {
+        Ok(ast) => ast,
+        Err(e) => {
+            println!("Compilation failed: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Print AST if in parse mode
+    if args.mode == CompilationMode::Parse {
+        let stdout = io::stdout();
+        let mut buffer = io::BufWriter::new(stdout.lock());
+
+        for command in &commands {
+            writeln!(buffer, "{}", command).unwrap();
+        }
+
+        writeln!(buffer, "Compilation succeeded, parsing complete.").unwrap();
+        buffer.flush().unwrap();
+        std::process::exit(0);
+    }
 }

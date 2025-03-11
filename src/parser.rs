@@ -1,101 +1,74 @@
-// use crate::ast_nodes::*;
-// use crate::lexer::Token;
+use crate::ast::{ASTNode, ASTVisitor, Binop, Command, Expression, LValue, Statement, Type, Unop};
+use crate::lexer::{Position, Token};
+use core::fmt;
+use std::fmt::Display;
+use std::iter::Peekable;
+use std::slice::Iter;
 
-// pub struct Parser<'a> {
-//     tokens: &'a [Token<'a>],
-//     current: usize,
-// }
+pub struct ParserError {
+    message: String,
+    file: String,
+    line: usize,
+    column: usize,
+}
 
-// impl<'a> Parser<'a> {
-//     pub fn new(tokens: &'a [Token]) -> Self {
-//         Self { tokens, current: 0 }
-//     }
+impl Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Parse error: {}:{}:{}: {}",
+            self.file, self.line, self.column, self.message
+        )
+    }
+}
 
-//     pub fn parse(&mut self) -> Result<Vec<Command<'a>>, String> {
-//         let mut commands = Vec::new();
+pub struct Parser<'a> {
+    tokens: Peekable<Iter<'a, Token<'a>>>,
+    file_name: &'a str,
+    index: usize,
+}
 
-//         while !self.is_at_end() {
-//             let command = self.parse_command()?;
-//             commands.push(command);
-//         }
+impl<'a> Parser<'a> {
+    pub fn new(tokens: &'a Vec<Token<'a>>, file_name: &'a str) -> Self {
+        Self {
+            tokens: tokens.iter().peekable(),
+            file_name,
+            index: 0,
+        }
+    }
 
-//         Ok(commands)
-//     }
+    pub fn parse(&mut self) -> Result<Vec<Command<'a>>, ParserError> {
+        let mut commands = Vec::new();
 
-//     fn parse_command(&mut self) -> Result<Command<'a>, String> {
-//         let token = self.advance();
+        while let Some(token) = self.tokens.peek() {
+            match token {
+                Token::Let { .. } => commands.push(self.parse_let_command()),
+                Token::Read { .. } => commands.push(self.parse_read_command()),
+                Token::Write { .. } => commands.push(self.parse_write_command()),
+                Token::Assert { .. } => commands.push(self.parse_assert_command()),
+                Token::Print { .. } => commands.push(self.parse_print_command()),
+                Token::Show { .. } => commands.push(self.parse_show_command()),
+                Token::Time { .. } => commands.push(self.parse_time_command()),
+                Token::Struct { .. } => commands.push(self.parse_struct_command()),
+                _ => {
+                    return Err(ParserError {
+                        message: "Unexpected token".to_string(),
+                        file: "unknown".to_string(),
+                        line: 0,
+                        column: 0,
+                    });
+                }
+            }
+        }
+        Ok(commands)
+    }
+}
 
-//         match &token.token_type() {
-//             TokenType::Read => {
-//                 let ident_token = self.advance();
-//                 match &ident_token.token_type() {
-//                     TokenType::Read => Ok(Command::Read {
-//                         position: token.position(),
-//                         destination: LValue::Variable(ident_token),
-//                         source: Expression::Variable(ident_token),
-//                     }),
-//                     _ => Err("Expected identifier after 'read'".to_string()),
-//                 }
-//             }
-//             _ => Err("Unexpected token while parsing command".to_string()),
-//         }
-//     }
-
-//     fn is_at_end(&self) -> bool {
-//         self.current >= self.tokens.len()
-//     }
-
-//     fn advance(&mut self) -> &Token {
-//         let token = &self.tokens[self.current];
-//         self.current += 1;
-//         token
-//     }
-// }
-
-// pub trait ASTVisitor<'a> {
-//     fn visit_command(&mut self, command: &Command<'a>);
-//     fn visit_lvalue(&mut self, lval: &LValue<'a>);
-//     fn visit_statement(&mut self, stmt: &Statement<'a>);
-//     fn visit_expression(&mut self, expr: &Expression<'a>);
-// }
-
-// pub struct RecursiveVisitor;
-
-// impl<'a> ASTVisitor<'a> for RecursiveVisitor {
-//     fn visit_command(&mut self, command: &Command<'a>) {
-//         match command {
-//             Command::Read { destination, .. } => {
-//                 self.visit_lvalue(destination);
-//             }
-//         }
-//     }
-
-//     fn visit_lvalue(&mut self, lval: &LValue<'a>) {
-//         match lval {
-//             LValue::Variable(name) => {
-//                 println!("Visiting variable: {}", name);
-//             }
-//         }
-//     }
-
-//     fn visit_statement(&mut self, stmt: &Statement<'a>) {
-//         match stmt {
-//             Statement::Command(cmd) => self.visit_command(cmd),
-//             Statement::Empty => {}
-//         }
-//     }
-
-//     fn visit_expression(&mut self, expr: &Expression<'a>) {
-//         match expr {
-//             Expression::Variable(name) => {
-//                 println!("Visiting expr var: {}", name);
-//             }
-//         }
-//     }
-// }
-
-// impl<'a> Command<'a> {
-//     pub fn accept<V: ASTVisitor<'a>>(&self, visitor: &mut V) {
-//         visitor.visit_command(self);
-//     }
-// }
+// Example usage
+pub fn parse<'a>(
+    tokens: &'a Vec<Token<'a>>,
+    file_name: &'a str,
+) -> Result<Vec<Command<'a>>, ParserError> {
+    let mut parser = Parser::new(tokens, file_name);
+    parser.parse()
+}
