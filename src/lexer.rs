@@ -2,14 +2,14 @@ use core::fmt;
 use std::fmt::Display;
 
 #[derive(PartialEq, Debug)]
-pub enum TokenType {
-    // Values
-    IntVal(String),
-    FloatVal(String),
-    Variable(String),
-    StringLiteral(String),
+pub enum TokenType<'a> {
+    // Values - using &str references instead of owned Strings
+    IntVal(&'a str),
+    FloatVal(&'a str),
+    Variable(&'a str),
+    StringLiteral(&'a str),
 
-    // Keywords
+    // Keywords - these don't need to change as they're fixed values
     Array,
     Assert,
     Bool,
@@ -36,8 +36,8 @@ pub enum TokenType {
     True,
     False,
 
-    // Operators
-    Op(String),
+    // Operators - using &str references
+    Op(&'a str),
     Equals,
 
     // Delimiters
@@ -56,79 +56,77 @@ pub enum TokenType {
     EndOfFile,
 }
 
-impl Display for TokenType {
+impl<'a> Display for TokenType<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let token = match self {
-            TokenType::IntVal(val) => format!("INTVAL '{}'", val),
-            TokenType::FloatVal(val) => format!("FLOATVAL '{}'", val),
-            TokenType::Variable(val) => format!("VARIABLE '{}'", val),
-            TokenType::StringLiteral(val) => format!("STRING '{}'", val),
-            TokenType::Array => "ARRAY 'array'".to_string(),
-            TokenType::Assert => "ASSERT 'assert'".to_string(),
-            TokenType::Bool => "BOOL 'bool'".to_string(),
-            TokenType::Else => "ELSE 'else'".to_string(),
-            TokenType::Fn => "FN 'fn'".to_string(),
-            TokenType::If => "IF 'if'".to_string(),
-            TokenType::Image => "IMAGE 'image'".to_string(),
-            TokenType::Int => "INT 'int'".to_string(),
-            TokenType::Float => "FLOAT 'float'".to_string(),
-            TokenType::Let => "LET 'let'".to_string(),
-            TokenType::Print => "PRINT 'print'".to_string(),
-            TokenType::Read => "READ 'read'".to_string(),
-            TokenType::Return => "RETURN 'return'".to_string(),
-            TokenType::Show => "SHOW 'show'".to_string(),
-            TokenType::Struct => "STRUCT 'struct'".to_string(),
-            TokenType::Sum => "SUM 'sum'".to_string(),
-            TokenType::Then => "THEN 'then'".to_string(),
-            TokenType::Time => "TIME 'time'".to_string(),
-            TokenType::To => "TO 'to'".to_string(),
-            TokenType::Void => "VOID 'void'".to_string(),
-            TokenType::Write => "WRITE 'write'".to_string(),
-            TokenType::True => "TRUE 'true'".to_string(),
-            TokenType::False => "FALSE 'false'".to_string(),
-            TokenType::Op(val) => format!("OP '{}'", val),
-            TokenType::Equals => "EQUALS '='".to_string(),
-            TokenType::LParen => "LPAREN '('".to_string(),
-            TokenType::RParen => "RPAREN ')'".to_string(),
-            TokenType::LCurly => "LCURLY '{'".to_string(),
-            TokenType::RCurly => "RCURLY '}'".to_string(),
-            TokenType::LSquare => "LSQUARE '['".to_string(),
-            TokenType::RSquare => "RSQUARE ']'".to_string(),
-            TokenType::Comma => "COMMA ','".to_string(),
-            TokenType::Colon => "COLON ':'".to_string(),
-            TokenType::Dot => "DOT '.'".to_string(),
-            TokenType::Newline => "NEWLINE".to_string(),
-            TokenType::EndOfFile => "END_OF_FILE".to_string(),
-        };
-
-        write!(f, "{}", token)
+        match self {
+            TokenType::IntVal(val) => write!(f, "INTVAL '{}'", val),
+            TokenType::FloatVal(val) => write!(f, "FLOATVAL '{}'", val),
+            TokenType::Variable(val) => write!(f, "VARIABLE '{}'", val),
+            TokenType::StringLiteral(val) => write!(f, "STRING '{}'", val),
+            TokenType::Array => write!(f, "ARRAY 'array'"),
+            TokenType::Assert => write!(f, "ASSERT 'assert'"),
+            TokenType::Bool => write!(f, "BOOL 'bool'"),
+            TokenType::Else => write!(f, "ELSE 'else'"),
+            TokenType::Fn => write!(f, "FN 'fn'"),
+            TokenType::If => write!(f, "IF 'if'"),
+            TokenType::Image => write!(f, "IMAGE 'image'"),
+            TokenType::Int => write!(f, "INT 'int'"),
+            TokenType::Float => write!(f, "FLOAT 'float'"),
+            TokenType::Let => write!(f, "LET 'let'"),
+            TokenType::Print => write!(f, "PRINT 'print'"),
+            TokenType::Read => write!(f, "READ 'read'"),
+            TokenType::Return => write!(f, "RETURN 'return'"),
+            TokenType::Show => write!(f, "SHOW 'show'"),
+            TokenType::Struct => write!(f, "STRUCT 'struct'"),
+            TokenType::Sum => write!(f, "SUM 'sum'"),
+            TokenType::Then => write!(f, "THEN 'then'"),
+            TokenType::Time => write!(f, "TIME 'time'"),
+            TokenType::To => write!(f, "TO 'to'"),
+            TokenType::Void => write!(f, "VOID 'void'"),
+            TokenType::Write => write!(f, "WRITE 'write'"),
+            TokenType::True => write!(f, "TRUE 'true'"),
+            TokenType::False => write!(f, "FALSE 'false'"),
+            TokenType::Op(val) => write!(f, "OP '{}'", val),
+            TokenType::Equals => write!(f, "EQUALS '='"),
+            TokenType::LParen => write!(f, "LPAREN '('"),
+            TokenType::RParen => write!(f, "RPAREN ')'"),
+            TokenType::LCurly => write!(f, "LCURLY '{{'"),
+            TokenType::RCurly => write!(f, "RCURLY '}}'"),
+            TokenType::LSquare => write!(f, "LSQUARE '['"),
+            TokenType::RSquare => write!(f, "RSQUARE ']'"),
+            TokenType::Comma => write!(f, "COMMA ','"),
+            TokenType::Colon => write!(f, "COLON ':'"),
+            TokenType::Dot => write!(f, "DOT '.'"),
+            TokenType::Newline => write!(f, "NEWLINE"),
+            TokenType::EndOfFile => write!(f, "END_OF_FILE"),
+        }
     }
 }
 
 #[derive(Debug)]
-pub struct Token {
-    token_type: TokenType,
+pub struct Token<'a> {
+    token_type: TokenType<'a>,
     line: usize,
     column: usize,
 }
 
-// impl Token {
-//     pub fn token_type(&self) -> &TokenType {
-//         &self.token_type
-//     }
+impl<'a> Token<'a> {
+    pub fn token_type(&self) -> &TokenType<'a> {
+        &self.token_type
+    }
 
-//     pub fn line(&self) -> usize {
-//         self.line
-//     }
+    pub fn line(&self) -> usize {
+        self.line
+    }
 
-//     pub fn column(&self) -> usize {
-//         self.column
-//     }
-// }
+    pub fn column(&self) -> usize {
+        self.column
+    }
+}
 
-impl Display for Token {
+impl<'a> Display for Token<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.token_type,)
+        write!(f, "{}", self.token_type)
     }
 }
 
@@ -149,485 +147,420 @@ impl Display for LexerError {
     }
 }
 
-pub fn lex(program: &str, file_name: &str) -> Result<Vec<Token>, LexerError> {
-    let mut tokens: Vec<Token> = vec![];
-    let mut position = 0;
-    let mut line = 1;
-    let mut column = 0;
-
-    loop {
-        if position >= program.len() {
-            break;
-        }
-
-        let character = program.chars().nth(position).unwrap();
-        match character {
-            c if c.is_alphabetic() => {
-                // Handle keywords and variables
-                tokens.push(lex_keyword_variable(
-                    program,
-                    &mut position,
-                    line,
-                    &mut column,
-                ));
-            }
-            c if c.is_numeric() => {
-                // Handle numbers
-                tokens.push(lex_number(program, &mut position, &line, &mut column));
-            }
-            '\"' => {
-                // Handle string literals
-                let token = lex_string(program, file_name, &mut position, &line, &mut column);
-                match token {
-                    Ok(token) => tokens.push(token),
-                    Err(e) => return Err(e),
-                }
-            }
-            '/' => {
-                match program.chars().nth(position + 1).unwrap() {
-                    '/' | '*' => {
-                        // Handle comments
-                        lex_comment(program, file_name, &mut position, &mut line, &mut column)?
-                    }
-                    _ => {
-                        tokens.push(Token {
-                            token_type: TokenType::Op("/".to_string()),
-                            line,
-                            column,
-                        });
-                        position += 1;
-                        column += 1;
-                    }
-                }
-            }
-            '.' => {
-                // Handle dot operator (could be float or struct access)
-                tokens.push(lex_dot(program, &mut position, &line, &mut column));
-            }
-            '\\' => {
-                // Line continuation
-                position += 2;
-                line += 1;
-                column = 0;
-            }
-            '\n' => {
-                // Add newline token if the last token is not a newline
-                if tokens.is_empty() || tokens.last().unwrap().token_type != TokenType::Newline {
-                    tokens.push(Token {
-                        token_type: TokenType::Newline,
-                        line,
-                        column,
-                    });
-                }
-
-                // Skip newline character
-                position += 1;
-                line += 1;
-                column = 0;
-            }
-            ' ' => {
-                // Whitespace
-                position += 1;
-                column += 1;
-            }
-            c if is_valid(c) => {
-                // Handle other characters (operators, delimiters)
-                let token =
-                    lex_punctuation_operator(program, file_name, &mut position, &line, &mut column);
-                match token {
-                    Ok(token) => tokens.push(token),
-                    Err(e) => return Err(e),
-                }
-            }
-            _ => {
-                // Handle invalid characters
-                return Err(LexerError {
-                    message: "invalid character".to_string(),
-                    file: file_name.to_string(),
-                    line,
-                    column,
-                });
-            }
-        }
-    }
-
-    tokens.push(Token {
-        token_type: TokenType::EndOfFile,
-        line,
-        column,
-    });
-
-    Ok(tokens)
-}
-
-// TODO, is this necessary since utf8 invalid is checked when reading in file?
-fn is_valid(c: char) -> bool {
-    32 <= c as u8 && c as u8 <= 126
-}
-
-fn lex_keyword_variable(
-    program: &str,
-    position: &mut usize,
+/// Represents the state of the lexer and provides helper methods
+struct Lexer<'a> {
+    program: &'a str,
+    bytes: &'a [u8],
+    file_name: &'a str,
+    len: usize,
+    position: usize,
     line: usize,
-    column: &mut usize,
-) -> Token {
-    let start = *position;
-    while *position < program.len()
-        && (program.chars().nth(*position).unwrap().is_alphabetic()
-            || program.chars().nth(*position).unwrap().is_numeric()
-            || program.chars().nth(*position).unwrap() == '_')
-    {
-        *position += 1;
-        *column += 1;
-    }
-
-    let column = *column;
-
-    let substr = &program[start..*position];
-    match substr {
-        "array" => Token {
-            token_type: TokenType::Array,
-            line,
-            column,
-        },
-        "assert" => Token {
-            token_type: TokenType::Assert,
-            line,
-            column,
-        },
-        "bool" => Token {
-            token_type: TokenType::Bool,
-            line,
-            column,
-        },
-        "else" => Token {
-            token_type: TokenType::Else,
-            line,
-            column,
-        },
-        "false" => Token {
-            token_type: TokenType::False,
-            line,
-            column,
-        },
-        "float" => Token {
-            token_type: TokenType::Float,
-            line,
-            column,
-        },
-        "fn" => Token {
-            token_type: TokenType::Fn,
-            line,
-            column,
-        },
-        "if" => Token {
-            token_type: TokenType::If,
-            line,
-            column,
-        },
-        "image" => Token {
-            token_type: TokenType::Image,
-            line,
-            column,
-        },
-        "int" => Token {
-            token_type: TokenType::Int,
-            line,
-            column,
-        },
-        "let" => Token {
-            token_type: TokenType::Let,
-            line,
-            column,
-        },
-        "print" => Token {
-            token_type: TokenType::Print,
-            line,
-            column,
-        },
-        "read" => Token {
-            token_type: TokenType::Read,
-            line,
-            column,
-        },
-        "return" => Token {
-            token_type: TokenType::Return,
-            line,
-            column,
-        },
-        "show" => Token {
-            token_type: TokenType::Show,
-            line,
-            column,
-        },
-        "struct" => Token {
-            token_type: TokenType::Struct,
-            line,
-            column,
-        },
-        "sum" => Token {
-            token_type: TokenType::Sum,
-            line,
-            column,
-        },
-        "then" => Token {
-            token_type: TokenType::Then,
-            line,
-            column,
-        },
-        "time" => Token {
-            token_type: TokenType::Time,
-            line,
-            column,
-        },
-        "to" => Token {
-            token_type: TokenType::To,
-            line,
-            column,
-        },
-        "true" => Token {
-            token_type: TokenType::True,
-            line,
-            column,
-        },
-        "void" => Token {
-            token_type: TokenType::Void,
-            line,
-            column,
-        },
-        "write" => Token {
-            token_type: TokenType::Write,
-            line,
-            column,
-        },
-        _ => Token {
-            token_type: TokenType::Variable(substr.to_string()),
-            line,
-            column,
-        },
-    }
+    column: usize,
 }
 
-fn lex_number(program: &str, position: &mut usize, line: &usize, column: &mut usize) -> Token {
-    let start = *position;
-    let mut has_dot = false;
+impl<'a> Lexer<'a> {
+    /// Creates a new lexer for the given program
+    fn new(program: &'a str, file_name: &'a str) -> Self {
+        Lexer {
+            program,
+            bytes: program.as_bytes(),
+            file_name,
+            len: program.len(),
+            position: 0,
+            line: 1,
+            column: 0,
+        }
+    }
 
-    while let Some(c) = program.chars().nth(*position) {
-        if c.is_numeric() {
-            *position += 1;
-            *column += 1;
-        } else if c == '.' && !has_dot {
-            has_dot = true;
-            *position += 1;
-            *column += 1;
+    /// Check if we've reached the end of input
+    fn at_end(&self) -> bool {
+        self.position >= self.len
+    }
+
+    /// Get the current byte
+    fn current_byte(&self) -> u8 {
+        if self.position < self.len {
+            self.bytes[self.position]
         } else {
-            break;
+            0
         }
     }
 
-    let substr = &program[start..*position];
-    if has_dot {
-        Token {
-            token_type: TokenType::FloatVal(substr.to_string()),
-            line: *line,
-            column: *column,
-        }
-    } else {
-        Token {
-            token_type: TokenType::IntVal(substr.to_string()),
-            line: *line,
-            column: *column,
+    /// Peek at the next byte
+    fn peek_byte(&self) -> u8 {
+        if self.position + 1 < self.len {
+            self.bytes[self.position + 1]
+        } else {
+            0
         }
     }
-}
 
-fn lex_dot(program: &str, position: &mut usize, line: &usize, column: &mut usize) -> Token {
-    *position += 1;
-    *column += 1;
+    /// Advance position by one character
+    fn advance(&mut self) {
+        self.position += 1;
+        self.column += 1;
+    }
 
-    if program.chars().nth(*position).unwrap().is_numeric() {
-        let start = *position - 1;
-        while let Some(c) = program.chars().nth(*position) {
-            if c.is_numeric() {
-                *position += 1;
-                *column += 1;
-            } else {
-                break;
-            }
+    /// Advance the lexer after encountering a newline
+    fn advance_newline(&mut self) {
+        self.position += 1;
+        self.line += 1;
+        self.column = 0;
+    }
+
+    /// Create an error at the current position
+    fn error(&self, message: &str) -> LexerError {
+        LexerError {
+            message: message.to_string(),
+            file: self.file_name.to_string(),
+            line: self.line,
+            column: self.column,
+        }
+    }
+
+    /// Lex an identifier or keyword
+    fn lex_identifier(&mut self) -> Token<'a> {
+        let start = self.position;
+
+        // Consume all alphanumeric characters
+        while self.position < self.len
+            && (self.bytes[self.position].is_ascii_alphanumeric()
+                || self.bytes[self.position] == b'_')
+        {
+            self.advance();
         }
 
-        let substr = &program[start..*position];
-        return Token {
-            token_type: TokenType::FloatVal(substr.to_string()),
-            line: *line,
-            column: *column,
+        let word = &self.program[start..self.position];
+
+        // Check if this is a keyword
+        let token_type = match word {
+            "array" => TokenType::Array,
+            "assert" => TokenType::Assert,
+            "bool" => TokenType::Bool,
+            "else" => TokenType::Else,
+            "false" => TokenType::False,
+            "float" => TokenType::Float,
+            "fn" => TokenType::Fn,
+            "if" => TokenType::If,
+            "image" => TokenType::Image,
+            "int" => TokenType::Int,
+            "let" => TokenType::Let,
+            "print" => TokenType::Print,
+            "read" => TokenType::Read,
+            "return" => TokenType::Return,
+            "show" => TokenType::Show,
+            "struct" => TokenType::Struct,
+            "sum" => TokenType::Sum,
+            "then" => TokenType::Then,
+            "time" => TokenType::Time,
+            "to" => TokenType::To,
+            "true" => TokenType::True,
+            "void" => TokenType::Void,
+            "write" => TokenType::Write,
+            _ => TokenType::Variable(word),
         };
-    };
 
-    Token {
-        token_type: TokenType::Dot,
-        line: *line,
-        column: *column,
+        Token {
+            token_type,
+            line: self.line,
+            column: self.column,
+        }
     }
-}
 
-fn lex_string(
-    program: &str,
-    file_name: &str,
-    position: &mut usize,
-    line: &usize,
-    column: &mut usize,
-) -> Result<Token, LexerError> {
-    let start = *position;
+    /// Lex a number (integer or float)
+    fn lex_number(&mut self) -> Token<'a> {
+        let start = self.position;
+        let mut has_dot = false;
 
-    *position += 1;
-    *column += 1;
-    loop {
-        let c = program.chars().nth(*position).unwrap();
-        if c == '"' {
-            break;
-        }
-        if !is_valid(c) {
-            return Err(LexerError {
-                message: "invalid character".to_string(),
-                file: file_name.to_string(),
-                line: *line,
-                column: *column,
-            });
-        }
-        *position += 1;
-        *column += 1;
-    }
-    *position += 1;
-    *column += 1;
-
-    let substr = &program[start..*position];
-
-    Ok(Token {
-        token_type: TokenType::StringLiteral(substr.to_string()),
-        line: *line,
-        column: *column,
-    })
-}
-
-fn lex_comment(
-    program: &str,
-    file_name: &str,
-    position: &mut usize,
-    line: &mut usize,
-    column: &mut usize,
-) -> Result<(), LexerError> {
-    if program.chars().nth(*position + 1).ok_or(LexerError {
-        message: "/ is not a valid token'".to_string(),
-        file: file_name.to_string(),
-        line: *line,
-        column: *column,
-    })? == '/'
-    {
-        // Inline comment, go until new line.
-        while let Some(c) = program.chars().nth(*position) {
-            if c == '\n' {
-                break;
-            }
-            if !is_valid(c) {
-                return Err(LexerError {
-                    message: "invalid character".to_string(),
-                    file: file_name.to_string(),
-                    line: *line,
-                    column: *column,
-                });
-            }
-            *position += 1;
-            *column += 1;
-        }
-    } else if program.chars().nth(*position + 1).ok_or(LexerError {
-        message: "Could not find '*/'".to_string(),
-        file: file_name.to_string(),
-        line: *line,
-        column: *column,
-    })? == '*'
-    {
-        // Block comment: go until finding "*/"
-        *position += 2;
-        *column += 2;
-        while *position < program.len() {
-            let c = program.chars().nth(*position).ok_or(LexerError {
-                message: "Could not find '*/'".to_string(),
-                file: file_name.to_string(),
-                line: *line,
-                column: *column,
-            })?;
-            if c == '*' && program.chars().nth(*position + 1).unwrap_or('\0') == '/' {
-                *position += 2;
-                *column += 2;
-                break;
-            }
-            if !(is_valid(c) || c == '\n') {
-                return Err(LexerError {
-                    message: "invalid character".to_string(),
-                    file: file_name.to_string(),
-                    line: *line,
-                    column: *column,
-                });
-            }
-            if c == '\n' {
-                *line += 1;
-                *column = 0;
+        // Consume all numeric characters
+        while self.position < self.len {
+            if self.bytes[self.position].is_ascii_digit() {
+                self.advance();
+            } else if self.bytes[self.position] == b'.' && !has_dot {
+                has_dot = true;
+                self.advance();
             } else {
-                *column += 1;
+                break;
             }
-            *position += 1;
+        }
+
+        let number = &self.program[start..self.position];
+        let token_type = if has_dot {
+            TokenType::FloatVal(number)
+        } else {
+            TokenType::IntVal(number)
+        };
+
+        Token {
+            token_type,
+            line: self.line,
+            column: self.column,
         }
     }
-    Ok(())
+
+    /// Lex a dot (could be a float or struct access)
+    fn lex_dot(&mut self) -> Token<'a> {
+        let start = self.position;
+        self.advance(); // Consume the dot
+
+        if self.position < self.len && self.bytes[self.position].is_ascii_digit() {
+            // It's a float starting with .
+            while self.position < self.len && self.bytes[self.position].is_ascii_digit() {
+                self.advance();
+            }
+
+            let float_val = &self.program[start..self.position];
+            Token {
+                token_type: TokenType::FloatVal(float_val),
+                line: self.line,
+                column: self.column,
+            }
+        } else {
+            // It's just a dot
+            Token {
+                token_type: TokenType::Dot,
+                line: self.line,
+                column: self.column - 1,
+            }
+        }
+    }
+
+    /// Lex a string literal
+    fn lex_string(&mut self) -> Result<Token<'a>, LexerError> {
+        let start = self.position;
+        self.advance(); // Skip opening quote
+
+        // Find the closing quote
+        while self.position < self.len && self.bytes[self.position] != b'"' {
+            if !is_valid(self.bytes[self.position] as char) {
+                return Err(self.error("invalid character in string"));
+            }
+            self.advance();
+        }
+
+        if self.position >= self.len {
+            return Err(self.error("unterminated string literal"));
+        }
+
+        self.advance(); // Skip closing quote
+
+        let string_literal = &self.program[start..self.position];
+        Ok(Token {
+            token_type: TokenType::StringLiteral(string_literal),
+            line: self.line,
+            column: self.column,
+        })
+    }
+
+    /// Lex a comment (line or block)
+    fn lex_comment(&mut self) -> Result<(), LexerError> {
+        if self.peek_byte() == b'/' {
+            // Line comment
+            self.position += 2; // Skip //
+            self.column += 2;
+
+            while self.position < self.len && self.bytes[self.position] != b'\n' {
+                if !is_valid(self.bytes[self.position] as char) {
+                    return Err(self.error("invalid character in comment"));
+                }
+                self.advance();
+            }
+            Ok(())
+        } else {
+            // Block comment
+            self.position += 2; // Skip /*
+            self.column += 2;
+
+            let mut found_end = false;
+            while self.position < self.len && !found_end {
+                if self.bytes[self.position] == b'*'
+                    && self.position + 1 < self.len
+                    && self.bytes[self.position + 1] == b'/'
+                {
+                    self.position += 2; // Skip */
+                    self.column += 2;
+                    found_end = true;
+                } else if self.bytes[self.position] == b'\n' {
+                    self.advance_newline();
+                } else {
+                    if !is_valid(self.bytes[self.position] as char)
+                        && self.bytes[self.position] != b'\n'
+                    {
+                        return Err(self.error("invalid character in block comment"));
+                    }
+                    self.advance();
+                }
+            }
+
+            if !found_end {
+                return Err(self.error("unterminated block comment"));
+            }
+            Ok(())
+        }
+    }
+
+    /// Lex operators and delimiters
+    fn lex_operator(&mut self) -> Token<'a> {
+        // Check for two-character operators
+        if self.position + 1 < self.len {
+            let potential_op = &self.program[self.position..self.position + 2];
+
+            match potential_op {
+                "==" | "<=" | ">=" | "!=" | "&&" | "||" => {
+                    let token = Token {
+                        token_type: TokenType::Op(potential_op),
+                        line: self.line,
+                        column: self.column,
+                    };
+                    self.position += 2;
+                    self.column += 2;
+                    return token;
+                }
+                _ => {}
+            }
+        }
+
+        // Single-character tokens
+        let byte = self.bytes[self.position];
+        let token_type = match byte {
+            b'(' => TokenType::LParen,
+            b')' => TokenType::RParen,
+            b'{' => TokenType::LCurly,
+            b'}' => TokenType::RCurly,
+            b'[' => TokenType::LSquare,
+            b']' => TokenType::RSquare,
+            b',' => TokenType::Comma,
+            b':' => TokenType::Colon,
+            b'=' => TokenType::Equals,
+            _ => TokenType::Op(&self.program[self.position..self.position + 1]),
+        };
+
+        let token = Token {
+            token_type,
+            line: self.line,
+            column: self.column,
+        };
+
+        self.advance();
+        token
+    }
+
+    /// Run the lexer to produce tokens
+    fn lex(&mut self) -> Result<Vec<Token<'a>>, LexerError> {
+        let mut tokens: Vec<Token<'a>> = Vec::with_capacity(self.program.len() / 4);
+
+        while !self.at_end() {
+            let byte = self.current_byte();
+
+            match byte {
+                // Alphabetic characters (keywords or variables)
+                b'a'..=b'z' | b'A'..=b'Z' => {
+                    tokens.push(self.lex_identifier());
+                }
+
+                // Number literals
+                b'0'..=b'9' => {
+                    tokens.push(self.lex_number());
+                }
+
+                // Dot (could be a float or struct access)
+                b'.' => {
+                    tokens.push(self.lex_dot());
+                }
+
+                // String literals
+                b'"' => {
+                    tokens.push(self.lex_string()?);
+                }
+
+                // Comments or division
+                b'/' => {
+                    if self.position + 1 < self.len {
+                        match self.peek_byte() {
+                            b'/' | b'*' => {
+                                self.lex_comment()?;
+                            }
+                            _ => {
+                                tokens.push(Token {
+                                    token_type: TokenType::Op("/"),
+                                    line: self.line,
+                                    column: self.column,
+                                });
+                                self.advance();
+                            }
+                        }
+                    } else {
+                        // Division at end of input
+                        tokens.push(Token {
+                            token_type: TokenType::Op("/"),
+                            line: self.line,
+                            column: self.column,
+                        });
+                        self.advance();
+                    }
+                }
+
+                // Line continuation
+                b'\\' => {
+                    if self.position + 1 < self.len && self.peek_byte() == b'\n' {
+                        self.position += 2;
+                        self.line += 1;
+                        self.column = 0;
+                    } else {
+                        return Err(self.error("invalid line continuation"));
+                    }
+                }
+
+                // Newline
+                b'\n' => {
+                    // Add newline token if the last token is not a newline
+                    if tokens.is_empty() || tokens.last().unwrap().token_type != TokenType::Newline
+                    {
+                        tokens.push(Token {
+                            token_type: TokenType::Newline,
+                            line: self.line,
+                            column: self.column,
+                        });
+                    }
+
+                    self.advance_newline();
+                }
+
+                // Whitespace
+                b' ' | b'\t' | b'\r' => {
+                    self.advance();
+                }
+
+                // Operators and delimiters
+                _ if is_valid(byte as char) => {
+                    tokens.push(self.lex_operator());
+                }
+
+                // Invalid character
+                _ => {
+                    return Err(self.error("invalid character"));
+                }
+            }
+        }
+
+        // Add EOF token
+        tokens.push(Token {
+            token_type: TokenType::EndOfFile,
+            line: self.line,
+            column: self.column,
+        });
+
+        Ok(tokens)
+    }
 }
 
-fn lex_punctuation_operator(
-    program: &str,
-    file_name: &str,
-    position: &mut usize,
-    line: &usize,
-    column: &mut usize,
-) -> Result<Token, LexerError> {
-    let character = program.chars().nth(*position).unwrap();
-    let double_char_operator = &program[*position..*position + 2];
+// Helper function to check if a character is valid
+fn is_valid(c: char) -> bool {
+    (c as u32) >= 32 && (c as u32) <= 126
+}
 
-    if !is_valid(character) {
-        return Err(LexerError {
-            message: "invalid character".to_string(),
-            file: file_name.to_string(),
-            line: *line,
-            column: *column,
-        });
-    }
-
-    let token = match double_char_operator {
-        "==" | "<=" | ">=" | "!=" | "&&" | "||" => {
-            *position += 2;
-            *column += 2;
-            TokenType::Op(double_char_operator.to_string())
-        }
-        _ => {
-            *position += 1;
-            *column += 1;
-            match character {
-                '(' => TokenType::LParen,
-                ')' => TokenType::RParen,
-                '{' => TokenType::LCurly,
-                '}' => TokenType::RCurly,
-                '[' => TokenType::LSquare,
-                ']' => TokenType::RSquare,
-                ',' => TokenType::Comma,
-                ':' => TokenType::Colon,
-                '=' => TokenType::Equals,
-                _ => TokenType::Op(character.to_string()),
-            }
-        }
-    };
-
-    Ok(Token {
-        token_type: token,
-        line: *line,
-        column: *column,
-    })
+// Optimized lexer implementation - main entry point
+pub fn lex<'a>(program: &'a str, file_name: &'a str) -> Result<Vec<Token<'a>>, LexerError> {
+    let mut lexer = Lexer::new(program, file_name);
+    lexer.lex()
 }

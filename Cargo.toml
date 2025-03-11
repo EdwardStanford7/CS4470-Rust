@@ -1,5 +1,5 @@
 [package]
-name = "CS4470-Rust"
+name = "myjplc"
 version = "0.1.0"
 edition = "2021"
 

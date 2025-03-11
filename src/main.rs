@@ -2,6 +2,7 @@ mod lexer;
 
 use clap::Parser;
 use clap::ValueEnum;
+use std::io::{self, Write};
 
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
 enum CompilationMode {
@@ -54,10 +55,15 @@ fn main() {
 
     // Print tokens if in lex mode
     if args.mode == CompilationMode::Lex {
-        for token in tokens {
-            println!("{}", token);
+        let stdout = io::stdout();
+        let mut buffer = io::BufWriter::new(stdout.lock());
+
+        for token in &tokens {
+            writeln!(buffer, "{}", token).unwrap();
         }
-        println!("Compilation succeeded, lexical analysis complete.");
+
+        writeln!(buffer, "Compilation succeeded, lexical analysis complete.").unwrap();
+        buffer.flush().unwrap();
         std::process::exit(0);
     }
 
