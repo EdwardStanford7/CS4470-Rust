@@ -1,4 +1,6 @@
+mod ast_nodes;
 mod lexer;
+mod parser;
 
 use clap::Parser;
 use clap::ValueEnum;
