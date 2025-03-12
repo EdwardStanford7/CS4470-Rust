@@ -54,40 +54,60 @@ impl<'a> Display for Command<'a> {
             CommandType::Read {
                 source,
                 destination,
-            } => write!(f, "(ReadCmd {} {})", source, destination),
+            } => {
+                write!(f, "(ReadCmd {} {})", source, destination)
+            }
             CommandType::Write {
                 source,
                 destination,
             } => {
-                todo!()
+                write!(f, "(WriteCmd {} {})", source, destination)
             }
             CommandType::Let { variable, rvalue } => {
-                todo!()
+                write!(f, "(LetCmd {} {})", variable, rvalue)
             }
             CommandType::Assert { condition, message } => {
-                todo!()
+                write!(f, "(AssertCmd {} {})", condition, message)
             }
             CommandType::Print { message } => {
-                todo!()
+                write!(f, "(PrintCmd {})", message)
             }
-
             CommandType::Show { expression } => {
-                todo!()
+                write!(f, "(ShowCmd {})", expression)
             }
             CommandType::Time { command } => {
-                todo!()
+                write!(f, "(TimeCmd {})", command)
             }
             CommandType::Function {
                 name,
                 parameters,
                 return_type,
                 statements,
-                has_return,
+                has_return: _,
             } => {
-                todo!()
+                let mut result = format!("(FnCmd {} ((", name);
+                let mut first = true;
+                for (var, typ) in parameters {
+                    if !first {
+                        result.push(' ');
+                    }
+                    result.push_str(&format!("{} {}", var, typ));
+                    first = false;
+                }
+                result.push_str(&format!(")) {}", return_type));
+                for stmt in statements {
+                    result.push_str(&format!(" {}", stmt));
+                }
+                result.push(')');
+                write!(f, "{}", result)
             }
             CommandType::Struct { name, elements } => {
-                todo!()
+                let mut result = format!("(StructCmd {}", name);
+                for (field, typ) in elements {
+                    result.push_str(&format!(" {} {}", field, typ));
+                }
+                result.push(')');
+                write!(f, "{}", result)
             }
         }
     }
@@ -229,7 +249,87 @@ pub enum ExpressionType<'a> {
 
 impl<'a> Display for Expression<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!();
+        match &self.node {
+            ExpressionType::Int { value } => write!(f, "(IntExpr {})", value),
+            ExpressionType::Float { value } => write!(f, "(FloatExpr {})", *value as i64),
+            ExpressionType::True => write!(f, "(TrueExpr)"),
+            ExpressionType::False => write!(f, "(FalseExpr)"),
+            ExpressionType::Void => write!(f, "(VoidExpr)"),
+            ExpressionType::Variable { name } => write!(f, "(VarExpr {})", name),
+            ExpressionType::ArrayLiteral { elements } => {
+                let mut result = String::from("(ArrayLiteralExpr");
+                for element in elements {
+                    result.push_str(&format!(" {}", element));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+            ExpressionType::ArrayIndex { array, indices } => {
+                let mut result = format!("(ArrayIndexExpr {}", array);
+                for index in indices {
+                    result.push_str(&format!(" {}", index));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+            ExpressionType::Dot {
+                struct_variable,
+                field,
+            } => {
+                write!(f, "(DotExpr {} {})", struct_variable, field)
+            }
+            ExpressionType::Call {
+                function,
+                arguments,
+            } => {
+                let mut result = format!("(CallExpr {}", function);
+                for arg in arguments {
+                    result.push_str(&format!(" {}", arg));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+            ExpressionType::StructLiteral { name, fields } => {
+                let mut result = format!("(StructLiteralExpr {}", name);
+                for field in fields {
+                    result.push_str(&format!(" {}", field));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+            ExpressionType::Unop {
+                operator,
+                expression,
+            } => {
+                write!(f, "(UnopExpr {} {})", operator, expression)
+            }
+            ExpressionType::Binop {
+                operator,
+                left,
+                right,
+            } => write!(f, "(BinopExpr {} {} {})", left, operator, right),
+            ExpressionType::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => write!(f, "(IfExpr {} {} {})", condition, then_branch, else_branch),
+            ExpressionType::ArrayLoop { range, body } => {
+                let mut result = String::from("(ArrayLoopExpr");
+                for (var, expr) in range {
+                    result.push_str(&format!(" {} {}", var, expr));
+                }
+                result.push_str(&format!(" {})", body));
+                write!(f, "{}", result)
+            }
+            ExpressionType::SumLoop { range, body } => {
+                let mut result = String::from("(SumLoopExpr");
+                for (var, expr) in range {
+                    result.push_str(&format!(" {} {}", var, expr));
+                }
+                result.push_str(&format!(" {})", body));
+                write!(f, "{}", result)
+            }
+        }
     }
 }
 
@@ -256,38 +356,48 @@ pub enum StatementType<'a> {
 
 impl<'a> Display for Statement<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!();
+        match &self.node {
+            StatementType::Let { variable, rvalue } => {
+                write!(f, "(LetStmt {} {})", variable, rvalue)
+            }
+            StatementType::Assert { condition, message } => {
+                write!(f, "(AssertStmt {} {})", condition, message)
+            }
+            StatementType::Return { value } => {
+                write!(f, "(ReturnStmt {})", value)
+            }
+        }
     }
 }
 
 // -------------------------------------------------------------------------------------------- Type Nodes -----------------------------------------------------------------------------------------------
 
 pub enum Type<'a> {
-    IntType {
+    Int {
         resolved: bool,
         value: i64,
     },
-    FloatType {
+    Float {
         resolved: bool,
         value: f64,
     },
-    BoolType {
+    Bool {
         resolved: bool,
     },
-    VoidType {
+    Void {
         resolved: bool,
     },
-    StructType {
+    Struct {
         resolved: bool,
         name: &'a str,
         value: Vec<(&'a str, Type<'a>)>,
     },
-    ArrayType {
+    Array {
         resolved: bool,
         element_type: Box<Type<'a>>,
         rank: usize,
     },
-    FunctionType {
+    Function {
         resolved: bool,
         param_types: Vec<Type<'a>>,
         return_type: Box<Type<'a>>,
@@ -322,7 +432,12 @@ impl<'a> Display for LValue<'a> {
         match &self.node {
             LValueType::Variable { name } => write!(f, "(VarLValue {})", name),
             LValueType::Array { name, indices } => {
-                todo!();
+                let mut result = format!("(ArrayLValue {}", name);
+                for idx in indices {
+                    result.push_str(&format!(" {}", idx));
+                }
+                result.push(')');
+                write!(f, "{}", result)
             }
         }
     }
