@@ -9,9 +9,9 @@ run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
 
 test:
-	$(MAKE) -C ./grader test-hw3 PART=all
+	$(MAKE) -C ./grader test-hw5 PART=all
 
-run-all: build
+run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw2 PART=all COMPILE_MODE=-l
 	$(MAKE) -C ./grader test-hw3 PART=all COMPILE_MODE=-p
 	$(MAKE) -C ./grader test-hw4 PART=all COMPILE_MODE=-p

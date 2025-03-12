@@ -1,6 +1,6 @@
 use crate::lexer::Position;
 use core::str;
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 // -------------------------------------------------------------------------------------------- Command Nodes -----------------------------------------------------------------------------------------------
 
@@ -37,14 +37,14 @@ pub enum CommandType<'a> {
     },
     Function {
         name: &'a str,
-        parameters: Vec<(LValue<'a>, Box<Type<'a>>)>,
+        parameters: Vec<(LValue<'a>, Type<'a>)>,
         return_type: Box<Type<'a>>,
         statements: Vec<Statement<'a>>,
         has_return: bool,
     },
     Struct {
         name: &'a str,
-        elements: Vec<(&'a str, Box<Type<'a>>)>,
+        elements: Vec<(&'a str, Type<'a>)>,
     },
 }
 
@@ -189,6 +189,7 @@ impl Binop {
 pub struct Expression<'a> {
     pub position: Position,
     pub node: ExpressionType<'a>,
+    pub resolved_type: Rc<RefCell<Option<Type<'a>>>>,
 }
 
 pub enum ExpressionType<'a> {
@@ -372,33 +373,25 @@ impl<'a> Display for Statement<'a> {
 
 // -------------------------------------------------------------------------------------------- Type Nodes -----------------------------------------------------------------------------------------------
 
-pub enum Type<'a> {
-    Int {
-        resolved: bool,
-        value: i64,
-    },
-    Float {
-        resolved: bool,
-        value: f64,
-    },
-    Bool {
-        resolved: bool,
-    },
-    Void {
-        resolved: bool,
-    },
+pub struct Type<'a> {
+    pub position: Position,
+    pub node: TypeValue<'a>,
+}
+
+pub enum TypeValue<'a> {
+    Int,
+    Float,
+    Bool,
+    Void,
     Struct {
-        resolved: bool,
         name: &'a str,
-        value: Vec<(&'a str, Type<'a>)>,
+        elements: Option<Vec<(&'a str, Type<'a>)>>, // Only exists once resolved.
     },
     Array {
-        resolved: bool,
         element_type: Box<Type<'a>>,
         rank: usize,
     },
     Function {
-        resolved: bool,
         param_types: Vec<Type<'a>>,
         return_type: Box<Type<'a>>,
     },
@@ -406,7 +399,20 @@ pub enum Type<'a> {
 
 impl<'a> Display for Type<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!();
+        match &self.node {
+            TypeValue::Int => write!(f, "(IntType)"),
+            TypeValue::Float => write!(f, "(FloatType)"),
+            TypeValue::Bool => write!(f, "(BoolType)"),
+            TypeValue::Void => write!(f, "(VoidType)"),
+            TypeValue::Struct { name, elements: _ } => write!(f, "(StructType {})", name),
+            TypeValue::Array { element_type, rank } => {
+                write!(f, "(ArrayType {} {})", element_type, rank)
+            }
+            TypeValue::Function {
+                param_types: _,
+                return_type,
+            } => write!(f, "{}", return_type),
+        }
     }
 }
 
