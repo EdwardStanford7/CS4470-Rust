@@ -70,7 +70,7 @@ fn main() {
     }
 
     // Parse the tokens
-    let commands = match parser::parse(&tokens, &args.file_name) {
+    let commands = match parser::parse(tokens, &args.file_name) {
         Ok(ast) => ast,
         Err(e) => {
             println!("Compilation failed: {}", e);

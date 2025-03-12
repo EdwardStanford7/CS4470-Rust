@@ -1,110 +1,127 @@
-use core::fmt;
+use core::{fmt, str};
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Position {
     pub line: usize,
     pub column: usize,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Token<'a> {
-    // Values
-    IntVal { position: Position, value: &'a str },
-    FloatVal { position: Position, value: &'a str },
-    Variable { position: Position, value: &'a str },
-    StringLiteral { position: Position, value: &'a str },
-
-    // Keywords
-    Array { position: Position },
-    Assert { position: Position },
-    Bool { position: Position },
-    Else { position: Position },
-    Fn { position: Position },
-    If { position: Position },
-    Image { position: Position },
-    Int { position: Position },
-    Float { position: Position },
-    Let { position: Position },
-    Print { position: Position },
-    Read { position: Position },
-    Return { position: Position },
-    Show { position: Position },
-    Struct { position: Position },
-    Sum { position: Position },
-    Then { position: Position },
-    Time { position: Position },
-    To { position: Position },
-    Void { position: Position },
-    Write { position: Position },
-
-    // Literals
-    True { position: Position },
-    False { position: Position },
-
-    // Operators
-    Op { position: Position, value: &'a str },
-    Equals { position: Position },
-
-    // Delimiters
-    LParen { position: Position },
-    RParen { position: Position },
-    LCurly { position: Position },
-    RCurly { position: Position },
-    LSquare { position: Position },
-    RSquare { position: Position },
-    Comma { position: Position },
-    Colon { position: Position },
-    Dot { position: Position },
-
-    // Other
-    Newline { position: Position },
-    EndOfFile { position: Position },
+pub struct Token<'a> {
+    pub position: Position,
+    pub token_type: TokenType,
+    pub value: Option<&'a str>,
 }
 
-impl<'a> Display for Token<'a> {
+impl Display for Token<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(contents) = self.value {
+            write!(f, "{} '{}'", self.token_type, contents)
+        } else {
+            write!(f, "{}", self.token_type)
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum TokenType {
+    // Values
+    IntVal,
+    FloatVal,
+    Variable,
+    String,
+
+    // Keywords
+    Array,
+    Assert,
+    Bool,
+    Else,
+    Fn,
+    If,
+    Image,
+    Int,
+    Float,
+    Let,
+    Print,
+    Read,
+    Return,
+    Show,
+    Struct,
+    Sum,
+    Then,
+    Time,
+    To,
+    Void,
+    Write,
+
+    // Literals
+    True,
+    False,
+
+    // Operators
+    Op,
+    Equals,
+
+    // Delimiters
+    LParen,
+    RParen,
+    LCurly,
+    RCurly,
+    LSquare,
+    RSquare,
+    Comma,
+    Colon,
+    Dot,
+
+    // Other
+    Newline,
+    EndOfFile,
+}
+
+impl Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Token::IntVal { position: _, value } => write!(f, "INTVAL '{}'", value),
-            Token::FloatVal { position: _, value } => write!(f, "FLOATVAL '{}'", value),
-            Token::Variable { position: _, value } => write!(f, "VARIABLE '{}'", value),
-            Token::StringLiteral { position: _, value } => write!(f, "STRING '{}'", value),
-            Token::Op { position: _, value } => write!(f, "OP '{}'", value),
-            Token::Array { position: _ } => write!(f, "ARRAY 'array'"),
-            Token::Assert { position: _ } => write!(f, "ASSERT 'assert'"),
-            Token::Bool { position: _ } => write!(f, "BOOL 'bool'"),
-            Token::Else { position: _ } => write!(f, "ELSE 'else'"),
-            Token::Fn { position: _ } => write!(f, "FN 'fn'"),
-            Token::If { position: _ } => write!(f, "IF 'if'"),
-            Token::Image { position: _ } => write!(f, "IMAGE 'image'"),
-            Token::Int { position: _ } => write!(f, "INT 'int'"),
-            Token::Float { position: _ } => write!(f, "FLOAT 'float'"),
-            Token::Let { position: _ } => write!(f, "LET 'let'"),
-            Token::Print { position: _ } => write!(f, "PRINT 'print'"),
-            Token::Read { position: _ } => write!(f, "READ 'read'"),
-            Token::Return { position: _ } => write!(f, "RETURN 'return'"),
-            Token::Show { position: _ } => write!(f, "SHOW 'show'"),
-            Token::Struct { position: _ } => write!(f, "STRUCT 'struct'"),
-            Token::Sum { position: _ } => write!(f, "SUM 'sum'"),
-            Token::Then { position: _ } => write!(f, "THEN 'then'"),
-            Token::Time { position: _ } => write!(f, "TIME 'time'"),
-            Token::To { position: _ } => write!(f, "TO 'to'"),
-            Token::Void { position: _ } => write!(f, "VOID 'void'"),
-            Token::Write { position: _ } => write!(f, "WRITE 'write'"),
-            Token::True { position: _ } => write!(f, "TRUE 'true'"),
-            Token::False { position: _ } => write!(f, "FALSE 'false'"),
-            Token::Equals { position: _ } => write!(f, "EQUALS '='"),
-            Token::LParen { position: _ } => write!(f, "LPAREN '('"),
-            Token::RParen { position: _ } => write!(f, "RPAREN ')'"),
-            Token::LCurly { position: _ } => write!(f, "LCURLY '{{'"),
-            Token::RCurly { position: _ } => write!(f, "RCURLY '}}'"),
-            Token::LSquare { position: _ } => write!(f, "LSQUARE '['"),
-            Token::RSquare { position: _ } => write!(f, "RSQUARE ']'"),
-            Token::Comma { position: _ } => write!(f, "COMMA ','"),
-            Token::Colon { position: _ } => write!(f, "COLON ':'"),
-            Token::Dot { position: _ } => write!(f, "DOT '.'"),
-            Token::Newline { position: _ } => write!(f, "NEWLINE"),
-            Token::EndOfFile { position: _ } => write!(f, "END_OF_FILE"),
+            TokenType::IntVal => write!(f, "INTVAL"),
+            TokenType::FloatVal => write!(f, "FLOATVAL"),
+            TokenType::Variable => write!(f, "VARIABLE"),
+            TokenType::String => write!(f, "STRING"),
+            TokenType::Op => write!(f, "OP"),
+            TokenType::Array => write!(f, "ARRAY 'array'"),
+            TokenType::Assert => write!(f, "ASSERT 'assert'"),
+            TokenType::Bool => write!(f, "BOOL 'bool'"),
+            TokenType::Else => write!(f, "ELSE 'else'"),
+            TokenType::Fn => write!(f, "FN 'fn'"),
+            TokenType::If => write!(f, "IF 'if'"),
+            TokenType::Image => write!(f, "IMAGE 'image'"),
+            TokenType::Int => write!(f, "INT 'int'"),
+            TokenType::Float => write!(f, "FLOAT 'float'"),
+            TokenType::Let => write!(f, "LET 'let'"),
+            TokenType::Print => write!(f, "PRINT 'print'"),
+            TokenType::Read => write!(f, "READ 'read'"),
+            TokenType::Return => write!(f, "RETURN 'return'"),
+            TokenType::Show => write!(f, "SHOW 'show'"),
+            TokenType::Struct => write!(f, "STRUCT 'struct'"),
+            TokenType::Sum => write!(f, "SUM 'sum'"),
+            TokenType::Then => write!(f, "THEN 'then'"),
+            TokenType::Time => write!(f, "TIME 'time'"),
+            TokenType::To => write!(f, "TO 'to'"),
+            TokenType::Void => write!(f, "VOID 'void'"),
+            TokenType::Write => write!(f, "WRITE 'write'"),
+            TokenType::True => write!(f, "TRUE 'true'"),
+            TokenType::False => write!(f, "FALSE 'false'"),
+            TokenType::Equals => write!(f, "EQUALS '='"),
+            TokenType::LParen => write!(f, "LPAREN '('"),
+            TokenType::RParen => write!(f, "RPAREN ')'"),
+            TokenType::LCurly => write!(f, "LCURLY '{{'"),
+            TokenType::RCurly => write!(f, "RCURLY '}}'"),
+            TokenType::LSquare => write!(f, "LSQUARE '['"),
+            TokenType::RSquare => write!(f, "RSQUARE ']'"),
+            TokenType::Comma => write!(f, "COMMA ','"),
+            TokenType::Colon => write!(f, "COLON ':'"),
+            TokenType::Dot => write!(f, "DOT '.'"),
+            TokenType::Newline => write!(f, "NEWLINE"),
+            TokenType::EndOfFile => write!(f, "END_OF_FILE"),
         }
     }
 }
@@ -112,8 +129,7 @@ impl<'a> Display for Token<'a> {
 pub struct LexerError {
     message: String,
     file: String,
-    line: usize,
-    column: usize,
+    position: Position,
 }
 
 impl Display for LexerError {
@@ -121,7 +137,7 @@ impl Display for LexerError {
         write!(
             f,
             "Lex error: {}:{}:{}: {}",
-            self.file, self.line, self.column, self.message
+            self.file, self.position.line, self.position.column, self.message
         )
     }
 }
@@ -192,8 +208,10 @@ impl<'a> Lexer<'a> {
         LexerError {
             message: message.to_string(),
             file: self.file_name.to_string(),
-            line: self.line,
-            column: self.column,
+            position: Position {
+                line: self.line,
+                column: self.column,
+            },
         }
     }
 
@@ -217,32 +235,125 @@ impl<'a> Lexer<'a> {
         };
         // Check if this is a keyword
         match word {
-            "array" => Token::Array { position: pos },
-            "assert" => Token::Assert { position: pos },
-            "bool" => Token::Bool { position: pos },
-            "else" => Token::Else { position: pos },
-            "false" => Token::False { position: pos },
-            "float" => Token::Float { position: pos },
-            "fn" => Token::Fn { position: pos },
-            "if" => Token::If { position: pos },
-            "image" => Token::Image { position: pos },
-            "int" => Token::Int { position: pos },
-            "let" => Token::Let { position: pos },
-            "print" => Token::Print { position: pos },
-            "read" => Token::Read { position: pos },
-            "return" => Token::Return { position: pos },
-            "show" => Token::Show { position: pos },
-            "struct" => Token::Struct { position: pos },
-            "sum" => Token::Sum { position: pos },
-            "then" => Token::Then { position: pos },
-            "time" => Token::Time { position: pos },
-            "to" => Token::To { position: pos },
-            "true" => Token::True { position: pos },
-            "void" => Token::Void { position: pos },
-            "write" => Token::Write { position: pos },
-            _ => Token::Variable {
+            "array" => Token {
                 position: pos,
-                value: word,
+                token_type: TokenType::Array,
+                value: None,
+            },
+            "assert" => Token {
+                position: pos,
+                token_type: TokenType::Assert,
+                value: None,
+            },
+            "bool" => Token {
+                position: pos,
+                token_type: TokenType::Bool,
+                value: None,
+            },
+            "else" => Token {
+                position: pos,
+                token_type: TokenType::Else,
+                value: None,
+            },
+            "false" => Token {
+                position: pos,
+                token_type: TokenType::False,
+                value: None,
+            },
+            "float" => Token {
+                position: pos,
+                token_type: TokenType::Float,
+                value: None,
+            },
+            "fn" => Token {
+                position: pos,
+                token_type: TokenType::Fn,
+                value: None,
+            },
+            "if" => Token {
+                position: pos,
+                token_type: TokenType::If,
+                value: None,
+            },
+            "image" => Token {
+                position: pos,
+                token_type: TokenType::Image,
+                value: None,
+            },
+            "int" => Token {
+                position: pos,
+                token_type: TokenType::Int,
+                value: None,
+            },
+            "let" => Token {
+                position: pos,
+                token_type: TokenType::Let,
+                value: None,
+            },
+            "print" => Token {
+                position: pos,
+                token_type: TokenType::Print,
+                value: None,
+            },
+            "read" => Token {
+                position: pos,
+                token_type: TokenType::Read,
+                value: None,
+            },
+            "return" => Token {
+                position: pos,
+                token_type: TokenType::Return,
+                value: None,
+            },
+            "show" => Token {
+                position: pos,
+                token_type: TokenType::Show,
+                value: None,
+            },
+            "struct" => Token {
+                position: pos,
+                token_type: TokenType::Struct,
+                value: None,
+            },
+            "sum" => Token {
+                position: pos,
+                token_type: TokenType::Sum,
+                value: None,
+            },
+            "then" => Token {
+                position: pos,
+                token_type: TokenType::Then,
+                value: None,
+            },
+            "time" => Token {
+                position: pos,
+                token_type: TokenType::Time,
+                value: None,
+            },
+            "to" => Token {
+                position: pos,
+                token_type: TokenType::To,
+                value: None,
+            },
+            "true" => Token {
+                position: pos,
+                token_type: TokenType::True,
+                value: None,
+            },
+            "void" => Token {
+                position: pos,
+                token_type: TokenType::Void,
+                value: None,
+            },
+            "write" => Token {
+                position: pos,
+                token_type: TokenType::Write,
+                value: None,
+            },
+            _ => Token {
+                position: pos,
+                token_type: TokenType::Variable,
+                value: Some(word),
             },
         }
     }
@@ -266,20 +377,22 @@ impl<'a> Lexer<'a> {
 
         let number = &self.program[start..self.position];
         if has_dot {
-            Token::FloatVal {
+            Token {
                 position: Position {
                     line: self.line,
                     column: self.column,
                 },
-                value: number,
+                token_type: TokenType::FloatVal,
+                value: Some(number),
             }
         } else {
-            Token::IntVal {
+            Token {
                 position: Position {
                     line: self.line,
                     column: self.column,
                 },
-                value: number,
+                token_type: TokenType::IntVal,
+                value: Some(number),
             }
         }
     }
@@ -295,20 +408,23 @@ impl<'a> Lexer<'a> {
                 self.advance();
             }
 
-            Token::FloatVal {
+            Token {
                 position: Position {
                     line: self.line,
                     column: self.column,
                 },
-                value: &self.program[start..self.position],
+                token_type: TokenType::FloatVal,
+                value: Some(&self.program[start..self.position]),
             }
         } else {
             // It's just a dot
-            Token::Dot {
+            Token {
                 position: Position {
                     line: self.line,
                     column: self.column - 1,
                 },
+                token_type: TokenType::Dot,
+                value: None,
             }
         }
     }
@@ -333,12 +449,13 @@ impl<'a> Lexer<'a> {
         self.advance(); // Skip closing quote
 
         let string_literal = &self.program[start..self.position];
-        Ok(Token::StringLiteral {
+        Ok(Token {
             position: Position {
                 line: self.line,
                 column: self.column,
             },
-            value: string_literal,
+            token_type: TokenType::String,
+            value: Some(string_literal),
         })
     }
 
@@ -402,27 +519,65 @@ impl<'a> Lexer<'a> {
             if ["==", "<=", ">=", "!=", "&&", "||"].contains(&potential_op) {
                 self.position += 2;
                 self.column += 2;
-                return Token::Op {
+                return Token {
                     position: pos,
-                    value: potential_op,
+                    token_type: TokenType::Op,
+                    value: Some(potential_op),
                 };
             }
         }
 
         // Single-character tokens
         let token = match self.bytes[self.position] {
-            b'(' => Token::LParen { position: pos },
-            b')' => Token::RParen { position: pos },
-            b'{' => Token::LCurly { position: pos },
-            b'}' => Token::RCurly { position: pos },
-            b'[' => Token::LSquare { position: pos },
-            b']' => Token::RSquare { position: pos },
-            b',' => Token::Comma { position: pos },
-            b':' => Token::Colon { position: pos },
-            b'=' => Token::Equals { position: pos },
-            _ => Token::Op {
+            b'(' => Token {
                 position: pos,
-                value: &self.program[self.position..self.position + 1],
+                token_type: TokenType::LParen,
+                value: None,
+            },
+            b')' => Token {
+                position: pos,
+                token_type: TokenType::RParen,
+                value: None,
+            },
+            b'{' => Token {
+                position: pos,
+                token_type: TokenType::LCurly,
+                value: None,
+            },
+            b'}' => Token {
+                position: pos,
+                token_type: TokenType::RCurly,
+                value: None,
+            },
+            b'[' => Token {
+                position: pos,
+                token_type: TokenType::LSquare,
+                value: None,
+            },
+            b']' => Token {
+                position: pos,
+                token_type: TokenType::RSquare,
+                value: None,
+            },
+            b',' => Token {
+                position: pos,
+                token_type: TokenType::Comma,
+                value: None,
+            },
+            b'=' => Token {
+                position: pos,
+                token_type: TokenType::Equals,
+                value: None,
+            },
+            b':' => Token {
+                position: pos,
+                token_type: TokenType::Colon,
+                value: None,
+            },
+            _ => Token {
+                position: pos,
+                token_type: TokenType::Op,
+                value: Some(&self.program[self.position..self.position + 1]),
             },
         };
 
@@ -464,12 +619,13 @@ impl<'a> Lexer<'a> {
                     if next == b'/' || next == b'*' {
                         self.lex_comment()?;
                     } else {
-                        tokens.push(Token::Op {
+                        tokens.push(Token {
                             position: Position {
                                 line: self.line,
                                 column: self.column,
                             },
-                            value: "/",
+                            token_type: TokenType::Op,
+                            value: Some("/"),
                         });
                         self.advance();
                     }
@@ -489,13 +645,16 @@ impl<'a> Lexer<'a> {
                 // Newline
                 b'\n' => {
                     // Add newline token if the last token is not a newline
-                    if tokens.is_empty() || !matches!(tokens.last().unwrap(), Token::Newline { .. })
+                    if tokens.is_empty()
+                        || !matches!(tokens.last().unwrap().token_type, TokenType::Newline)
                     {
-                        tokens.push(Token::Newline {
+                        tokens.push(Token {
                             position: Position {
                                 line: self.line,
                                 column: self.column,
                             },
+                            token_type: TokenType::Newline,
+                            value: None,
                         });
                     }
 
@@ -520,11 +679,13 @@ impl<'a> Lexer<'a> {
         }
 
         // Add EOF token
-        tokens.push(Token::EndOfFile {
+        tokens.push(Token {
             position: Position {
                 line: self.line,
                 column: self.column,
             },
+            token_type: TokenType::EndOfFile,
+            value: None,
         });
 
         Ok(tokens)
