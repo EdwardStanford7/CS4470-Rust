@@ -1,12 +1,13 @@
 use crate::ast::*;
 use crate::lexer::*;
 use core::fmt;
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Display;
+use std::rc::Rc;
 
 pub struct ParserError {
     message: String,
-    file: String,
     position: Position,
 }
 
@@ -14,26 +15,21 @@ impl Display for ParserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Parse error: {}:{}:{}: {}",
-            self.file, self.position.line, self.position.column, self.message
+            "Parse error: {}:{}: {}",
+            self.position.line, self.position.column, self.message
         )
     }
 }
 
-use std::cell::Cell;
-use std::rc::Rc;
-
 struct Parser<'a> {
     tokens: Vec<Token<'a>>,
-    file_name: &'a str,
     index: Cell<usize>,
 }
 
 impl<'a> Parser<'a> {
-    fn new(tokens: Vec<Token<'a>>, file_name: &'a str) -> Self {
+    fn new(tokens: Vec<Token<'a>>) -> Self {
         Self {
             tokens,
-            file_name,
             index: 0.into(),
         }
     }
@@ -64,7 +60,6 @@ impl<'a> Parser<'a> {
         } else {
             Err(ParserError {
                 message: format!("Expected token {}, got {}", expected, token.token_type),
-                file: self.file_name.to_string(),
                 position: token.position.clone(),
             })
         }
@@ -93,7 +88,6 @@ impl<'a> Parser<'a> {
             TokenType::Struct => self.parse_struct_command(),
             _ => Err(ParserError {
                 message: format!("Expected command, got {}", self.peek_token().token_type),
-                file: self.file_name.to_string(),
                 position: self.peek_token().position.clone(),
             }),
         }
@@ -254,6 +248,7 @@ impl<'a> Parser<'a> {
                 return_type: Box::new(return_type),
                 statements,
                 has_return: false,
+                local_scope: None,
             },
         })
     }
@@ -263,10 +258,8 @@ impl<'a> Parser<'a> {
     fn parse_int_expr(&mut self) -> Result<Expression<'a>, ParserError> {
         let token = self.expect_token(TokenType::IntVal)?;
         let value_str = token.value.as_ref().unwrap();
-        let file = self.file_name.to_string();
         let value = value_str.parse::<i64>().map_err(|_| ParserError {
             message: format!("Integer constant {} is too large", value_str),
-            file,
             position: token.position.clone(),
         })?;
         Ok(Expression {
@@ -281,13 +274,11 @@ impl<'a> Parser<'a> {
         let value_str = token.value.as_ref().unwrap();
         let value = value_str.parse::<f64>().map_err(|_| ParserError {
             message: format!("Float constant {} is not valid", value_str),
-            file: self.file_name.to_string(),
             position: token.position.clone(),
         })?;
         if value.is_infinite() {
             return Err(ParserError {
                 message: format!("Float constant {} is too large", value_str),
-                file: self.file_name.to_string(),
                 position: token.position.clone(),
             });
         }
@@ -562,7 +553,6 @@ impl<'a> Parser<'a> {
             TokenType::Void => self.parse_void_expr(),
             _ => Err(ParserError {
                 message: format!("{} is not a valid expression", self.peek_token().token_type),
-                file: self.file_name.to_string(),
                 position: self.peek_token().position.clone(),
             }),
         }
@@ -727,7 +717,6 @@ impl<'a> Parser<'a> {
             TokenType::Return => self.parse_return_statement(),
             _ => Err(ParserError {
                 message: format!("Expected statement, got {}", self.peek_token().token_type),
-                file: self.file_name.to_string(),
                 position: self.peek_token().position.clone(),
             }),
         }
@@ -845,7 +834,6 @@ impl<'a> Parser<'a> {
             TokenType::Variable => self.parse_struct_type(),
             _ => Err(ParserError {
                 message: format!("{} is not a valid type", self.peek_token().token_type),
-                file: self.file_name.to_string(),
                 position: self.peek_token().position.clone(),
             }),
         }
@@ -912,10 +900,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse<'a>(
-    tokens: Vec<Token<'a>>,
-    file_name: &'a str,
-) -> Result<Vec<Command<'a>>, ParserError> {
-    let mut parser = Parser::new(tokens, file_name);
+pub fn parse<'a>(tokens: Vec<Token<'a>>) -> Result<Vec<Command<'a>>, ParserError> {
+    let mut parser = Parser::new(tokens);
     parser.parse()
 }

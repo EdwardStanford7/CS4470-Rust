@@ -9,7 +9,7 @@ run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
 
 test:
-	$(MAKE) -C ./grader test-hw5 PART=all
+	$(MAKE) -C ./grader test-hw6 PART=all
 
 run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw2 PART=all COMPILE_MODE=" -m lex"

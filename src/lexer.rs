@@ -128,7 +128,6 @@ impl Display for TokenType {
 
 pub struct LexerError {
     message: String,
-    file: String,
     position: Position,
 }
 
@@ -136,8 +135,8 @@ impl Display for LexerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Lex error: {}:{}:{}: {}",
-            self.file, self.position.line, self.position.column, self.message
+            "Lex error: {}:{}: {}",
+            self.position.line, self.position.column, self.message
         )
     }
 }
@@ -146,7 +145,6 @@ impl Display for LexerError {
 struct Lexer<'a> {
     program: &'a str,
     bytes: &'a [u8],
-    file_name: &'a str,
     len: usize,
     position: usize,
     line: usize,
@@ -155,11 +153,10 @@ struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     /// Creates a new lexer for the given program
-    fn new(program: &'a str, file_name: &'a str) -> Self {
+    fn new(program: &'a str) -> Self {
         Lexer {
             program,
             bytes: program.as_bytes(),
-            file_name,
             len: program.len(),
             position: 0,
             line: 1,
@@ -207,7 +204,6 @@ impl<'a> Lexer<'a> {
     fn error(&self, message: &str) -> LexerError {
         LexerError {
             message: message.to_string(),
-            file: self.file_name.to_string(),
             position: Position {
                 line: self.line,
                 column: self.column,
@@ -698,7 +694,7 @@ fn is_valid(c: char) -> bool {
 }
 
 // Optimized lexer implementation - main entry point
-pub fn lex<'a>(program: &'a str, file_name: &'a str) -> Result<Vec<Token<'a>>, LexerError> {
-    let mut lexer = Lexer::new(program, file_name);
+pub fn lex<'a>(program: &'a str) -> Result<Vec<Token<'a>>, LexerError> {
+    let mut lexer = Lexer::new(program);
     lexer.lex()
 }

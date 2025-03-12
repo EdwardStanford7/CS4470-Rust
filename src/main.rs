@@ -1,6 +1,7 @@
 mod ast;
 mod lexer;
 mod parser;
+mod typechecker;
 
 use clap::Parser;
 use clap::ValueEnum;
@@ -47,7 +48,7 @@ fn main() {
     let file_contents = file_contents.unwrap();
 
     // Lex the file
-    let tokens = match lexer::lex(&file_contents, &args.file_name) {
+    let tokens = match lexer::lex(&file_contents) {
         Ok(tokens) => tokens,
         Err(e) => {
             println!("Compilation failed: {}", e);
@@ -70,7 +71,7 @@ fn main() {
     }
 
     // Parse the tokens
-    let commands = match parser::parse(tokens, &args.file_name) {
+    let commands = match parser::parse(tokens) {
         Ok(ast) => ast,
         Err(e) => {
             println!("Compilation failed: {}", e);
@@ -88,6 +89,29 @@ fn main() {
         }
 
         writeln!(buffer, "Compilation succeeded, parsing complete.").unwrap();
+        buffer.flush().unwrap();
+        std::process::exit(0);
+    }
+
+    // Typecheck the AST
+    let global_env = match typechecker::typecheck(&commands) {
+        Ok(global_env) => global_env,
+        Err(e) => {
+            println!("Compilation failed: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Print typechecked AST if in typecheck mode
+    if args.mode == CompilationMode::Typecheck {
+        let stdout = io::stdout();
+        let mut buffer = io::BufWriter::new(stdout.lock());
+
+        for command in &commands {
+            writeln!(buffer, "{}", command).unwrap();
+        }
+
+        writeln!(buffer, "Compilation succeeded, typechecking complete.").unwrap();
         buffer.flush().unwrap();
         std::process::exit(0);
     }

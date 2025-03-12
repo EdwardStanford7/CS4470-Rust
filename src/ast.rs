@@ -1,6 +1,6 @@
 use crate::lexer::Position;
 use core::str;
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 // -------------------------------------------------------------------------------------------- Command Nodes -----------------------------------------------------------------------------------------------
 
@@ -41,6 +41,7 @@ pub enum CommandType<'a> {
         return_type: Box<Type<'a>>,
         statements: Vec<Statement<'a>>,
         has_return: bool,
+        local_scope: Option<HashMap<&'a str, Type<'a>>>,
     },
     Struct {
         name: &'a str,
@@ -84,6 +85,7 @@ impl<'a> Display for Command<'a> {
                 return_type,
                 statements,
                 has_return: _,
+                local_scope: _,
             } => {
                 let mut result = format!("(FnCmd {} ((", name);
                 let mut first = true;
