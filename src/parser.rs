@@ -585,29 +585,34 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_precedence5_expr(&mut self) -> Result<Expression<'a>, ParserError> {
-        if self.peek_token().token_type == TokenType::Op {
-            let op_token = self.expect_token(TokenType::Op)?;
-            let op_str = op_token.value.unwrap();
-            let position = op_token.position.clone();
-            if op_str == "-" || op_str == "!" {
-                // Note: operator mapping as used in the AST must be defined elsewhere.
-                let operator = if op_str == "-" {
-                    Unop::Negative
-                } else {
-                    Unop::Not
-                };
-                let expression = Box::new(self.parse_precedence5_expr()?);
+        let token = self.peek_token();
+        if let Some(value) = token.value {
+            if value == "-" {
+                let position = token.position.clone();
+                self.expect_token(TokenType::Op)?;
+                let right = self.parse_precedence5_expr()?;
                 return Ok(Expression {
                     position,
                     node: ExpressionType::Unop {
-                        operator,
-                        expression,
+                        operator: Unop::Negative,
+                        expression: Box::new(right),
+                    },
+                    resolved_type: Rc::new(RefCell::new(None)),
+                });
+            } else if value == "!" {
+                let position = token.position.clone();
+                self.expect_token(TokenType::Op)?;
+                let right = self.parse_precedence5_expr()?;
+                return Ok(Expression {
+                    position,
+                    node: ExpressionType::Unop {
+                        operator: Unop::Not,
+                        expression: Box::new(right),
                     },
                     resolved_type: Rc::new(RefCell::new(None)),
                 });
             }
-        }
-        if self.peek_token().token_type == TokenType::Array {
+        } else if self.peek_token().token_type == TokenType::Array {
             return self.parse_array_loop_expr();
         } else if self.peek_token().token_type == TokenType::Sum {
             return self.parse_sum_loop_expr();
@@ -646,6 +651,7 @@ impl<'a> Parser<'a> {
         while self.peek_token().token_type == TokenType::Op {
             let op_str = self.peek_token().value.unwrap();
             if op_str == "+" || op_str == "-" {
+                self.expect_token(TokenType::Op)?;
                 let right = self.parse_precedence4_expr()?;
                 let operator = Binop::from_str(op_str);
                 left = Expression {
@@ -669,6 +675,7 @@ impl<'a> Parser<'a> {
         while self.peek_token().token_type == TokenType::Op {
             let op_str = self.peek_token().value.unwrap();
             if ["<", ">", "<=", ">=", "==", "!="].contains(&op_str) {
+                self.expect_token(TokenType::Op)?;
                 let right = self.parse_precedence3_expr()?;
                 let operator = Binop::from_str(op_str);
                 left = Expression {
@@ -692,6 +699,7 @@ impl<'a> Parser<'a> {
         while self.peek_token().token_type == TokenType::Op {
             let op_str = self.peek_token().value.unwrap();
             if op_str == "&&" || op_str == "||" {
+                self.expect_token(TokenType::Op)?;
                 let right = self.parse_precedence2_expr()?;
                 let operator = Binop::from_str(op_str);
                 left = Expression {
@@ -703,6 +711,8 @@ impl<'a> Parser<'a> {
                     },
                     resolved_type: Rc::new(RefCell::new(None)),
                 };
+            } else {
+                break;
             }
         }
         Ok(left)
