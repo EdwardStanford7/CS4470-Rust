@@ -252,15 +252,23 @@ pub enum ExpressionType<'a> {
 
 impl<'a> Display for Expression<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let type_str = if let Some(typ) = self.resolved_type.borrow().as_ref() {
+            format!(" {}", typ)
+        } else {
+            String::new()
+        };
+
         match &self.node {
-            ExpressionType::Int { value } => write!(f, "(IntExpr {})", value),
-            ExpressionType::Float { value } => write!(f, "(FloatExpr {})", *value as i64),
-            ExpressionType::True => write!(f, "(TrueExpr)"),
-            ExpressionType::False => write!(f, "(FalseExpr)"),
-            ExpressionType::Void => write!(f, "(VoidExpr)"),
-            ExpressionType::Variable { name } => write!(f, "(VarExpr {})", name),
+            ExpressionType::Int { value } => write!(f, "(IntExpr{} {})", type_str, value),
+            ExpressionType::Float { value } => {
+                write!(f, "(FloatExpr{} {})", type_str, *value as i64)
+            }
+            ExpressionType::True => write!(f, "(TrueExpr{})", type_str),
+            ExpressionType::False => write!(f, "(FalseExpr{})", type_str),
+            ExpressionType::Void => write!(f, "(VoidExpr{})", type_str),
+            ExpressionType::Variable { name } => write!(f, "(VarExpr{} {})", type_str, name),
             ExpressionType::ArrayLiteral { elements } => {
-                let mut result = String::from("(ArrayLiteralExpr");
+                let mut result = format!("(ArrayLiteralExpr{}", type_str);
                 for element in elements {
                     result.push_str(&format!(" {}", element));
                 }
@@ -268,7 +276,7 @@ impl<'a> Display for Expression<'a> {
                 write!(f, "{}", result)
             }
             ExpressionType::ArrayIndex { array, indices } => {
-                let mut result = format!("(ArrayIndexExpr {}", array);
+                let mut result = format!("(ArrayIndexExpr{} {}", type_str, array);
                 for index in indices {
                     result.push_str(&format!(" {}", index));
                 }
@@ -279,13 +287,13 @@ impl<'a> Display for Expression<'a> {
                 struct_variable,
                 field,
             } => {
-                write!(f, "(DotExpr {} {})", struct_variable, field)
+                write!(f, "(DotExpr{} {} {})", type_str, struct_variable, field)
             }
             ExpressionType::Call {
                 function,
                 arguments,
             } => {
-                let mut result = format!("(CallExpr {}", function);
+                let mut result = format!("(CallExpr{} {}", type_str, function);
                 for arg in arguments {
                     result.push_str(&format!(" {}", arg));
                 }
@@ -293,7 +301,7 @@ impl<'a> Display for Expression<'a> {
                 write!(f, "{}", result)
             }
             ExpressionType::StructLiteral { name, fields } => {
-                let mut result = format!("(StructLiteralExpr {}", name);
+                let mut result = format!("(StructLiteralExpr{} {}", type_str, name);
                 for field in fields {
                     result.push_str(&format!(" {}", field));
                 }
@@ -304,20 +312,24 @@ impl<'a> Display for Expression<'a> {
                 operator,
                 expression,
             } => {
-                write!(f, "(UnopExpr {} {})", operator, expression)
+                write!(f, "(UnopExpr{} {} {})", type_str, operator, expression)
             }
             ExpressionType::Binop {
                 operator,
                 left,
                 right,
-            } => write!(f, "(BinopExpr {} {} {})", left, operator, right),
+            } => write!(f, "(BinopExpr{} {} {} {})", type_str, left, operator, right),
             ExpressionType::If {
                 condition,
                 then_branch,
                 else_branch,
-            } => write!(f, "(IfExpr {} {} {})", condition, then_branch, else_branch),
+            } => write!(
+                f,
+                "(IfExpr{} {} {} {})",
+                type_str, condition, then_branch, else_branch
+            ),
             ExpressionType::ArrayLoop { range, body } => {
-                let mut result = String::from("(ArrayLoopExpr");
+                let mut result = format!("(ArrayLoopExpr{}", type_str);
                 for (var, expr) in range {
                     result.push_str(&format!(" {} {}", var, expr));
                 }
@@ -325,7 +337,7 @@ impl<'a> Display for Expression<'a> {
                 write!(f, "{}", result)
             }
             ExpressionType::SumLoop { range, body } => {
-                let mut result = String::from("(SumLoopExpr");
+                let mut result = format!("(SumLoopExpr{}", type_str);
                 for (var, expr) in range {
                     result.push_str(&format!(" {} {}", var, expr));
                 }
@@ -375,11 +387,13 @@ impl<'a> Display for Statement<'a> {
 
 // -------------------------------------------------------------------------------------------- Type Nodes -----------------------------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct Type<'a> {
     pub position: Position,
     pub node: TypeValue<'a>,
 }
 
+#[derive(Debug)]
 pub enum TypeValue<'a> {
     Int,
     Float,

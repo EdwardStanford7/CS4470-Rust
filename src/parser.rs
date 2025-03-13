@@ -900,7 +900,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse<'a>(tokens: Vec<Token<'a>>) -> Result<Vec<Command<'a>>, ParserError> {
+pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Command<'_>>, ParserError> {
     let mut parser = Parser::new(tokens);
     parser.parse()
 }

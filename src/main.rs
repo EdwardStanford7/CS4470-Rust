@@ -1,4 +1,5 @@
 mod ast;
+mod c_generator;
 mod lexer;
 mod parser;
 mod typechecker;
@@ -113,6 +114,13 @@ fn main() {
 
         writeln!(buffer, "Compilation succeeded, typechecking complete.").unwrap();
         buffer.flush().unwrap();
+        std::process::exit(0);
+    }
+
+    // Generate intermediate representation if in IR mode
+    if args.mode == CompilationMode::IntermediateRepresentation {
+        println!("{}", c_generator::generate_code(&global_env, &commands));
+        println!(" Compilation succeeded, intermediate representation generated.");
         std::process::exit(0);
     }
 }
