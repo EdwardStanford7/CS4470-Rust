@@ -724,6 +724,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_let_statement(&mut self) -> Result<Statement<'a>, ParserError> {
+        self.expect_token(TokenType::Let)?;
         let variable = self.parse_lvalue()?;
         self.expect_token(TokenType::Equals)?;
         let expression = self.parse_precedence1_expr()?;
@@ -736,6 +737,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_assert_statement(&mut self) -> Result<Statement<'a>, ParserError> {
+        self.expect_token(TokenType::Assert)?;
         let expression = self.parse_precedence1_expr()?;
         self.expect_token(TokenType::Comma)?;
         let message = self.expect_token(TokenType::String)?.value.unwrap();
@@ -748,6 +750,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_return_statement(&mut self) -> Result<Statement<'a>, ParserError> {
+        self.expect_token(TokenType::Return)?;
         let return_value = self.parse_precedence1_expr()?;
         Ok(Statement {
             node: StatementType::Return {
