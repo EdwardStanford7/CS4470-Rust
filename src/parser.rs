@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::lexer::*;
+use crate::typechecker::TypeEnvironment;
 use core::fmt;
 use std::cell::Cell;
 use std::cell::RefCell;
@@ -247,8 +248,8 @@ impl<'a> Parser<'a> {
                 parameters,
                 return_type: Box::new(return_type),
                 statements,
-                has_return: false,
-                local_scope: None,
+                has_return: Cell::new(false),
+                local_env: Rc::new(RefCell::new(TypeEnvironment::new(None))), // bad ik don't worry about it
             },
         })
     }
@@ -265,7 +266,7 @@ impl<'a> Parser<'a> {
         Ok(Expression {
             position: token.position.clone(),
             node: ExpressionType::Int { value },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -285,7 +286,7 @@ impl<'a> Parser<'a> {
         Ok(Expression {
             position: token.position.clone(),
             node: ExpressionType::Float { value },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -294,7 +295,7 @@ impl<'a> Parser<'a> {
         Ok(Expression {
             position: token.position.clone(),
             node: ExpressionType::True,
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -303,7 +304,7 @@ impl<'a> Parser<'a> {
         Ok(Expression {
             position: token.position.clone(),
             node: ExpressionType::False,
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -314,7 +315,7 @@ impl<'a> Parser<'a> {
             node: ExpressionType::Variable {
                 name: token.value.unwrap(),
             },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -328,7 +329,7 @@ impl<'a> Parser<'a> {
                 node: ExpressionType::ArrayLiteral {
                     elements: Vec::new(),
                 },
-                resolved_type: Rc::new(RefCell::new(None)),
+                resolved_type: RefCell::new(None),
             });
         }
         let mut elements = Vec::new();
@@ -342,7 +343,7 @@ impl<'a> Parser<'a> {
         Ok(Expression {
             position,
             node: ExpressionType::ArrayLiteral { elements },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -367,7 +368,7 @@ impl<'a> Parser<'a> {
                 function: func_name,
                 arguments,
             },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -392,7 +393,7 @@ impl<'a> Parser<'a> {
                 name: struct_name,
                 fields,
             },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -405,7 +406,7 @@ impl<'a> Parser<'a> {
                 struct_variable: Box::new(left),
                 field: field_token.value.unwrap(),
             },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -423,7 +424,7 @@ impl<'a> Parser<'a> {
                     array: Box::new(array),
                     indices,
                 },
-                resolved_type: Rc::new(RefCell::new(None)),
+                resolved_type: RefCell::new(None),
             });
         }
         indices.push(self.parse_precedence1_expr()?);
@@ -438,7 +439,7 @@ impl<'a> Parser<'a> {
                 array: Box::new(array),
                 indices,
             },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -454,7 +455,7 @@ impl<'a> Parser<'a> {
         Ok(Expression {
             position: token.position.clone(),
             node: ExpressionType::Void,
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -472,7 +473,7 @@ impl<'a> Parser<'a> {
                 then_branch,
                 else_branch,
             },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -501,7 +502,7 @@ impl<'a> Parser<'a> {
                 range: iterations,
                 body: element_expr,
             },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -530,7 +531,7 @@ impl<'a> Parser<'a> {
                 range: iterations,
                 body: element_expr,
             },
-            resolved_type: Rc::new(RefCell::new(None)),
+            resolved_type: RefCell::new(None),
         })
     }
 
@@ -587,7 +588,7 @@ impl<'a> Parser<'a> {
                         operator: Unop::Negative,
                         expression: Box::new(right),
                     },
-                    resolved_type: Rc::new(RefCell::new(None)),
+                    resolved_type: RefCell::new(None),
                 });
             } else if value == "!" {
                 let position = token.position.clone();
@@ -599,7 +600,7 @@ impl<'a> Parser<'a> {
                         operator: Unop::Not,
                         expression: Box::new(right),
                     },
-                    resolved_type: Rc::new(RefCell::new(None)),
+                    resolved_type: RefCell::new(None),
                 });
             }
         } else if self.peek_token().token_type == TokenType::Array {
@@ -627,7 +628,7 @@ impl<'a> Parser<'a> {
                         left: Box::new(left),
                         right: Box::new(right),
                     },
-                    resolved_type: Rc::new(RefCell::new(None)),
+                    resolved_type: RefCell::new(None),
                 };
             } else {
                 break;
@@ -651,7 +652,7 @@ impl<'a> Parser<'a> {
                         left: Box::new(left),
                         right: Box::new(right),
                     },
-                    resolved_type: Rc::new(RefCell::new(None)),
+                    resolved_type: RefCell::new(None),
                 };
             } else {
                 break;
@@ -675,7 +676,7 @@ impl<'a> Parser<'a> {
                         left: Box::new(left),
                         right: Box::new(right),
                     },
-                    resolved_type: Rc::new(RefCell::new(None)),
+                    resolved_type: RefCell::new(None),
                 };
             } else {
                 break;
@@ -699,7 +700,7 @@ impl<'a> Parser<'a> {
                         left: Box::new(left),
                         right: Box::new(right),
                     },
-                    resolved_type: Rc::new(RefCell::new(None)),
+                    resolved_type: RefCell::new(None),
                 };
             } else {
                 break;
@@ -776,8 +777,8 @@ impl<'a> Parser<'a> {
                 self.expect_token(TokenType::RSquare)?;
                 return Ok(LValue {
                     position,
+                    name: array_name,
                     node: LValueType::Array {
-                        name: array_name,
                         indices: Vec::new(),
                     },
                 });
@@ -798,8 +799,8 @@ impl<'a> Parser<'a> {
             self.expect_token(TokenType::RSquare)?;
             Ok(LValue {
                 position,
+                name: array_name,
                 node: LValueType::Array {
-                    name: array_name,
                     indices,
                 },
             })
@@ -808,9 +809,8 @@ impl<'a> Parser<'a> {
             let token = self.expect_token(TokenType::Variable)?;
             Ok(LValue {
                 position: token.position.clone(),
-                node: LValueType::Variable {
-                    name: token.value.unwrap(),
-                },
+                name: token.value.unwrap(),
+                node: LValueType::Variable ,
             })
         }
     }
@@ -843,7 +843,7 @@ impl<'a> Parser<'a> {
         let token = self.expect_token(TokenType::Int)?;
         Ok(Type {
             position: token.position.clone(),
-            node: TypeValue::Int,
+            node: TypeType::Int,
         })
     }
 
@@ -851,7 +851,7 @@ impl<'a> Parser<'a> {
         let token = self.expect_token(TokenType::Float)?;
         Ok(Type {
             position: token.position.clone(),
-            node: TypeValue::Float,
+            node: TypeType::Float,
         })
     }
 
@@ -859,7 +859,7 @@ impl<'a> Parser<'a> {
         let token = self.expect_token(TokenType::Bool)?;
         Ok(Type {
             position: token.position.clone(),
-            node: TypeValue::Bool,
+            node: TypeType::Bool,
         })
     }
 
@@ -867,7 +867,7 @@ impl<'a> Parser<'a> {
         let token = self.expect_token(TokenType::Void)?;
         Ok(Type {
             position: token.position.clone(),
-            node: TypeValue::Void,
+            node: TypeType::Void,
         })
     }
 
@@ -875,7 +875,7 @@ impl<'a> Parser<'a> {
         let token = self.expect_token(TokenType::Variable)?;
         Ok(Type {
             position: token.position.clone(),
-            node: TypeValue::Struct {
+            node: TypeType::Struct {
                 name: token.value.unwrap(),
                 elements: None,
             },
@@ -892,7 +892,7 @@ impl<'a> Parser<'a> {
         self.expect_token(TokenType::RSquare)?;
         Ok(Type {
             position: start_token.position.clone(),
-            node: TypeValue::Array {
+            node: TypeType::Array {
                 element_type: Box::new(base),
                 rank,
             },

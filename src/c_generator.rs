@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::{ast::*, typechecker::TypeEnvironment};
 use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 struct CFunction<'a> {
@@ -45,14 +45,14 @@ impl<'a> CFunction<'a> {
 }
 
 struct CGenerator<'a> {
-    global_env: &'a HashMap<&'a str, Rc<RefCell<Option<Type<'a>>>>>,
+    global_env: &'a Rc<RefCell<TypeEnvironment<'a>>>,
     commands: &'a Vec<Command<'a>>,
     functions: Vec<CFunction<'a>>,
 }
 
 impl<'a> CGenerator<'a> {
     fn new(
-        global_env: &'a HashMap<&'a str, Rc<RefCell<Option<Type<'a>>>>>,
+        global_env: &'a Rc<RefCell<TypeEnvironment<'a>>>,
         commands: &'a Vec<Command<'a>>,
     ) -> CGenerator<'a> {
         CGenerator {
@@ -80,7 +80,7 @@ impl<'a> CGenerator<'a> {
 }
 
 pub fn generate_code<'a>(
-    global_env: &'a HashMap<&'a str, Rc<RefCell<Option<Type<'a>>>>>,
+    global_env: &'a Rc<RefCell<TypeEnvironment<'a>>>,
     commands: &'a Vec<Command<'a>>,
 ) -> String {
     let generator = CGenerator::new(global_env, commands);

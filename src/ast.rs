@@ -1,6 +1,10 @@
-use crate::lexer::Position;
+use crate::{lexer::Position, typechecker::TypeEnvironment};
 use core::str;
-use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    fmt::Display,
+    rc::Rc,
+};
 
 // -------------------------------------------------------------------------------------------- Command Nodes -----------------------------------------------------------------------------------------------
 
@@ -40,8 +44,8 @@ pub enum CommandType<'a> {
         parameters: Vec<(LValue<'a>, Type<'a>)>,
         return_type: Box<Type<'a>>,
         statements: Vec<Statement<'a>>,
-        has_return: bool,
-        local_scope: Option<HashMap<&'a str, Type<'a>>>,
+        has_return: Cell<bool>,
+        local_env: Rc<RefCell<TypeEnvironment<'a>>>,
     },
     Struct {
         name: &'a str,
@@ -85,7 +89,7 @@ impl<'a> Display for Command<'a> {
                 return_type,
                 statements,
                 has_return: _,
-                local_scope: _,
+                local_env: _,
             } => {
                 let mut result = format!("(FnCmd {} ((", name);
                 let mut first = true;
@@ -191,7 +195,7 @@ impl Binop {
 pub struct Expression<'a> {
     pub position: Position,
     pub node: ExpressionType<'a>,
-    pub resolved_type: Rc<RefCell<Option<Type<'a>>>>,
+    pub resolved_type: RefCell<Option<TypeValue<'a>>>,
 }
 
 pub enum ExpressionType<'a> {
@@ -387,14 +391,12 @@ impl<'a> Display for Statement<'a> {
 
 // -------------------------------------------------------------------------------------------- Type Nodes -----------------------------------------------------------------------------------------------
 
-#[derive(Debug)]
 pub struct Type<'a> {
     pub position: Position,
-    pub node: TypeValue<'a>,
+    pub node: TypeType<'a>,
 }
 
-#[derive(Debug)]
-pub enum TypeValue<'a> {
+pub enum TypeType<'a> {
     Int,
     Float,
     Bool,
@@ -407,24 +409,65 @@ pub enum TypeValue<'a> {
         element_type: Box<Type<'a>>,
         rank: usize,
     },
-    Function {
-        param_types: Vec<Type<'a>>,
-        return_type: Box<Type<'a>>,
-    },
 }
 
 impl<'a> Display for Type<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.node {
-            TypeValue::Int => write!(f, "(IntType)"),
-            TypeValue::Float => write!(f, "(FloatType)"),
-            TypeValue::Bool => write!(f, "(BoolType)"),
-            TypeValue::Void => write!(f, "(VoidType)"),
-            TypeValue::Struct { name, elements: _ } => write!(f, "(StructType {})", name),
-            TypeValue::Array { element_type, rank } => {
+            TypeType::Int => write!(f, "(IntType)"),
+            TypeType::Float => write!(f, "(FloatType)"),
+            TypeType::Bool => write!(f, "(BoolType)"),
+            TypeType::Void => write!(f, "(VoidType)"),
+            TypeType::Struct { name, elements: _ } => write!(f, "(StructType {})", name),
+            TypeType::Array { element_type, rank } => {
                 write!(f, "(ArrayType {} {})", element_type, rank)
             }
-            TypeValue::Function {
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------- TypeValue Nodes -----------------------------------------------------------------------------------------------
+
+#[derive(Clone)]
+pub struct TypeValue<'a> {
+    pub position: Position,
+    pub node: TypeValueType<'a>,
+}
+
+#[derive(Clone)]
+pub enum TypeValueType<'a> {
+    Int,
+    Float,
+    Bool,
+    Void,
+    Struct {
+        name: &'a str,
+        elements: Vec<(&'a str, TypeValue<'a>)>,
+    },
+    Array {
+        element_type: Box<TypeValue<'a>>,
+        rank: usize,
+    },
+    Function {
+        param_types: Vec<TypeValue<'a>>,
+        return_type: Box<TypeValue<'a>>,
+    },
+}
+
+impl<'a> Display for TypeValue<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.node {
+            TypeValueType::Int => write!(f, "(IntType)"),
+            TypeValueType::Float => write!(f, "(FloatType)"),
+            TypeValueType::Bool => write!(f, "(BoolType)"),
+            TypeValueType::Void => write!(f, "(VoidType)"),
+            TypeValueType::Struct { name, elements: _ } => {
+                write!(f, "(StructType {})", name)
+            }
+            TypeValueType::Array { element_type, rank } => {
+                write!(f, "(ArrayType {} {})", element_type, rank)
+            }
+            TypeValueType::Function {
                 param_types: _,
                 return_type,
             } => write!(f, "{}", return_type),
@@ -436,25 +479,21 @@ impl<'a> Display for Type<'a> {
 
 pub struct LValue<'a> {
     pub position: Position,
+    pub name: &'a str,
     pub node: LValueType<'a>,
 }
 
 pub enum LValueType<'a> {
-    Variable {
-        name: &'a str,
-    },
-    Array {
-        name: &'a str,
-        indices: Vec<&'a str>,
-    },
+    Variable,
+    Array { indices: Vec<&'a str> },
 }
 
 impl<'a> Display for LValue<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.node {
-            LValueType::Variable { name } => write!(f, "(VarLValue {})", name),
-            LValueType::Array { name, indices } => {
-                let mut result = format!("(ArrayLValue {}", name);
+            LValueType::Variable => write!(f, "(VarLValue {})", self.name),
+            LValueType::Array { indices } => {
+                let mut result = format!("(ArrayLValue {}", self.name);
                 for idx in indices {
                     result.push_str(&format!(" {}", idx));
                 }
