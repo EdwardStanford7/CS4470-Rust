@@ -243,7 +243,6 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn typecheck_type(
-        &self,
         typ: &Type<'a>,
         env: &Rc<RefCell<TypeEnvironment<'a>>>,
     ) -> Result<TypeValue<'a>, TypeCheckerError> {
@@ -265,7 +264,7 @@ impl<'a> TypeChecker<'a> {
                 node: TypeValueType::Void,
             }),
             TypeType::Array { element_type, rank } => {
-                let type_value = self.typecheck_type(element_type, env)?;
+                let type_value = Self::typecheck_type(element_type, env)?;
                 Ok(TypeValue {
                     position: typ.position.clone(),
                     node: TypeValueType::Array {
@@ -482,7 +481,7 @@ impl<'a> TypeChecker<'a> {
                 });
             }
 
-            let type_value = self.typecheck_type(element_type, global_env)?;
+            let type_value = Self::typecheck_type(element_type, global_env)?;
             resolved_elements.push((*element_name, type_value));
         }
 
@@ -511,7 +510,7 @@ impl<'a> TypeChecker<'a> {
         global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
     ) -> Result<(), TypeCheckerError> {
         // Check return type
-        let fn_return_type = self.typecheck_type(return_type, global_env)?;
+        let fn_return_type = Self::typecheck_type(return_type, global_env)?;
 
         // Create parameter types list
         let mut param_types = Vec::new();
@@ -521,7 +520,7 @@ impl<'a> TypeChecker<'a> {
 
         // Add parameters to local scope
         for (param, param_type) in parameters {
-            let type_value = self.typecheck_type(param_type, global_env)?;
+            let type_value = Self::typecheck_type(param_type, global_env)?;
             param_types.push(type_value.clone());
             self.bind_lvalue(param, type_value, local_env)?;
         }

@@ -724,12 +724,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_let_statement(&mut self) -> Result<Statement<'a>, ParserError> {
-        let position = self.expect_token(TokenType::Let)?.position.clone();
         let variable = self.parse_lvalue()?;
         self.expect_token(TokenType::Equals)?;
         let expression = self.parse_precedence1_expr()?;
         Ok(Statement {
-            position,
             node: StatementType::Let {
                 variable: Box::new(variable),
                 rvalue: Box::new(expression),
@@ -738,12 +736,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_assert_statement(&mut self) -> Result<Statement<'a>, ParserError> {
-        let position = self.expect_token(TokenType::Assert)?.position.clone();
         let expression = self.parse_precedence1_expr()?;
         self.expect_token(TokenType::Comma)?;
         let message = self.expect_token(TokenType::String)?.value.unwrap();
         Ok(Statement {
-            position,
             node: StatementType::Assert {
                 condition: Box::new(expression),
                 message,
@@ -752,10 +748,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_return_statement(&mut self) -> Result<Statement<'a>, ParserError> {
-        let position = self.expect_token(TokenType::Return)?.position.clone();
         let return_value = self.parse_precedence1_expr()?;
         Ok(Statement {
-            position,
             node: StatementType::Return {
                 value: Box::new(return_value),
             },
@@ -800,9 +794,7 @@ impl<'a> Parser<'a> {
             Ok(LValue {
                 position,
                 name: array_name,
-                node: LValueType::Array {
-                    indices,
-                },
+                node: LValueType::Array { indices },
             })
         } else {
             // Variable LValue
@@ -810,7 +802,7 @@ impl<'a> Parser<'a> {
             Ok(LValue {
                 position: token.position.clone(),
                 name: token.value.unwrap(),
-                node: LValueType::Variable ,
+                node: LValueType::Variable,
             })
         }
     }

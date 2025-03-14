@@ -694,7 +694,7 @@ fn is_valid(c: char) -> bool {
 }
 
 // Optimized lexer implementation - main entry point
-pub fn lex<'a>(program: &'a str) -> Result<Vec<Token<'a>>, LexerError> {
+pub fn lex(program: & str) -> Result<Vec<Token>, LexerError> {
     let mut lexer = Lexer::new(program);
     lexer.lex()
 }

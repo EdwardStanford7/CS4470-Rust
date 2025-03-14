@@ -355,7 +355,6 @@ impl<'a> Display for Expression<'a> {
 // -------------------------------------------------------------------------------------------- Statement Nodes -----------------------------------------------------------------------------------------------
 
 pub struct Statement<'a> {
-    pub position: Position,
     pub node: StatementType<'a>,
 }
 
