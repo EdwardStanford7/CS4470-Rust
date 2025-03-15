@@ -28,7 +28,7 @@ fn pos() -> Position {
 }
 
 pub struct TypeEnvironment<'a> {
-    local_environment: HashMap<&'a str, TypeValue<'a>>,
+    local_environment: HashMap<&'a str, Type<'a>>,
     parent: Option<Rc<RefCell<TypeEnvironment<'a>>>>,
 }
 
@@ -40,11 +40,7 @@ impl<'a> TypeEnvironment<'a> {
         }
     }
 
-    pub fn add_identifier(
-        &mut self,
-        name: &'a str,
-        typ: TypeValue<'a>,
-    ) -> Result<(), TypeCheckerError> {
+    pub fn add_identifier(&mut self, name: &'a str, typ: Type<'a>) -> Result<(), TypeCheckerError> {
         match self.local_environment.entry(name) {
             Entry::Occupied(_) => {
                 return Err(TypeCheckerError {
@@ -63,7 +59,7 @@ impl<'a> TypeEnvironment<'a> {
         &self,
         position: Position,
         name: &'a str,
-    ) -> Result<TypeValue<'a>, TypeCheckerError> {
+    ) -> Result<Type<'a>, TypeCheckerError> {
         match self.local_environment.get(name) {
             Some(typ) => Ok(typ.clone()),
             None => match &self.parent {
@@ -100,20 +96,20 @@ impl<'a> TypeChecker<'a> {
 
     fn populate_built_ins(&mut self, global_env: &Rc<RefCell<TypeEnvironment<'a>>>) {
         // Create basic types
-        let float_type = || TypeValue {
+        let float_type = || Type {
             position: pos(),
-            node: TypeValueType::Float,
+            node: TypeType::Float,
         };
 
-        let int_type = || TypeValue {
+        let int_type = || Type {
             position: pos(),
-            node: TypeValueType::Int,
+            node: TypeType::Int,
         };
 
         // RGBA struct type
-        let rgba = TypeValue {
+        let rgba = Type {
             position: pos(),
-            node: TypeValueType::Struct {
+            node: TypeType::Struct {
                 name: "rgba",
                 elements: vec![
                     ("r", float_type()),
@@ -126,42 +122,42 @@ impl<'a> TypeChecker<'a> {
 
         // Argnum and args
         let argnum = int_type();
-        let args = TypeValue {
+        let args = Type {
             position: pos(),
-            node: TypeValueType::Array {
+            node: TypeType::Array {
                 element_type: Box::new(int_type()),
                 rank: 1,
             },
         };
 
         // Function types
-        let one_float_to_float = TypeValue {
+        let one_float_to_float = Type {
             position: pos(),
-            node: TypeValueType::Function {
+            node: TypeType::Function {
                 param_types: vec![float_type()],
                 return_type: Box::new(float_type()),
             },
         };
 
-        let two_floats_to_float = TypeValue {
+        let two_floats_to_float = Type {
             position: pos(),
-            node: TypeValueType::Function {
+            node: TypeType::Function {
                 param_types: vec![float_type(), float_type()],
                 return_type: Box::new(float_type()),
             },
         };
 
-        let to_float = TypeValue {
+        let to_float = Type {
             position: pos(),
-            node: TypeValueType::Function {
+            node: TypeType::Function {
                 param_types: vec![int_type()],
                 return_type: Box::new(float_type()),
             },
         };
 
-        let to_int = TypeValue {
+        let to_int = Type {
             position: pos(),
-            node: TypeValueType::Function {
+            node: TypeType::Function {
                 param_types: vec![float_type()],
                 return_type: Box::new(int_type()),
             },
@@ -193,7 +189,7 @@ impl<'a> TypeChecker<'a> {
     fn bind_lvalue(
         &mut self,
         lvalue: &LValue<'a>,
-        typ: TypeValue<'a>,
+        typ: Type<'a>,
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
     ) -> Result<(), TypeCheckerError> {
         match &lvalue.node {
@@ -204,7 +200,7 @@ impl<'a> TypeChecker<'a> {
                     .add_identifier(lvalue.name, typ.clone())?;
 
                 // Check if the type is an array with matching rank
-                if let TypeValueType::Array {
+                if let TypeType::Array {
                     element_type: _,
                     rank,
                 } = &typ.node
@@ -230,9 +226,9 @@ impl<'a> TypeChecker<'a> {
                 for &index in indices {
                     environment.borrow_mut().add_identifier(
                         index,
-                        TypeValue {
+                        Type {
                             position: pos(),
-                            node: TypeValueType::Int,
+                            node: TypeType::Int,
                         },
                     )?;
                 }
@@ -248,29 +244,29 @@ impl<'a> TypeChecker<'a> {
     fn typecheck_type(
         typ: &Type<'a>,
         env: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<TypeValue<'a>, TypeCheckerError> {
+    ) -> Result<Type<'a>, TypeCheckerError> {
         match &typ.node {
-            TypeType::Int => Ok(TypeValue {
+            TypeType::Int => Ok(Type {
                 position: typ.position.clone(),
-                node: TypeValueType::Int,
+                node: TypeType::Int,
             }),
-            TypeType::Float => Ok(TypeValue {
+            TypeType::Float => Ok(Type {
                 position: typ.position.clone(),
-                node: TypeValueType::Float,
+                node: TypeType::Float,
             }),
-            TypeType::Bool => Ok(TypeValue {
+            TypeType::Bool => Ok(Type {
                 position: typ.position.clone(),
-                node: TypeValueType::Bool,
+                node: TypeType::Bool,
             }),
-            TypeType::Void => Ok(TypeValue {
+            TypeType::Void => Ok(Type {
                 position: typ.position.clone(),
-                node: TypeValueType::Void,
+                node: TypeType::Void,
             }),
             TypeType::Array { element_type, rank } => {
                 let type_value = Self::typecheck_type(element_type, env)?;
-                Ok(TypeValue {
+                Ok(Type {
                     position: typ.position.clone(),
-                    node: TypeValueType::Array {
+                    node: TypeType::Array {
                         element_type: Box::new(type_value),
                         rank: *rank,
                     },
@@ -282,30 +278,47 @@ impl<'a> TypeChecker<'a> {
                     Err(err) => Err(err),
                 }
             }
+            TypeType::Function {
+                param_types,
+                return_type,
+            } => {
+                let mut resolved_param_types = Vec::new();
+                for param_type in param_types {
+                    resolved_param_types.push(Self::typecheck_type(param_type, env)?);
+                }
+                let resolved_return_type = Self::typecheck_type(return_type, env)?;
+                Ok(Type {
+                    position: typ.position.clone(),
+                    node: TypeType::Function {
+                        param_types: resolved_param_types,
+                        return_type: Box::new(resolved_return_type),
+                    },
+                })
+            }
         }
     }
 
-    fn types_equal(left: &TypeValue<'a>, right: &TypeValue<'a>) -> bool {
+    fn types_equal(left: &Type<'a>, right: &Type<'a>) -> bool {
         match (&left.node, &right.node) {
-            (TypeValueType::Int, TypeValueType::Int) => true,
-            (TypeValueType::Float, TypeValueType::Float) => true,
-            (TypeValueType::Bool, TypeValueType::Bool) => true,
-            (TypeValueType::Void, TypeValueType::Void) => true,
+            (TypeType::Int, TypeType::Int) => true,
+            (TypeType::Float, TypeType::Float) => true,
+            (TypeType::Bool, TypeType::Bool) => true,
+            (TypeType::Void, TypeType::Void) => true,
             (
-                TypeValueType::Array {
+                TypeType::Array {
                     element_type: left_element,
                     rank: left_rank,
                 },
-                TypeValueType::Array {
+                TypeType::Array {
                     element_type: right_element,
                     rank: right_rank,
                 },
             ) => left_rank == right_rank && Self::types_equal(left_element, right_element),
             (
-                TypeValueType::Struct {
+                TypeType::Struct {
                     name: left_name, ..
                 },
-                TypeValueType::Struct {
+                TypeType::Struct {
                     name: right_name, ..
                 },
             ) => left_name == right_name,
@@ -374,9 +387,9 @@ impl<'a> TypeChecker<'a> {
         let rgba = global_env
             .borrow()
             .get_identifier(position.clone(), "rgba")?;
-        let rgba_array = TypeValue {
+        let rgba_array = Type {
             position: pos(),
-            node: TypeValueType::Array {
+            node: TypeType::Array {
                 element_type: Box::new(rgba.clone()),
                 rank: 2,
             },
@@ -397,9 +410,9 @@ impl<'a> TypeChecker<'a> {
             for index in indices {
                 let _ = global_env.borrow_mut().add_identifier(
                     index,
-                    TypeValue {
+                    Type {
                         position: pos(),
-                        node: TypeValueType::Int,
+                        node: TypeType::Int,
                     },
                 );
             }
@@ -418,10 +431,10 @@ impl<'a> TypeChecker<'a> {
 
         let is_rgba_array = matches!(
             &image_type.borrow().as_ref().unwrap().node,
-            TypeValueType::Array {
+            TypeType::Array {
                 element_type,
                 rank: 2,
-            } if matches!(element_type.node, TypeValueType::Struct { name, .. } if name == "rgba")
+            } if matches!(element_type.node, TypeType::Struct { name, .. } if name == "rgba")
         );
 
         if !is_rgba_array {
@@ -442,7 +455,7 @@ impl<'a> TypeChecker<'a> {
         let condition_type = self.typecheck_expression(condition, global_env)?;
         if !matches!(
             condition_type.borrow().as_ref().unwrap().node,
-            TypeValueType::Bool
+            TypeType::Bool
         ) {
             return Err(TypeCheckerError {
                 message: "Asserted expression must be boolean".to_string(),
@@ -491,9 +504,9 @@ impl<'a> TypeChecker<'a> {
         // Add the struct to the environment
         global_env.borrow_mut().add_identifier(
             name,
-            TypeValue {
+            Type {
                 position: position.clone(),
-                node: TypeValueType::Struct {
+                node: TypeType::Struct {
                     name,
                     elements: resolved_elements,
                 },
@@ -529,9 +542,9 @@ impl<'a> TypeChecker<'a> {
         }
 
         // Add function to global environment for recursive calls
-        let function_type = TypeValue {
+        let function_type = Type {
             position: position.clone(),
-            node: TypeValueType::Function {
+            node: TypeType::Function {
                 param_types,
                 return_type: Box::new(fn_return_type.clone()),
             },
@@ -559,10 +572,7 @@ impl<'a> TypeChecker<'a> {
                     message: _,
                 } => {
                     let cond_type = self.typecheck_expression(condition, local_env)?;
-                    if !matches!(
-                        cond_type.borrow().as_ref().unwrap().node,
-                        TypeValueType::Bool
-                    ) {
+                    if !matches!(cond_type.borrow().as_ref().unwrap().node, TypeType::Bool) {
                         return Err(TypeCheckerError {
                             message: "Asserted expression must be boolean".to_string(),
                             position: condition.position.clone(),
@@ -584,7 +594,7 @@ impl<'a> TypeChecker<'a> {
         }
 
         // Check for implicit return
-        if !(has_return.get()) && !matches!(fn_return_type.node, TypeValueType::Void) {
+        if !(has_return.get()) && !matches!(fn_return_type.node, TypeType::Void) {
             return Err(TypeCheckerError {
                 message: "Implicit return type (void) does not match return type of function"
                     .to_string(),
@@ -599,7 +609,7 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         expression: &Expression<'a>,
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         match &expression.node {
             ExpressionType::Int { value: _ } => self.typecheck_int_expression(expression),
             ExpressionType::Float { value: _ } => self.typecheck_float_expression(expression),
@@ -730,10 +740,10 @@ impl<'a> TypeChecker<'a> {
     fn typecheck_int_expression(
         &mut self,
         expression: &Expression<'a>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
-        *expression.resolved_type.borrow_mut() = Some(TypeValue {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
+        *expression.resolved_type.borrow_mut() = Some(Type {
             position: expression.position.clone(),
-            node: TypeValueType::Int,
+            node: TypeType::Int,
         });
         Ok(expression.resolved_type.clone())
     }
@@ -741,10 +751,10 @@ impl<'a> TypeChecker<'a> {
     fn typecheck_float_expression(
         &mut self,
         expression: &Expression<'a>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
-        *expression.resolved_type.borrow_mut() = Some(TypeValue {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
+        *expression.resolved_type.borrow_mut() = Some(Type {
             position: expression.position.clone(),
-            node: TypeValueType::Float,
+            node: TypeType::Float,
         });
         Ok(expression.resolved_type.clone())
     }
@@ -752,10 +762,10 @@ impl<'a> TypeChecker<'a> {
     fn typecheck_bool_expression(
         &mut self,
         expression: &Expression<'a>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
-        *expression.resolved_type.borrow_mut() = Some(TypeValue {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
+        *expression.resolved_type.borrow_mut() = Some(Type {
             position: expression.position.clone(),
-            node: TypeValueType::Bool,
+            node: TypeType::Bool,
         });
         Ok(expression.resolved_type.clone())
     }
@@ -763,10 +773,10 @@ impl<'a> TypeChecker<'a> {
     fn typecheck_void_expression(
         &mut self,
         expression: &Expression<'a>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
-        *expression.resolved_type.borrow_mut() = Some(TypeValue {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
+        *expression.resolved_type.borrow_mut() = Some(Type {
             position: expression.position.clone(),
-            node: TypeValueType::Void,
+            node: TypeType::Void,
         });
         Ok(expression.resolved_type.clone())
     }
@@ -776,13 +786,13 @@ impl<'a> TypeChecker<'a> {
         expression: &Expression<'a>,
         name: &'a str,
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         let identifier_type = environment
             .borrow_mut()
             .get_identifier(expression.position.clone(), name)?;
 
         // Check if it's a function type, which is not allowed for variable expressions
-        if let TypeValueType::Function { .. } = identifier_type.node {
+        if let TypeType::Function { .. } = identifier_type.node {
             return Err(TypeCheckerError {
                 message: format!("Name {} is not defined as a variable", name),
                 position: expression.position.clone(),
@@ -801,7 +811,7 @@ impl<'a> TypeChecker<'a> {
         right: &Expression<'a>,
         operator: &Binop,
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         let left_type = self.typecheck_expression(left, environment)?;
         let right_type = self.typecheck_expression(right, environment)?;
 
@@ -822,10 +832,7 @@ impl<'a> TypeChecker<'a> {
         match operator {
             &Binop::Add | Binop::Subtract | Binop::Multiply | Binop::Divide | Binop::Modulo => {
                 // Numeric operators require int or float types
-                if !matches!(
-                    left_type_inner.node,
-                    TypeValueType::Int | TypeValueType::Float
-                ) {
+                if !matches!(left_type_inner.node, TypeType::Int | TypeType::Float) {
                     return Err(TypeCheckerError {
                         message: format!(
                             "Left and right hand operators need to be int or float for {}",
@@ -841,7 +848,7 @@ impl<'a> TypeChecker<'a> {
                 // Equality operators support int, float, or boolean
                 if !matches!(
                     left_type_inner.node,
-                    TypeValueType::Int | TypeValueType::Float | TypeValueType::Bool
+                    TypeType::Int | TypeType::Float | TypeType::Bool
                 ) {
                     return Err(TypeCheckerError {
                         message: format!(
@@ -852,18 +859,15 @@ impl<'a> TypeChecker<'a> {
                     });
                 }
                 // Result is boolean
-                let bool_type = RefCell::new(Some(TypeValue {
+                let bool_type = RefCell::new(Some(Type {
                     position: position.clone(),
-                    node: TypeValueType::Bool,
+                    node: TypeType::Bool,
                 }));
                 Ok(bool_type)
             }
             Binop::Less | Binop::Greater | Binop::LessEquals | Binop::GreaterEquals => {
                 // Comparison operators require int or float types
-                if !matches!(
-                    left_type_inner.node,
-                    TypeValueType::Int | TypeValueType::Float
-                ) {
+                if !matches!(left_type_inner.node, TypeType::Int | TypeType::Float) {
                     return Err(TypeCheckerError {
                         message: format!(
                             "Left and right hand operators need to be int or float for {}",
@@ -873,15 +877,15 @@ impl<'a> TypeChecker<'a> {
                     });
                 }
                 // Result is boolean
-                let bool_type = RefCell::new(Some(TypeValue {
+                let bool_type = RefCell::new(Some(Type {
                     position: position.clone(),
-                    node: TypeValueType::Bool,
+                    node: TypeType::Bool,
                 }));
                 Ok(bool_type)
             }
             Binop::And | Binop::Or => {
                 // Logical operators require bool types
-                if !matches!(left_type_inner.node, TypeValueType::Bool) {
+                if !matches!(left_type_inner.node, TypeType::Bool) {
                     return Err(TypeCheckerError {
                         message: format!(
                             "Left and right hand operators need to be bool for {}",
@@ -902,13 +906,13 @@ impl<'a> TypeChecker<'a> {
         name: &'a str,
         fields: &[Expression<'a>],
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         // Get the struct type from environment
         let type_value = environment
             .borrow_mut()
             .get_identifier(position.clone(), name)?;
 
-        if let TypeValueType::Struct { name: _, elements } = type_value.node.clone() {
+        if let TypeType::Struct { name: _, elements } = type_value.node.clone() {
             // Check number of fields
             if elements.len() != fields.len() {
                 return Err(TypeCheckerError {
@@ -948,7 +952,7 @@ impl<'a> TypeChecker<'a> {
         position: Position,
         elements: &[Expression<'a>],
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         if elements.is_empty() {
             return Err(TypeCheckerError {
                 message: "Array literal cannot be empty".to_string(),
@@ -978,9 +982,9 @@ impl<'a> TypeChecker<'a> {
         }
 
         // Create and return array type
-        let array_type = RefCell::new(Some(TypeValue {
+        let array_type = RefCell::new(Some(Type {
             position: position.clone(),
-            node: TypeValueType::Array {
+            node: TypeType::Array {
                 element_type: Box::new(first_type.borrow().clone().unwrap()),
                 rank: 1,
             },
@@ -996,12 +1000,12 @@ impl<'a> TypeChecker<'a> {
         then_branch: &Expression<'a>,
         else_branch: &Expression<'a>,
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         // Check that condition is boolean
         let condition_type = self.typecheck_expression(condition, environment)?;
         if !matches!(
             condition_type.borrow().as_ref().unwrap().node,
-            TypeValueType::Bool
+            TypeType::Bool
         ) {
             return Err(TypeCheckerError {
                 message: "Type of condition for if expression must be boolean".to_string(),
@@ -1032,12 +1036,12 @@ impl<'a> TypeChecker<'a> {
         struct_variable: &Expression<'a>,
         field: &'a str,
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         // Get struct type
         let variable_type = self.typecheck_expression(struct_variable, environment)?;
 
-        if let Some(TypeValue {
-            node: TypeValueType::Struct { name: _, elements },
+        if let Some(Type {
+            node: TypeType::Struct { name: _, elements },
             ..
         }) = &*variable_type.clone().borrow()
         {
@@ -1066,11 +1070,11 @@ impl<'a> TypeChecker<'a> {
         array: &Expression<'a>,
         indices: &Vec<Expression<'a>>,
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         let array_type = self.typecheck_expression(array, environment)?;
 
-        if let Some(TypeValue {
-            node: TypeValueType::Array { element_type, rank },
+        if let Some(Type {
+            node: TypeType::Array { element_type, rank },
             ..
         }) = &*array_type.clone().borrow()
         {
@@ -1089,10 +1093,7 @@ impl<'a> TypeChecker<'a> {
             // Check that all indices are integers
             for index in indices {
                 let index_type = self.typecheck_expression(index, environment)?;
-                if !matches!(
-                    index_type.borrow().as_ref().unwrap().node,
-                    TypeValueType::Int
-                ) {
+                if !matches!(index_type.borrow().as_ref().unwrap().node, TypeType::Int) {
                     return Err(TypeCheckerError {
                         message: "Array indices must be integers".to_string(),
                         position: index.position.clone(),
@@ -1116,15 +1117,15 @@ impl<'a> TypeChecker<'a> {
         function: &'a str,
         arguments: &[Expression<'a>],
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         // Get function type
         let func_type = environment
             .borrow()
             .get_identifier(position.clone(), function)?;
 
-        if let TypeValue {
+        if let Type {
             node:
-                TypeValueType::Function {
+                TypeType::Function {
                     param_types,
                     return_type,
                 },
@@ -1169,7 +1170,7 @@ impl<'a> TypeChecker<'a> {
         range: &Vec<(&'a str, Expression<'a>)>,
         body: &Expression<'a>,
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         if range.is_empty() {
             return Err(TypeCheckerError {
                 message: "Cannot make array of rank 0".to_string(),
@@ -1185,10 +1186,7 @@ impl<'a> TypeChecker<'a> {
         for (var_name, limit_expr) in range {
             let limit_type = self.typecheck_expression(limit_expr, environment)?;
 
-            if !matches!(
-                limit_type.borrow().as_ref().unwrap().node,
-                TypeValueType::Int
-            ) {
+            if !matches!(limit_type.borrow().as_ref().unwrap().node, TypeType::Int) {
                 return Err(TypeCheckerError {
                     message: "Cannot iterate to non-integer value".to_string(),
                     position: limit_expr.position.clone(),
@@ -1199,9 +1197,9 @@ impl<'a> TypeChecker<'a> {
                 .borrow_mut()
                 .add_identifier(
                     var_name,
-                    TypeValue {
+                    Type {
                         position: position.clone(),
-                        node: TypeValueType::Int,
+                        node: TypeType::Int,
                     },
                 )
                 .map_err(|_| TypeCheckerError {
@@ -1214,9 +1212,9 @@ impl<'a> TypeChecker<'a> {
         let element_type = self.typecheck_expression(body, &local_env)?;
 
         // Create array type
-        let array_type = RefCell::new(Some(TypeValue {
+        let array_type = RefCell::new(Some(Type {
             position: position.clone(),
-            node: TypeValueType::Array {
+            node: TypeType::Array {
                 element_type: Box::new(element_type.borrow().clone().unwrap()),
                 rank: range.len(),
             },
@@ -1231,7 +1229,7 @@ impl<'a> TypeChecker<'a> {
         range: &Vec<(&'a str, Expression<'a>)>,
         body: &Expression<'a>,
         environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-    ) -> Result<RefCell<Option<TypeValue<'a>>>, TypeCheckerError> {
+    ) -> Result<RefCell<Option<Type<'a>>>, TypeCheckerError> {
         if range.is_empty() {
             return Err(TypeCheckerError {
                 message: "Cannot sum over array of rank 0".to_string(),
@@ -1247,10 +1245,7 @@ impl<'a> TypeChecker<'a> {
         for (var_name, limit_expr) in range {
             let limit_type = self.typecheck_expression(limit_expr, environment)?;
 
-            if !matches!(
-                limit_type.borrow().as_ref().unwrap().node,
-                TypeValueType::Int
-            ) {
+            if !matches!(limit_type.borrow().as_ref().unwrap().node, TypeType::Int) {
                 return Err(TypeCheckerError {
                     message: "Cannot iterate to non-integer value".to_string(),
                     position: limit_expr.position.clone(),
@@ -1261,9 +1256,9 @@ impl<'a> TypeChecker<'a> {
                 .borrow_mut()
                 .add_identifier(
                     var_name,
-                    TypeValue {
+                    Type {
                         position: position.clone(),
-                        node: TypeValueType::Int,
+                        node: TypeType::Int,
                     },
                 )
                 .map_err(|_| TypeCheckerError {
@@ -1278,7 +1273,7 @@ impl<'a> TypeChecker<'a> {
         // Check if body type is numeric (int or float)
         if !matches!(
             element_type.borrow().as_ref().unwrap().node,
-            TypeValueType::Int | TypeValueType::Float
+            TypeType::Int | TypeType::Float
         ) {
             return Err(TypeCheckerError {
                 message: "Cannot sum over elements that are not int or float".to_string(),

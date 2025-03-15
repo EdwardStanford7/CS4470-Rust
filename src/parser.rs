@@ -872,7 +872,7 @@ impl<'a> Parser<'a> {
             position: token.position.clone(),
             node: TypeType::Struct {
                 name: token.value.unwrap(),
-                elements: None,
+                elements: Vec::new(),
             },
         })
     }

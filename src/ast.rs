@@ -195,7 +195,7 @@ impl Binop {
 pub struct Expression<'a> {
     pub position: Position,
     pub node: ExpressionType<'a>,
-    pub resolved_type: RefCell<Option<TypeValue<'a>>>,
+    pub resolved_type: RefCell<Option<Type<'a>>>,
 }
 
 pub enum ExpressionType<'a> {
@@ -390,11 +390,13 @@ impl<'a> Display for Statement<'a> {
 
 // -------------------------------------------------------------------------------------------- Type Nodes -----------------------------------------------------------------------------------------------
 
+#[derive(Clone)]
 pub struct Type<'a> {
     pub position: Position,
     pub node: TypeType<'a>,
 }
 
+#[derive(Clone)]
 pub enum TypeType<'a> {
     Int,
     Float,
@@ -402,11 +404,15 @@ pub enum TypeType<'a> {
     Void,
     Struct {
         name: &'a str,
-        elements: Option<Vec<(&'a str, Type<'a>)>>, // Only exists once resolved.
+        elements: Vec<(&'a str, Type<'a>)>,
     },
     Array {
         element_type: Box<Type<'a>>,
         rank: usize,
+    },
+    Function {
+        param_types: Vec<Type<'a>>,
+        return_type: Box<Type<'a>>,
     },
 }
 
@@ -421,52 +427,7 @@ impl<'a> Display for Type<'a> {
             TypeType::Array { element_type, rank } => {
                 write!(f, "(ArrayType {} {})", element_type, rank)
             }
-        }
-    }
-}
-
-// -------------------------------------------------------------------------------------------- TypeValue Nodes -----------------------------------------------------------------------------------------------
-
-#[derive(Clone)]
-pub struct TypeValue<'a> {
-    pub position: Position,
-    pub node: TypeValueType<'a>,
-}
-
-#[derive(Clone)]
-pub enum TypeValueType<'a> {
-    Int,
-    Float,
-    Bool,
-    Void,
-    Struct {
-        name: &'a str,
-        elements: Vec<(&'a str, TypeValue<'a>)>,
-    },
-    Array {
-        element_type: Box<TypeValue<'a>>,
-        rank: usize,
-    },
-    Function {
-        param_types: Vec<TypeValue<'a>>,
-        return_type: Box<TypeValue<'a>>,
-    },
-}
-
-impl<'a> Display for TypeValue<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.node {
-            TypeValueType::Int => write!(f, "(IntType)"),
-            TypeValueType::Float => write!(f, "(FloatType)"),
-            TypeValueType::Bool => write!(f, "(BoolType)"),
-            TypeValueType::Void => write!(f, "(VoidType)"),
-            TypeValueType::Struct { name, elements: _ } => {
-                write!(f, "(StructType {})", name)
-            }
-            TypeValueType::Array { element_type, rank } => {
-                write!(f, "(ArrayType {} {})", element_type, rank)
-            }
-            TypeValueType::Function {
+            TypeType::Function {
                 param_types: _,
                 return_type,
             } => write!(f, "{}", return_type),
