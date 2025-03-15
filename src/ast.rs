@@ -49,7 +49,7 @@ pub enum CommandType<'a> {
     },
 }
 
-impl<'a> Display for Command<'a> {
+impl Display for Command<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.node {
             CommandType::Read {
@@ -260,7 +260,7 @@ pub enum ExpressionType<'a> {
     },
 }
 
-impl<'a> Display for Expression<'a> {
+impl Display for Expression<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let type_str = if let Some(typ) = self.resolved_type.borrow().as_ref() {
             format!(" {}", typ)
@@ -378,7 +378,7 @@ pub enum StatementType<'a> {
     },
 }
 
-impl<'a> Display for Statement<'a> {
+impl Display for Statement<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.node {
             StatementType::Let { variable, rvalue } => {
@@ -422,7 +422,7 @@ pub enum TypeType<'a> {
     },
 }
 
-impl<'a> Display for Type<'a> {
+impl Display for Type<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.node {
             TypeType::Int => write!(f, "(IntType)"),
@@ -454,7 +454,7 @@ pub enum LValueType<'a> {
     Array { indices: Vec<&'a str> },
 }
 
-impl<'a> Display for LValue<'a> {
+impl Display for LValue<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.node {
             LValueType::Variable => write!(f, "(VarLValue {})", self.name),

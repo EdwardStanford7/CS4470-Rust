@@ -13,7 +13,7 @@ pub struct Token<'a> {
     pub token_type: TokenType<'a>,
 }
 
-impl<'a> Display for Token<'a> {
+impl Display for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.token_type)
     }
@@ -74,7 +74,7 @@ pub enum TokenType<'a> {
     EndOfFile,
 }
 
-impl<'a> Display for TokenType<'a> {
+impl Display for TokenType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TokenType::IntVal(contents) => write!(f, "INTVAL '{}'", contents),
