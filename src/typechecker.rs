@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::lexer::Position;
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     fmt::Display,
     rc::Rc,
 };
@@ -45,14 +45,17 @@ impl<'a> TypeEnvironment<'a> {
         name: &'a str,
         typ: TypeValue<'a>,
     ) -> Result<(), TypeCheckerError> {
-        if self.local_environment.contains_key(name) {
-            return Err(TypeCheckerError {
-                message: format!("Cannot redefine the name {}", name),
-                position: typ.position.clone(),
-            });
+        match self.local_environment.entry(name) {
+            Entry::Occupied(_) => {
+                return Err(TypeCheckerError {
+                    message: format!("Cannot redefine the name {}", name),
+                    position: typ.position.clone(),
+                });
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(typ);
+            }
         }
-
-        self.local_environment.insert(name, typ);
         Ok(())
     }
 

@@ -1,5 +1,4 @@
 mod ast;
-mod c_generator;
 mod lexer;
 mod parser;
 mod typechecker;
@@ -16,8 +15,6 @@ enum CompilationMode {
     Parse,
     /// Typecheck after parsing
     Typecheck,
-    /// Generate C intermediate representation
-    IntermediateRepresentation,
     /// Generate assembly code
     Assembly,
     /// Full compilation pipeline
@@ -114,13 +111,6 @@ fn main() {
 
         writeln!(buffer, "Compilation succeeded, typechecking complete.").unwrap();
         buffer.flush().unwrap();
-        std::process::exit(0);
-    }
-
-    // Generate intermediate representation if in IR mode
-    if args.mode == CompilationMode::IntermediateRepresentation {
-        println!("{}", c_generator::generate_code(&global_env, &commands));
-        println!(" Compilation succeeded, intermediate representation generated.");
         std::process::exit(0);
     }
 }
