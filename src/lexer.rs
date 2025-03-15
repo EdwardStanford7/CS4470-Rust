@@ -204,6 +204,13 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn current_position(&self) -> Position {
+        Position {
+            line: self.line,
+            column: self.column,
+        }
+    }
+
     /// Lex an identifier or keyword
     fn lex_identifier(&mut self) -> Token<'a> {
         let start = self.position;
@@ -218,10 +225,7 @@ impl<'a> Lexer<'a> {
         }
 
         let word = &self.program[start..self.position];
-        let pos = Position {
-            line: self.line,
-            column: self.column,
-        };
+        let pos = self.current_position();
 
         // Check if this is a keyword
         match word {
@@ -343,10 +347,7 @@ impl<'a> Lexer<'a> {
         }
 
         let number = &self.program[start..self.position];
-        let position = Position {
-            line: self.line,
-            column: self.column,
-        };
+        let position = self.current_position();
 
         if has_dot {
             Token {
@@ -466,10 +467,7 @@ impl<'a> Lexer<'a> {
 
     /// Lex operators and delimiters
     fn lex_operator(&mut self) -> Token<'a> {
-        let pos = Position {
-            line: self.line,
-            column: self.column,
-        };
+        let pos = self.current_position();
 
         // Check for two-character operators
         if self.peek_byte() != 0 {
