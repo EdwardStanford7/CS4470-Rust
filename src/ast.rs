@@ -1,10 +1,6 @@
 use crate::{lexer::Position, typechecker::TypeEnvironment};
 use core::str;
-use std::{
-    cell::{Cell, RefCell},
-    fmt::Display,
-    rc::Rc,
-};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 // -------------------------------------------------------------------------------------------- Command Nodes -----------------------------------------------------------------------------------------------
 
@@ -44,7 +40,7 @@ pub enum CommandType<'a> {
         parameters: Vec<(LValue<'a>, Type<'a>)>,
         return_type: Box<Type<'a>>,
         statements: Vec<Statement<'a>>,
-        has_return: Cell<bool>,
+        has_return: bool,
         local_env: Rc<RefCell<TypeEnvironment<'a>>>,
     },
     Struct {
@@ -131,6 +127,16 @@ impl Display for Unop {
         match self {
             Unop::Negative => write!(f, "-"),
             Unop::Not => write!(f, "!"),
+        }
+    }
+}
+
+impl Unop {
+    pub fn from_str(s: &str) -> Unop {
+        match s {
+            "-" => Unop::Negative,
+            "!" => Unop::Not,
+            _ => panic!("Invalid unary operator: {}", s),
         }
     }
 }

@@ -2,10 +2,12 @@ mod ast;
 mod lexer;
 mod parser;
 mod typechecker;
-
 use clap::Parser;
 use clap::ValueEnum;
+use lexer::LexError;
+use parser::ParseError;
 use std::io::{self, Write};
+use typechecker::TypeError;
 
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
 enum CompilationMode {
@@ -34,25 +36,67 @@ struct Args {
     mode: CompilationMode,
 }
 
+enum CompilerError {
+    Io(io::Error),
+    Lex(LexError),
+    Parse(ParseError),
+    Type(TypeError),
+}
+
+// Implement Display trait for CompilerError
+impl std::fmt::Display for CompilerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompilerError::Io(err) => write!(f, "Compilation failed: {}", err),
+            CompilerError::Lex(err) => write!(f, "Compilation failed: {}", err),
+            CompilerError::Parse(err) => write!(f, "Compilation failed: {}", err),
+            CompilerError::Type(err) => write!(f, "Compilation failed: {}", err),
+        }
+    }
+}
+
+// Automatic conversion from std::io::Error
+impl From<io::Error> for CompilerError {
+    fn from(err: io::Error) -> Self {
+        CompilerError::Io(err)
+    }
+}
+
+// Automatic conversion from LexerError
+impl From<LexError> for CompilerError {
+    fn from(err: LexError) -> Self {
+        CompilerError::Lex(err)
+    }
+}
+
+// Automatic conversion from ParseError
+impl From<ParseError> for CompilerError {
+    fn from(err: ParseError) -> Self {
+        CompilerError::Parse(err)
+    }
+}
+
+// Automatic conversion from TypeError
+impl From<TypeError> for CompilerError {
+    fn from(err: TypeError) -> Self {
+        CompilerError::Type(err)
+    }
+}
+
 fn main() {
+    if let Err(err) = compile() {
+        println!("{}", err);
+    }
+}
+
+fn compile() -> Result<(), CompilerError> {
     let args = Args::parse();
 
     // Open file and read contents
-    let file_contents = std::fs::read_to_string(&args.file_name);
-    if let Err(e) = file_contents {
-        println!("Compilation failed: error reading file: {}", e);
-        std::process::exit(1);
-    }
-    let file_contents = file_contents.unwrap();
+    let file_contents = std::fs::read_to_string(&args.file_name)?;
 
-    // Lex the file
-    let tokens = match lexer::lex(&file_contents) {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            println!("Compilation failed: {}", e);
-            std::process::exit(1);
-        }
-    };
+    // Lex the file - convert any error to CompilerError
+    let tokens = lexer::lex(&file_contents)?;
 
     // Print tokens if in lex mode
     if args.mode == CompilationMode::Lex {
@@ -60,22 +104,16 @@ fn main() {
         let mut buffer = io::BufWriter::new(stdout.lock());
 
         for token in &tokens {
-            writeln!(buffer, "{}", token).unwrap();
+            writeln!(buffer, "{}", token)?;
         }
 
-        writeln!(buffer, "Compilation succeeded, lexical analysis complete.").unwrap();
-        buffer.flush().unwrap();
-        std::process::exit(0);
+        writeln!(buffer, "Compilation succeeded, lexical analysis complete.")?;
+        buffer.flush()?;
+        return Ok(());
     }
 
     // Parse the tokens
-    let commands = match parser::parse(tokens) {
-        Ok(ast) => ast,
-        Err(e) => {
-            println!("Compilation failed: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let commands = parser::parse(tokens)?;
 
     // Print AST if in parse mode
     if args.mode == CompilationMode::Parse {
@@ -83,22 +121,16 @@ fn main() {
         let mut buffer = io::BufWriter::new(stdout.lock());
 
         for command in &commands {
-            writeln!(buffer, "{}", command).unwrap();
+            writeln!(buffer, "{}", command)?;
         }
 
-        writeln!(buffer, "Compilation succeeded, parsing complete.").unwrap();
-        buffer.flush().unwrap();
-        std::process::exit(0);
+        writeln!(buffer, "Compilation succeeded, parsing complete.")?;
+        buffer.flush()?;
+        return Ok(());
     }
 
     // Typecheck the AST
-    let global_env = match typechecker::typecheck(&commands) {
-        Ok(global_env) => global_env,
-        Err(e) => {
-            println!("Compilation failed: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let (commands, global_env) = typechecker::typecheck(commands)?;
 
     // Print typechecked AST if in typecheck mode
     if args.mode == CompilationMode::Typecheck {
@@ -106,11 +138,13 @@ fn main() {
         let mut buffer = io::BufWriter::new(stdout.lock());
 
         for command in &commands {
-            writeln!(buffer, "{}", command).unwrap();
+            writeln!(buffer, "{}", command)?;
         }
 
-        writeln!(buffer, "Compilation succeeded, typechecking complete.").unwrap();
-        buffer.flush().unwrap();
-        std::process::exit(0);
+        writeln!(buffer, "Compilation succeeded, typechecking complete.")?;
+        buffer.flush()?;
+        return Ok(());
     }
+
+    Ok(())
 }

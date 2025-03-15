@@ -1,7 +1,7 @@
 use core::{fmt, str};
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Position {
     pub line: usize,
     pub column: usize,
@@ -10,27 +10,22 @@ pub struct Position {
 #[derive(Debug, PartialEq)]
 pub struct Token<'a> {
     pub position: Position,
-    pub token_type: TokenType,
-    pub value: Option<&'a str>,
+    pub token_type: TokenType<'a>,
 }
 
-impl Display for Token<'_> {
+impl<'a> Display for Token<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(contents) = self.value {
-            write!(f, "{} '{}'", self.token_type, contents)
-        } else {
-            write!(f, "{}", self.token_type)
-        }
+        write!(f, "{}", self.token_type)
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum TokenType {
+#[derive(Debug, PartialEq)]
+pub enum TokenType<'a> {
     // Values
-    IntVal,
-    FloatVal,
-    Variable,
-    String,
+    IntVal(&'a str),
+    FloatVal(&'a str),
+    Variable(&'a str),
+    String(&'a str),
 
     // Keywords
     Array,
@@ -60,7 +55,7 @@ pub enum TokenType {
     False,
 
     // Operators
-    Op,
+    Op(&'a str),
     Equals,
 
     // Delimiters
@@ -79,14 +74,14 @@ pub enum TokenType {
     EndOfFile,
 }
 
-impl Display for TokenType {
+impl<'a> Display for TokenType<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenType::IntVal => write!(f, "INTVAL"),
-            TokenType::FloatVal => write!(f, "FLOATVAL"),
-            TokenType::Variable => write!(f, "VARIABLE"),
-            TokenType::String => write!(f, "STRING"),
-            TokenType::Op => write!(f, "OP"),
+            TokenType::IntVal(contents) => write!(f, "INTVAL '{}'", contents),
+            TokenType::FloatVal(contents) => write!(f, "FLOATVAL '{}'", contents),
+            TokenType::Variable(contents) => write!(f, "VARIABLE '{}'", contents),
+            TokenType::String(contents) => write!(f, "STRING '{}'", contents),
+            TokenType::Op(contents) => write!(f, "OP '{}'", contents),
             TokenType::Array => write!(f, "ARRAY 'array'"),
             TokenType::Assert => write!(f, "ASSERT 'assert'"),
             TokenType::Bool => write!(f, "BOOL 'bool'"),
@@ -126,12 +121,12 @@ impl Display for TokenType {
     }
 }
 
-pub struct LexerError {
+pub struct LexError {
     message: String,
     position: Position,
 }
 
-impl Display for LexerError {
+impl Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -144,8 +139,6 @@ impl Display for LexerError {
 /// Represents the state of the lexer and provides helper methods
 struct Lexer<'a> {
     program: &'a str,
-    bytes: &'a [u8],
-    len: usize,
     position: usize,
     line: usize,
     column: usize,
@@ -156,35 +149,35 @@ impl<'a> Lexer<'a> {
     fn new(program: &'a str) -> Self {
         Lexer {
             program,
-            bytes: program.as_bytes(),
-            len: program.len(),
             position: 0,
             line: 1,
             column: 0,
         }
     }
 
-    /// Check if we've reached the end of input
-    fn at_end(&self) -> bool {
-        self.position >= self.len
+    // Helper function to check if a character is valid
+    fn is_valid(c: u8) -> bool {
+        (32..=126).contains(&c)
     }
 
     /// Get the current byte
+    /// Returns 0 if the position is at the end of the program
     fn current_byte(&self) -> u8 {
-        if self.position < self.len {
-            self.bytes[self.position]
-        } else {
-            0
-        }
+        self.program
+            .as_bytes()
+            .get(self.position)
+            .cloned()
+            .unwrap_or(0)
     }
 
-    /// Peek at the next byte
+    /// Get the next byte
+    /// Returns 0 if the position is at the end of the program
     fn peek_byte(&self) -> u8 {
-        if self.position + 1 < self.len {
-            self.bytes[self.position + 1]
-        } else {
-            0
-        }
+        self.program
+            .as_bytes()
+            .get(self.position + 1)
+            .cloned()
+            .unwrap_or(0)
     }
 
     /// Advance position by one character
@@ -201,8 +194,8 @@ impl<'a> Lexer<'a> {
     }
 
     /// Create an error at the current position
-    fn error(&self, message: &str) -> LexerError {
-        LexerError {
+    fn error(&self, message: &str) -> LexError {
+        LexError {
             message: message.to_string(),
             position: Position {
                 line: self.line,
@@ -216,140 +209,117 @@ impl<'a> Lexer<'a> {
         let start = self.position;
 
         // Consume all alphanumeric characters
-        while self.position < self.len
-            && (self.bytes[self.position].is_ascii_alphanumeric()
-                || self.bytes[self.position] == b'_')
-        {
+        loop {
+            let c = self.current_byte();
+            if !(c.is_ascii_alphanumeric() || c == b'_') {
+                break;
+            }
             self.advance();
         }
 
         let word = &self.program[start..self.position];
-
         let pos = Position {
             line: self.line,
             column: self.column,
         };
+
         // Check if this is a keyword
         match word {
             "array" => Token {
                 position: pos,
                 token_type: TokenType::Array,
-                value: None,
             },
             "assert" => Token {
                 position: pos,
                 token_type: TokenType::Assert,
-                value: None,
             },
             "bool" => Token {
                 position: pos,
                 token_type: TokenType::Bool,
-                value: None,
             },
             "else" => Token {
                 position: pos,
                 token_type: TokenType::Else,
-                value: None,
             },
             "false" => Token {
                 position: pos,
                 token_type: TokenType::False,
-                value: None,
             },
             "float" => Token {
                 position: pos,
                 token_type: TokenType::Float,
-                value: None,
             },
             "fn" => Token {
                 position: pos,
                 token_type: TokenType::Fn,
-                value: None,
             },
             "if" => Token {
                 position: pos,
                 token_type: TokenType::If,
-                value: None,
             },
             "image" => Token {
                 position: pos,
                 token_type: TokenType::Image,
-                value: None,
             },
             "int" => Token {
                 position: pos,
                 token_type: TokenType::Int,
-                value: None,
             },
             "let" => Token {
                 position: pos,
                 token_type: TokenType::Let,
-                value: None,
             },
             "print" => Token {
                 position: pos,
                 token_type: TokenType::Print,
-                value: None,
             },
             "read" => Token {
                 position: pos,
                 token_type: TokenType::Read,
-                value: None,
             },
             "return" => Token {
                 position: pos,
                 token_type: TokenType::Return,
-                value: None,
             },
             "show" => Token {
                 position: pos,
                 token_type: TokenType::Show,
-                value: None,
             },
             "struct" => Token {
                 position: pos,
                 token_type: TokenType::Struct,
-                value: None,
             },
             "sum" => Token {
                 position: pos,
                 token_type: TokenType::Sum,
-                value: None,
             },
             "then" => Token {
                 position: pos,
                 token_type: TokenType::Then,
-                value: None,
             },
             "time" => Token {
                 position: pos,
                 token_type: TokenType::Time,
-                value: None,
             },
             "to" => Token {
                 position: pos,
                 token_type: TokenType::To,
-                value: None,
             },
             "true" => Token {
                 position: pos,
                 token_type: TokenType::True,
-                value: None,
             },
             "void" => Token {
                 position: pos,
                 token_type: TokenType::Void,
-                value: None,
             },
             "write" => Token {
                 position: pos,
                 token_type: TokenType::Write,
-                value: None,
             },
             _ => Token {
                 position: pos,
-                token_type: TokenType::Variable,
-                value: Some(word),
+                token_type: TokenType::Variable(word),
             },
         }
     }
@@ -360,10 +330,11 @@ impl<'a> Lexer<'a> {
         let mut has_dot = false;
 
         // Consume all numeric characters
-        while self.position < self.len {
-            if self.bytes[self.position].is_ascii_digit() {
+        loop {
+            let c = self.current_byte();
+            if c.is_ascii_digit() {
                 self.advance();
-            } else if self.bytes[self.position] == b'.' && !has_dot {
+            } else if c == b'.' && !has_dot {
                 has_dot = true;
                 self.advance();
             } else {
@@ -372,23 +343,20 @@ impl<'a> Lexer<'a> {
         }
 
         let number = &self.program[start..self.position];
+        let position = Position {
+            line: self.line,
+            column: self.column,
+        };
+
         if has_dot {
             Token {
-                position: Position {
-                    line: self.line,
-                    column: self.column,
-                },
-                token_type: TokenType::FloatVal,
-                value: Some(number),
+                position,
+                token_type: TokenType::FloatVal(number),
             }
         } else {
             Token {
-                position: Position {
-                    line: self.line,
-                    column: self.column,
-                },
-                token_type: TokenType::IntVal,
-                value: Some(number),
+                position,
+                token_type: TokenType::IntVal(number),
             }
         }
     }
@@ -398,72 +366,72 @@ impl<'a> Lexer<'a> {
         let start = self.position;
         self.advance(); // Consume the dot
 
-        if self.position < self.len && self.bytes[self.position].is_ascii_digit() {
-            // It's a float starting with .
-            while self.position < self.len && self.bytes[self.position].is_ascii_digit() {
+        // Check if it's a float starting with a dot
+        if self.current_byte().is_ascii_digit() {
+            while self.current_byte().is_ascii_digit() {
                 self.advance();
             }
 
-            Token {
+            return Token {
                 position: Position {
                     line: self.line,
                     column: self.column,
                 },
-                token_type: TokenType::FloatVal,
-                value: Some(&self.program[start..self.position]),
-            }
-        } else {
-            // It's just a dot
-            Token {
-                position: Position {
-                    line: self.line,
-                    column: self.column - 1,
-                },
-                token_type: TokenType::Dot,
-                value: None,
-            }
+                token_type: TokenType::FloatVal(&self.program[start..self.position]),
+            };
+        }
+
+        // It's just a dot
+        Token {
+            position: Position {
+                line: self.line,
+                column: self.column - 1,
+            },
+            token_type: TokenType::Dot,
         }
     }
 
     /// Lex a string literal
-    fn lex_string(&mut self) -> Result<Token<'a>, LexerError> {
+    fn lex_string(&mut self) -> Result<Token<'a>, LexError> {
         let start = self.position;
         self.advance(); // Skip opening quote
 
-        // Find the closing quote
-        while self.position < self.len && self.bytes[self.position] != b'"' {
-            if !is_valid(self.bytes[self.position] as char) {
+        while self.current_byte() != b'"' {
+            let c = self.current_byte();
+
+            if c == 0 {
+                return Err(self.error("unterminated string"));
+            }
+
+            if !Self::is_valid(c) {
                 return Err(self.error("invalid character in string"));
             }
-            self.advance();
-        }
 
-        if self.position >= self.len {
-            return Err(self.error("unterminated string literal"));
+            self.advance();
         }
 
         self.advance(); // Skip closing quote
 
-        let string_literal = &self.program[start..self.position];
         Ok(Token {
             position: Position {
                 line: self.line,
                 column: self.column,
             },
-            token_type: TokenType::String,
-            value: Some(string_literal),
+            token_type: TokenType::String(&self.program[start..self.position]),
         })
     }
 
     /// Lex a comment (line or block)
-    fn lex_comment(&mut self) -> Result<(), LexerError> {
-        if self.peek_byte() == b'/' {
-            // Line comment
-            self.position += 2; // Skip //
-            self.column += 2;
+    fn lex_comment(&mut self) -> Result<(), LexError> {
+        self.advance(); // Skip the first /
+        let mut c = self.current_byte();
 
-            while self.position < self.len && self.bytes[self.position] != b'\n' {
-                if !is_valid(self.bytes[self.position] as char) {
+        if c == b'/' {
+            // Line comment
+            self.advance(); // Skip the second /
+
+            while self.current_byte() != b'\n' {
+                if !Self::is_valid(self.current_byte()) {
                     return Err(self.error("invalid character in comment"));
                 }
                 self.advance();
@@ -471,33 +439,27 @@ impl<'a> Lexer<'a> {
             Ok(())
         } else {
             // Block comment
-            self.position += 2; // Skip /*
-            self.column += 2;
+            self.advance(); // Skip the *
 
-            let mut found_end = false;
-            while self.position < self.len && !found_end {
-                if self.bytes[self.position] == b'*'
-                    && self.position + 1 < self.len
-                    && self.bytes[self.position + 1] == b'/'
-                {
-                    self.position += 2; // Skip */
-                    self.column += 2;
-                    found_end = true;
-                } else if self.bytes[self.position] == b'\n' {
+            // let mut found_end = false;
+            loop {
+                c = self.current_byte();
+                if c == b'*' && self.peek_byte() == b'/' {
+                    self.advance(); // Skip *
+                    self.advance(); // Skip /
+                    break;
+                } else if c == 0 {
+                    return Err(self.error("unterminated block comment"));
+                } else if c == b'\n' {
                     self.advance_newline();
                 } else {
-                    if !is_valid(self.bytes[self.position] as char)
-                        && self.bytes[self.position] != b'\n'
-                    {
+                    if !Self::is_valid(c) && c != b'\n' {
                         return Err(self.error("invalid character in block comment"));
                     }
                     self.advance();
                 }
             }
 
-            if !found_end {
-                return Err(self.error("unterminated block comment"));
-            }
             Ok(())
         }
     }
@@ -510,70 +472,59 @@ impl<'a> Lexer<'a> {
         };
 
         // Check for two-character operators
-        if self.position + 1 < self.len {
+        if self.peek_byte() != 0 {
             let potential_op = &self.program[self.position..self.position + 2];
             if ["==", "<=", ">=", "!=", "&&", "||"].contains(&potential_op) {
                 self.position += 2;
                 self.column += 2;
                 return Token {
                     position: pos,
-                    token_type: TokenType::Op,
-                    value: Some(potential_op),
+                    token_type: TokenType::Op(potential_op),
                 };
             }
         }
 
         // Single-character tokens
-        let token = match self.bytes[self.position] {
+        let token = match self.current_byte() {
             b'(' => Token {
                 position: pos,
                 token_type: TokenType::LParen,
-                value: None,
             },
             b')' => Token {
                 position: pos,
                 token_type: TokenType::RParen,
-                value: None,
             },
             b'{' => Token {
                 position: pos,
                 token_type: TokenType::LCurly,
-                value: None,
             },
             b'}' => Token {
                 position: pos,
                 token_type: TokenType::RCurly,
-                value: None,
             },
             b'[' => Token {
                 position: pos,
                 token_type: TokenType::LSquare,
-                value: None,
             },
             b']' => Token {
                 position: pos,
                 token_type: TokenType::RSquare,
-                value: None,
             },
             b',' => Token {
                 position: pos,
                 token_type: TokenType::Comma,
-                value: None,
             },
             b'=' => Token {
                 position: pos,
                 token_type: TokenType::Equals,
-                value: None,
             },
             b':' => Token {
                 position: pos,
                 token_type: TokenType::Colon,
-                value: None,
             },
             _ => Token {
                 position: pos,
-                token_type: TokenType::Op,
-                value: Some(&self.program[self.position..self.position + 1]),
+                token_type: TokenType::Op(&self.program[self.position..self.position + 1]),
             },
         };
 
@@ -582,13 +533,13 @@ impl<'a> Lexer<'a> {
     }
 
     /// Run the lexer to produce tokens
-    fn lex(&mut self) -> Result<Vec<Token<'a>>, LexerError> {
+    fn lex(&mut self) -> Result<Vec<Token<'a>>, LexError> {
         let mut tokens: Vec<Token<'a>> = Vec::with_capacity(self.program.len() / 4);
 
-        while !self.at_end() {
-            let byte = self.current_byte();
+        while self.current_byte() != 0 {
+            let c = self.current_byte();
 
-            match byte {
+            match c {
                 // Alphabetic characters (keywords or variables)
                 b'a'..=b'z' | b'A'..=b'Z' => {
                     tokens.push(self.lex_identifier());
@@ -620,8 +571,9 @@ impl<'a> Lexer<'a> {
                                 line: self.line,
                                 column: self.column,
                             },
-                            token_type: TokenType::Op,
-                            value: Some("/"),
+                            token_type: TokenType::Op(
+                                &self.program[self.position..self.position + 1],
+                            ),
                         });
                         self.advance();
                     }
@@ -629,10 +581,9 @@ impl<'a> Lexer<'a> {
 
                 // Line continuation
                 b'\\' => {
-                    if self.position + 1 < self.len && self.peek_byte() == b'\n' {
-                        self.position += 2;
-                        self.line += 1;
-                        self.column = 0;
+                    self.advance();
+                    if self.current_byte() == b'\n' {
+                        self.advance_newline();
                     } else {
                         return Err(self.error("invalid line continuation"));
                     }
@@ -650,7 +601,6 @@ impl<'a> Lexer<'a> {
                                 column: self.column,
                             },
                             token_type: TokenType::Newline,
-                            value: None,
                         });
                     }
 
@@ -658,12 +608,12 @@ impl<'a> Lexer<'a> {
                 }
 
                 // Whitespace
-                b' ' | b'\t' | b'\r' => {
+                b' ' => {
                     self.advance();
                 }
 
                 // Operators and delimiters
-                _ if is_valid(byte as char) => {
+                _ if Self::is_valid(c) => {
                     tokens.push(self.lex_operator());
                 }
 
@@ -681,20 +631,14 @@ impl<'a> Lexer<'a> {
                 column: self.column,
             },
             token_type: TokenType::EndOfFile,
-            value: None,
         });
 
         Ok(tokens)
     }
 }
 
-// Helper function to check if a character is valid
-fn is_valid(c: char) -> bool {
-    (c as u32) >= 32 && (c as u32) <= 126
-}
-
 // Optimized lexer implementation - main entry point
-pub fn lex(program: & str) -> Result<Vec<Token>, LexerError> {
+pub fn lex(program: &str) -> Result<Vec<Token>, LexError> {
     let mut lexer = Lexer::new(program);
     lexer.lex()
 }
