@@ -2,7 +2,6 @@ use crate::ast::*;
 use crate::lexer::*;
 use crate::typechecker::TypeEnvironment;
 use core::fmt;
-use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -24,15 +23,12 @@ impl Display for ParseError {
 
 struct Parser<'a> {
     tokens: Vec<Token<'a>>,
-    index: Cell<usize>,
+    index: usize,
 }
 
 impl<'a> Parser<'a> {
     fn new(tokens: Vec<Token<'a>>) -> Self {
-        Self {
-            tokens,
-            index: 0.into(),
-        }
+        Self { tokens, index: 0 }
     }
 
     fn parse(&mut self) -> Result<Vec<Command<'a>>, ParseError> {
@@ -53,9 +49,9 @@ impl<'a> Parser<'a> {
         Ok(commands)
     }
 
-    fn expect_token(&self, expected: TokenType) -> Result<Position, ParseError> {
-        let token = &self.tokens[self.index.get()];
-        self.index.replace(self.index.get() + 1);
+    fn expect_token(&mut self, expected: TokenType) -> Result<Position, ParseError> {
+        let token = &self.tokens[self.index];
+        self.index += 1;
 
         if token.token_type == expected {
             Ok(token.position)
@@ -68,11 +64,11 @@ impl<'a> Parser<'a> {
     }
 
     fn expect_token_match(
-        &self,
+        &mut self,
         does_match: impl FnOnce(&TokenType<'a>) -> bool,
     ) -> Result<(Position, &'a str), ParseError> {
-        let token = &self.tokens[self.index.get()];
-        self.index.replace(self.index.get() + 1);
+        let token = &self.tokens[self.index];
+        self.index += 1;
 
         match &token.token_type {
             TokenType::IntVal(value)
@@ -94,11 +90,11 @@ impl<'a> Parser<'a> {
     }
 
     fn peek_token(&self) -> &Token<'a> {
-        self.tokens.get(self.index.get()).unwrap()
+        self.tokens.get(self.index).unwrap()
     }
 
     fn peek_next_token(&self) -> &Token<'a> {
-        self.tokens.get(self.index.get() + 1).unwrap()
+        self.tokens.get(self.index + 1).unwrap()
     }
 
     // ----------------------------------------------------------------------------------- Command Parsers ----------------------------------------------------------------------------------------------
@@ -620,7 +616,7 @@ impl<'a> Parser<'a> {
         match token.token_type {
             TokenType::Op(operator) => {
                 if operator == "-" || operator == "!" {
-                    self.index.replace(self.index.get() + 1);
+                    self.index += 1;
                     let right = self.parse_precedence5_expr()?;
                     return Ok(Expression {
                         position,
@@ -654,7 +650,7 @@ impl<'a> Parser<'a> {
 
         while let TokenType::Op(operator) = self.peek_token().token_type {
             if operator == "*" || operator == "/" || operator == "%" {
-                self.index.replace(self.index.get() + 1);
+                self.index += 1;
                 let right = self.parse_precedence5_expr()?;
                 left = Expression {
                     position: left.position,
@@ -678,7 +674,7 @@ impl<'a> Parser<'a> {
 
         while let TokenType::Op(operator) = self.peek_token().token_type {
             if operator == "+" || operator == "-" {
-                self.index.replace(self.index.get() + 1);
+                self.index += 1;
                 let right = self.parse_precedence4_expr()?;
                 left = Expression {
                     position: left.position,
@@ -708,7 +704,7 @@ impl<'a> Parser<'a> {
                 || operator == "=="
                 || operator == "!="
             {
-                self.index.replace(self.index.get() + 1);
+                self.index += 1;
                 let right = self.parse_precedence3_expr()?;
                 left = Expression {
                     position: left.position,
@@ -732,7 +728,7 @@ impl<'a> Parser<'a> {
 
         while let TokenType::Op(operator) = self.peek_token().token_type {
             if operator == "&&" || operator == "||" {
-                self.index.replace(self.index.get() + 1);
+                self.index += 1;
                 let right = self.parse_precedence2_expr()?;
                 left = Expression {
                     position: left.position,

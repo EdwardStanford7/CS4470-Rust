@@ -204,6 +204,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Get the current position in a Position struct
     fn current_position(&self) -> Position {
         Position {
             line: self.line,
@@ -635,7 +636,6 @@ impl<'a> Lexer<'a> {
     }
 }
 
-// Optimized lexer implementation - main entry point
 pub fn lex(program: &str) -> Result<Vec<Token>, LexError> {
     let mut lexer = Lexer::new(program);
     lexer.lex()
