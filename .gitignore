@@ -2,3 +2,6 @@
 t.jpl
 grader
 rt
+.zig-cache
+**/*.o
+main

@@ -32,32 +32,32 @@ run:
 	./main $(TEST) -l
 norm-test:
 	@clear
-	zig build-exe src/main.zig -OReleaseFast && time ./main examples/t2.jpl -l > output.txt
+	zig build-exe src/main.zig -OReleaseFast && time ./main t2.jpl -l > output.txt
 
 check-ref:
 	@clear
 	zig build-exe src/main.zig -OReleaseFast
-	./main examples/t2.jpl -l > output.txt
+	./main t2.jpl -l > output.txt
 	(diff output.txt steoutput.expected > diff.txt) || code-insiders diff.txt
 
 hyp:
 	@clear
 	zig build-exe src/main.zig -OReleaseFast
-	hyperfine --warmup 3 './main examples/t2.jpl -l'
+	hyperfine --warmup 3 './main t2.jpl -l'
 
 hyp-smol:
 	@clear
 	zig build-exe src/main.zig -OReleaseFast
-	hyperfine --warmup 50 './main examples/t2.jpl -_'
+	hyperfine --warmup 50 './main t2.jpl -_'
 
 hyp-smol-safe-smol-comp:
 	@clear
 	zig build-exe src/main.zig -OReleaseSafe
-	hyperfine --warmup 10 './main examples/t2.jpl -_'
+	hyperfine --warmup 10 './main t2.jpl -_'
 	zig build-exe src/main.zig -OReleaseSmall
-	hyperfine --warmup 10 './main examples/t2.jpl -_'
+	hyperfine --warmup 10 './main t2.jpl -_'
 	zig build-exe src/main.zig -OReleaseFast
-	hyperfine --warmup 10 './main examples/t2.jpl -_'
+	hyperfine --warmup 10 './main t2.jpl -_'
 
 norm-small:
 	@clear
@@ -65,15 +65,15 @@ norm-small:
 
 ben:
 	zig build-exe src/main.zig -OReleaseFast
-	time ./main examples/t2.jpl -l &> /dev/null
-	time ./main examples/t2.jpl -l > output.txt
-	time ./main examples/t2.jpl -l &> /dev/null
-	time ./main examples/t2.jpl -_ &> /dev/null
+	time ./main t2.jpl -l &> /dev/null
+	time ./main t2.jpl -l > output.txt
+	time ./main t2.jpl -l &> /dev/null
+	time ./main t2.jpl -_ &> /dev/null
 
 
 flamegraph:
 	make compile-fast
-	sudo dtrace -n 'profile-997 /execname == "main"/ { @[ustack(100)] = count(); }' -o out.stacks -c './main examples/t2.jpl -t' > /dev/null
+	sudo dtrace -n 'profile-997 /execname == "main"/ { @[ustack(100)] = count(); }' -o out.stacks -c './main t2.jpl -t' > /dev/null
 	stackcollapse.pl out.stacks | flamegraph.pl --title "Flamegraph" > flamegraph.svg
 
 zigraf:
@@ -90,7 +90,7 @@ zigraf:
 
 	# Run DTrace profiling (redirecting extra output to /dev/null)
 	echo "Profiling with DTrace..."
-	sudo dtrace -n 'profile-997 /execname == "main"/ { @[ustack(100)] = count(); }' -o out.stacks -c './main examples/t2.jpl -t' > /dev/null
+	sudo dtrace -n 'profile-997 /execname == "main"/ { @[ustack(100)] = count(); }' -o out.stacks -c './main t2.jpl -t' > /dev/null
 
 	# Generate the flamegraph from the stack data
 	echo "Generating flamegraph..."
