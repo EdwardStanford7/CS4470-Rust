@@ -4,7 +4,7 @@ const lexprinter = @import("lexprinter.zig");
 const defs = @import("defs.zig");
 pub fn panic(reason: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
     //TODO recreate line number
-    printLex();
+    printLex() catch unreachable;
     _ = outw.print("reason: {s}\n", .{reason}) catch unreachable;
     _ = outw.print("last n: {d}, i: {d}, j: {d}\n", .{ lex.n, lex.i, lex.j }) catch unreachable;
     _ = outw.write("Compilation failed\n") catch unreachable;
@@ -18,7 +18,7 @@ var imp: []u8 = undefined;
 var v1: []u8 = undefined;
 var v2: []u8 = undefined;
 
-pub fn main() void {
+pub fn main() !void {
     outw = std.io.getStdOut().writer();
     // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     // _ = gpa.allocator();
@@ -56,7 +56,7 @@ pub fn main() void {
     lex.lex(imp, lex_values, lex_types);
 
     //----
-    printLex();
+    try printLex();
 
     //---
     _ = outw.write("Compilation succeeded\n") catch unreachable;
@@ -78,18 +78,13 @@ fn evilBitCheck(string: []u8) bool {
     return false;
 }
 
-fn printLex() void {
+fn printLex() !void {
     if (v2[1] == 'l') {
         var allocsize: usize = imp.len;
-        while (true) {
-            allocsize *= 7;
-            const lex_out = std.heap.page_allocator.alloc(u8, allocsize) catch unreachable;
-            defer std.heap.page_allocator.free(lex_out);
-            var lex_buf = std.io.fixedBufferStream(lex_out);
-            if (lexprinter.lex_print(lex_buf.writer(), lex_values, lex_types, imp)) {
-                _ = outw.write(lex_out[0..lex_buf.pos]) catch unreachable;
-                break;
-            }
-        }
+        allocsize *= 16;
+        const lex_out = std.heap.page_allocator.alloc(u8, allocsize) catch @panic("could not allocate for printing");
+        defer std.heap.page_allocator.free(lex_out);
+        const len = try lexprinter.lex_print(lex_out, lex_values, lex_types, imp);
+        _ = try std.posix.write(1, lex_out[0..len]);
     }
 }
