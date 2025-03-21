@@ -2,12 +2,11 @@ mod ast;
 mod lexer;
 mod parser;
 mod typechecker;
+mod utils;
 use clap::Parser;
 use clap::ValueEnum;
-use lexer::LexError;
-use parser::ParseError;
 use std::io::{self, Write};
-use typechecker::TypeError;
+use utils::*;
 
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
 enum CompilationMode {
@@ -130,7 +129,7 @@ fn compile() -> Result<(), CompilerError> {
     }
 
     // Typecheck the AST
-    let (commands, global_env) = typechecker::typecheck(commands)?;
+    let (commands, environment) = typechecker::typecheck(commands)?;
 
     // Print typechecked AST if in typecheck mode
     if args.mode == CompilationMode::Typecheck {

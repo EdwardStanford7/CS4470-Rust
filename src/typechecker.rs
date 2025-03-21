@@ -1,634 +1,662 @@
 use crate::ast::*;
-use crate::lexer::Position;
-use std::{
-    cell::RefCell,
-    collections::{hash_map::Entry, HashMap},
-    fmt::Display,
-    rc::Rc,
-};
-
-pub struct TypeError {
-    pub message: String,
-    pub position: Position,
-}
-
-impl Display for TypeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Type error: {}:{}: {}",
-            self.position.line, self.position.column, self.message
-        )
-    }
-}
-
-pub struct TypeEnvironment<'a> {
-    local_environment: HashMap<&'a str, Type<'a>>,
-    parent: Option<Rc<RefCell<TypeEnvironment<'a>>>>,
-}
-
-impl<'a> TypeEnvironment<'a> {
-    pub fn new(parent: Option<Rc<RefCell<TypeEnvironment<'a>>>>) -> TypeEnvironment<'a> {
-        TypeEnvironment {
-            local_environment: HashMap::new(),
-            parent,
-        }
-    }
-
-    pub fn add_identifier(&mut self, name: &'a str, typ: Type<'a>) -> Result<(), TypeError> {
-        match self.local_environment.entry(name) {
-            Entry::Occupied(_) => {
-                return Err(TypeError {
-                    message: format!("Cannot redefine the name {}", name),
-                    position: typ.position,
-                });
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(typ);
-            }
-        }
-        Ok(())
-    }
-
-    pub fn get_identifier(&self, position: Position, name: &'a str) -> Result<Type<'a>, TypeError> {
-        match self.local_environment.get(name) {
-            Some(typ) => Ok(typ.clone()),
-            None => match &self.parent {
-                Some(parent) => parent.borrow().get_identifier(position, name),
-                None => Err(TypeError {
-                    message: format!("Identifier {} is undefined", name),
-                    position,
-                }),
-            },
-        }
-    }
-}
+use crate::utils::*;
 
 pub fn typecheck(
     mut commands: Vec<Command<'_>>,
-) -> Result<(Vec<Command<'_>>, Rc<RefCell<TypeEnvironment<'_>>>), TypeError> {
-    let global_env = Rc::new(RefCell::new(TypeEnvironment::new(None)));
+) -> Result<(Vec<Command<'_>>, TypeEnvironment<'_>), TypeError> {
+    let mut environment = TypeEnvironment::new();
 
-    populate_built_ins(&global_env);
+    populate_built_ins(&mut environment);
 
     for command in commands.iter_mut() {
-        typecheck_command(command, &global_env)?;
+        typecheck_command(command, &mut environment)?;
     }
 
-    Ok((commands, global_env))
+    Ok((commands, environment))
 }
 
-fn pos() -> Position {
-    Position { line: 0, column: 0 }
-}
-
-fn populate_built_ins(global_env: &Rc<RefCell<TypeEnvironment<'_>>>) {
-    // Create basic types
-    let float_type = || Type {
-        position: pos(),
-        node: TypeType::Float,
-    };
-
-    let int_type = || Type {
-        position: pos(),
-        node: TypeType::Int,
-    };
+fn populate_built_ins(environment: &mut TypeEnvironment<'_>) {
+    environment.add_scope("global", "");
 
     // RGBA struct type
-    let rgba = Type {
-        position: pos(),
-        node: TypeType::Struct {
-            name: "rgba",
-            elements: vec![
-                ("r", float_type()),
-                ("g", float_type()),
-                ("b", float_type()),
-                ("a", float_type()),
-            ],
-        },
+    let rgba = Type::Struct {
+        name: "rgba",
+        elements: vec![
+            ("r", Type::Float),
+            ("g", Type::Float),
+            ("b", Type::Float),
+            ("a", Type::Float),
+        ],
     };
 
     // Argnum and args
-    let argnum = int_type();
-    let args = Type {
-        position: pos(),
-        node: TypeType::Array {
-            element_type: Box::new(int_type()),
-            rank: 1,
-        },
+    let argnum = Type::Int;
+    let args = Type::Array {
+        element_type: Box::new(Type::Int),
+        rank: 1,
     };
 
     // Function types
-    let one_float_to_float = Type {
-        position: pos(),
-        node: TypeType::Function {
-            param_types: vec![float_type()],
-            return_type: Box::new(float_type()),
-        },
+    let one_float_to_float = Type::Function {
+        param_types: vec![Type::Float],
+        return_type: Box::new(Type::Float),
     };
 
-    let two_floats_to_float = Type {
-        position: pos(),
-        node: TypeType::Function {
-            param_types: vec![float_type(), float_type()],
-            return_type: Box::new(float_type()),
-        },
+    let two_floats_to_float = Type::Function {
+        param_types: vec![Type::Float, Type::Float],
+        return_type: Box::new(Type::Float),
     };
 
-    let to_float = Type {
-        position: pos(),
-        node: TypeType::Function {
-            param_types: vec![int_type()],
-            return_type: Box::new(float_type()),
-        },
+    let to_float = Type::Function {
+        param_types: vec![Type::Int],
+        return_type: Box::new(Type::Float),
     };
 
-    let to_int = Type {
-        position: pos(),
-        node: TypeType::Function {
-            param_types: vec![float_type()],
-            return_type: Box::new(int_type()),
-        },
+    let to_int = Type::Function {
+        param_types: vec![Type::Float],
+        return_type: Box::new(Type::Int),
     };
 
     // Add to environment
-    let _ = global_env.borrow_mut().add_identifier("rgba", rgba);
-    let _ = global_env.borrow_mut().add_identifier("argnum", argnum);
-    let _ = global_env.borrow_mut().add_identifier("args", args);
+    let _ = environment.add_identifier("global", "rgba", rgba, Position::new(0, 0));
+    let _ = environment.add_identifier("global", "argnum", argnum, Position::new(0, 0));
+    let _ = environment.add_identifier("global", "args", args, Position::new(0, 0));
 
     for name in &[
         "float", "sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "log",
     ] {
-        let _ = global_env
-            .borrow_mut()
-            .add_identifier(name, one_float_to_float.clone());
+        let _ = environment.add_identifier(
+            "global",
+            name,
+            one_float_to_float.clone(),
+            Position::new(0, 0),
+        );
     }
 
     for name in &["pow", "atan2"] {
-        let _ = global_env
-            .borrow_mut()
-            .add_identifier(name, two_floats_to_float.clone());
+        let _ = environment.add_identifier(
+            "global",
+            name,
+            two_floats_to_float.clone(),
+            Position::new(0, 0),
+        );
     }
 
-    let _ = global_env.borrow_mut().add_identifier("to_float", to_float);
-    let _ = global_env.borrow_mut().add_identifier("to_int", to_int);
+    let _ = environment.add_identifier("global", "to_float", to_float, Position::new(0, 0));
+    let _ = environment.add_identifier("global", "to_int", to_int, Position::new(0, 0));
 }
 
 fn bind_lvalue<'a>(
     lvalue: &LValue<'a>,
     typ: Type<'a>,
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+    scope: &'a str,
+    environment: &mut TypeEnvironment<'a>,
 ) -> Result<(), TypeError> {
     match &lvalue.node {
         LValueType::Array { indices } => {
             // Add the identifier with the type
-            environment
-                .borrow_mut()
-                .add_identifier(lvalue.name, typ.clone())?;
+            environment.add_identifier(scope, lvalue.name, typ.clone(), lvalue.position)?;
 
             // Check if the type is an array with matching rank
-            if let TypeType::Array {
+            if let Type::Array {
                 element_type: _,
                 rank,
-            } = &typ.node
+            } = &typ
             {
                 if *rank != indices.len() {
-                    return Err(TypeError {
-                        message: format!(
+                    return Err(TypeError::new(
+                        format!(
                             "Rank of array lvalue ({}) does not match right hand side ({})",
                             indices.len(),
                             rank
                         ),
-                        position: lvalue.position,
-                    });
+                        lvalue.position,
+                    ));
                 }
             } else {
-                return Err(TypeError {
-                    message: "Incorrect type for array lvalue".to_string(),
-                    position: lvalue.position,
-                });
+                return Err(TypeError::new(
+                    "Incorrect type for array lvalue".to_string(),
+                    lvalue.position,
+                ));
             }
 
             // Bind index variables as integers
             for &index in indices {
-                environment.borrow_mut().add_identifier(
-                    index,
-                    Type {
-                        position: pos(),
-                        node: TypeType::Int,
-                    },
-                )?;
+                environment.add_identifier(scope, index, Type::Int, lvalue.position)?;
             }
 
             Ok(())
         }
-        LValueType::Variable => environment
-            .borrow_mut()
-            .add_identifier(lvalue.name, typ.clone()),
+        LValueType::Variable => {
+            environment.add_identifier(scope, lvalue.name, typ, lvalue.position)
+        }
     }
 }
 
 fn typecheck_type<'a>(
-    typ: &Type<'a>,
-    env: &Rc<RefCell<TypeEnvironment<'a>>>,
+    typ: Type<'a>,
+    scope: &'a str,
+    environment: &mut TypeEnvironment<'a>,
+    position: Position,
 ) -> Result<Type<'a>, TypeError> {
-    match &typ.node {
-        TypeType::Int => Ok(Type {
-            position: typ.position,
-            node: TypeType::Int,
-        }),
-        TypeType::Float => Ok(Type {
-            position: typ.position,
-            node: TypeType::Float,
-        }),
-        TypeType::Bool => Ok(Type {
-            position: typ.position,
-            node: TypeType::Bool,
-        }),
-        TypeType::Void => Ok(Type {
-            position: typ.position,
-            node: TypeType::Void,
-        }),
-        TypeType::Array { element_type, rank } => {
-            let type_value = typecheck_type(element_type, env)?;
-            Ok(Type {
-                position: typ.position,
-                node: TypeType::Array {
-                    element_type: Box::new(type_value),
-                    rank: *rank,
-                },
-            })
+    match &typ {
+        Type::Array {
+            element_type,
+            rank: _,
+        } => {
+            typecheck_type(element_type.as_ref().clone(), scope, environment, position)?;
         }
-        TypeType::Struct { name, elements: _ } => {
-            match env.borrow().get_identifier(typ.position, name) {
-                Ok(struct_type) => Ok(struct_type.clone()),
-                Err(err) => Err(err),
+        Type::Struct { name, elements: _ } => {
+            match environment.get_identifier(scope, position, name) {
+                Ok(struct_type) => {
+                    return Ok(struct_type);
+                }
+                Err(err) => return Err(err),
             }
         }
-        TypeType::Function {
+        Type::Function {
             param_types,
             return_type,
         } => {
             let mut resolved_param_types = Vec::new();
             for param_type in param_types {
-                resolved_param_types.push(typecheck_type(param_type, env)?);
+                resolved_param_types.push(typecheck_type(
+                    param_type.clone(),
+                    scope,
+                    environment,
+                    position,
+                )?);
             }
-            let resolved_return_type = typecheck_type(return_type, env)?;
-            Ok(Type {
-                position: typ.position,
-                node: TypeType::Function {
-                    param_types: resolved_param_types,
-                    return_type: Box::new(resolved_return_type),
-                },
-            })
+            typecheck_type(return_type.as_ref().clone(), scope, environment, position)?;
         }
+        _ => {}
     }
+
+    Ok(typ)
 }
 
-fn types_equal<'a>(left: &Type<'a>, right: &Type<'a>) -> bool {
-    match (&left.node, &right.node) {
-        (TypeType::Int, TypeType::Int) => true,
-        (TypeType::Float, TypeType::Float) => true,
-        (TypeType::Bool, TypeType::Bool) => true,
-        (TypeType::Void, TypeType::Void) => true,
+fn types_equal(t1: &Type<'_>, t2: &Type<'_>) -> bool {
+    match (t1, t2) {
+        (Type::Int, Type::Int)
+        | (Type::Float, Type::Float)
+        | (Type::Bool, Type::Bool)
+        | (Type::Void, Type::Void) => true,
         (
-            TypeType::Array {
-                element_type: left_element,
-                rank: left_rank,
+            Type::Array {
+                element_type: e1,
+                rank: r1,
             },
-            TypeType::Array {
-                element_type: right_element,
-                rank: right_rank,
+            Type::Array {
+                element_type: e2,
+                rank: r2,
             },
-        ) => left_rank == right_rank && types_equal(left_element, right_element),
+        ) => r1 == r2 && types_equal(e1, e2),
         (
-            TypeType::Struct {
-                name: left_name, ..
+            Type::Struct {
+                name: n1,
+                elements: _,
             },
-            TypeType::Struct {
-                name: right_name, ..
+            Type::Struct {
+                name: n2,
+                elements: _,
             },
-        ) => left_name == right_name,
+        ) => n1 == n2,
+        (
+            Type::Function {
+                param_types: p1,
+                return_type: r1,
+            },
+            Type::Function {
+                param_types: p2,
+                return_type: r2,
+            },
+        ) => {
+            p1.len() == p2.len()
+                && p1.iter().zip(p2.iter()).all(|(t1, t2)| types_equal(t1, t2))
+                && types_equal(r1, r2)
+        }
         _ => false,
     }
 }
 
-// ----------------------------------------------------------------------------------- Command Typecheckers ----------------------------------------------------------------------------------------------
-
 fn typecheck_command<'a>(
-    command: &Command<'a>,
-    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
+    command: &mut Command<'a>,
+    environment: &mut TypeEnvironment<'a>,
 ) -> Result<(), TypeError> {
-    match &command.node {
+    match command.node.as_mut() {
         CommandType::Read {
             source: _,
             destination,
-        } => typecheck_read_command(command.position, destination, global_env),
+        } => {
+            let rgba = environment.get_identifier("global", command.position, "rgba")?;
+            let rgba_array = Type::Array {
+                element_type: Box::new(rgba.clone()),
+                rank: 2,
+            };
+
+            bind_lvalue(destination, rgba_array, "global", environment)?;
+
+            if let LValueType::Array { indices } = &destination.node {
+                if indices.len() != 2 {
+                    return Err(TypeError::new(
+                        format!(
+                            "Cannot bind rgba[,] to array of dimension  {}",
+                            indices.len()
+                        ),
+                        destination.position,
+                    ));
+                }
+                for index in indices {
+                    let _ =
+                        environment.add_identifier("global", index, Type::Int, command.position);
+                }
+            };
+
+            Ok(())
+        }
         CommandType::Write {
             source,
             destination: _,
-        } => typecheck_write_command(command.position, source, global_env),
+        } => {
+            let image_type = typecheck_expression(source, "global", environment)?;
+
+            let is_rgba_array = matches!(
+                image_type,
+                Type::Array {
+                    element_type,
+                    rank: 2,
+                } if matches!(element_type.as_ref(), Type::Struct { name, .. } if *name == "rgba")
+            );
+
+            if !is_rgba_array {
+                Err(TypeError::new(
+                    "Expression for write needs to be rgba[,]".to_string(),
+                    command.position,
+                ))
+            } else {
+                Ok(())
+            }
+        }
         CommandType::Let { variable, rvalue } => {
-            typecheck_let_command(variable, rvalue, global_env)
+            let rtype = typecheck_expression(rvalue, "global", environment)?;
+            bind_lvalue(variable, rtype, "global", environment)
         }
         CommandType::Assert {
             condition,
             message: _,
-        } => typecheck_assert_command(condition, global_env),
+        } => {
+            let condition_type = typecheck_expression(condition, "global", environment)?;
+            if !matches!(condition_type, Type::Bool) {
+                return Err(TypeError::new(
+                    "Asserted expression must be boolean".to_string(),
+                    condition.position,
+                ));
+            }
+            Ok(())
+        }
         CommandType::Print { message: _ } => Ok(()),
         CommandType::Show { expression } => {
-            typecheck_expression(expression, global_env)?;
+            typecheck_expression(expression, "global", environment)?;
             Ok(())
         }
         CommandType::Time {
             command: inner_command,
-        } => typecheck_command(inner_command, global_env),
+        } => typecheck_command(inner_command, environment),
         CommandType::Struct { name, elements } => {
-            typecheck_struct_command(command.position, name, elements, global_env)
+            let mut resolved_elements = Vec::new();
+
+            for (element_name, element_type) in elements {
+                // Check if duplicate name exists inside struct
+                if resolved_elements
+                    .iter()
+                    .any(|(name, _)| name == element_name)
+                {
+                    return Err(TypeError::new(
+                        format!("Duplicate field name {} in struct", element_name),
+                        command.position,
+                    ));
+                }
+
+                let type_value = typecheck_type(
+                    element_type.clone(),
+                    "global",
+                    environment,
+                    command.position,
+                )?;
+                resolved_elements.push((*element_name, type_value));
+            }
+
+            // Add the struct to the environment
+            environment.add_identifier(
+                "global",
+                name,
+                Type::Struct {
+                    name,
+                    elements: resolved_elements,
+                },
+                command.position,
+            )
         }
         CommandType::Function {
             name,
             parameters,
             return_type,
             statements,
-            mut has_return,
-            local_env,
+            has_return,
         } => {
             // Check return type
-            let fn_return_type = typecheck_type(return_type, global_env)?;
+            let fn_return_type =
+                typecheck_type(return_type.clone(), "global", environment, command.position)?;
 
             // Create parameter types list
             let mut param_types = Vec::new();
 
-            // Create local scope
-            *local_env.borrow_mut() = TypeEnvironment::new(Some(Rc::clone(global_env)));
+            environment.add_scope(name, "global");
 
             // Add parameters to local scope
             for (param, param_type) in parameters {
-                let type_value = typecheck_type(param_type, global_env)?;
+                let type_value =
+                    typecheck_type(param_type.clone(), "global", environment, param.position)?;
                 param_types.push(type_value.clone());
-                bind_lvalue(param, type_value, local_env)?;
+                bind_lvalue(param, type_value, name, environment)?;
             }
-
-            let position = command.position;
 
             // Add function to global environment for recursive calls
-            let function_type = Type {
-                position,
-                node: TypeType::Function {
-                    param_types,
-                    return_type: Box::new(fn_return_type.clone()),
-                },
+            let function_type = Type::Function {
+                param_types,
+                return_type: Box::new(fn_return_type.clone()),
             };
 
-            if global_env
-                .borrow_mut()
-                .add_identifier(name, function_type)
-                .is_err()
-            {
-                return Err(TypeError {
-                    message: format!("Cannot redefine function {}", name),
-                    position,
-                });
-            }
+            environment.add_identifier("global", name, function_type, command.position)?;
 
             // Check all statements in the function
-            for statement in statements {
-                match &statement.node {
+            for statement in statements.iter_mut() {
+                match &mut statement.node {
                     StatementType::Let { variable, rvalue } => {
-                        typecheck_let_command(variable, rvalue, local_env)?;
+                        let rtype = typecheck_expression(rvalue, name, environment)?;
+                        bind_lvalue(variable, rtype, name, environment)?;
                     }
                     StatementType::Assert {
                         condition,
                         message: _,
                     } => {
-                        let cond_type = typecheck_expression(condition, local_env)?;
-                        if !matches!(cond_type.borrow().as_ref().unwrap().node, TypeType::Bool) {
-                            return Err(TypeError {
-                                message: "Asserted expression must be boolean".to_string(),
-                                position: condition.position,
-                            });
+                        let cond_type = typecheck_expression(condition, name, environment)?;
+                        if !types_equal(&cond_type, &Type::Bool) {
+                            return Err(TypeError::new(
+                                "Asserted expression must be boolean".to_string(),
+                                condition.position,
+                            ));
                         }
                     }
                     StatementType::Return { value } => {
-                        let ret_type = typecheck_expression(value, local_env)?;
-                        if !types_equal(&fn_return_type, ret_type.borrow().as_ref().unwrap()) {
-                            return Err(TypeError {
-                                message:
-                                    "Type of expression does not match return type of function"
-                                        .to_string(),
-                                position: value.position,
-                            });
+                        let ret_type = typecheck_expression(value, name, environment)?;
+                        if !types_equal(&fn_return_type, &ret_type) {
+                            return Err(TypeError::new(
+                                "Type of expression does not match return type of function"
+                                    .to_string(),
+                                value.position,
+                            ));
                         }
-                        has_return = true
+                        has_return.replace(true);
                     }
                 }
             }
 
             // Check for implicit return
-            if !has_return && !matches!(fn_return_type.node, TypeType::Void) {
-                return Err(TypeError {
-                    message: "Implicit return type (void) does not match return type of function"
+            if !has_return.get() && !types_equal(&fn_return_type, &Type::Void) {
+                return Err(TypeError::new(
+                    "Implicit return type (void) does not match return type of function"
                         .to_string(),
-                    position,
-                });
+                    command.position,
+                ));
             };
+
             Ok(())
         }
     }
 }
 
-fn typecheck_read_command<'a>(
-    position: Position,
-    destination: &LValue<'a>,
-    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<(), TypeError> {
-    let rgba = global_env.borrow().get_identifier(position, "rgba")?;
-    let rgba_array = Type {
-        position: pos(),
-        node: TypeType::Array {
-            element_type: Box::new(rgba.clone()),
-            rank: 2,
-        },
-    };
-
-    bind_lvalue(destination, rgba_array, global_env)?;
-
-    if let LValueType::Array { indices } = &destination.node {
-        if indices.len() != 2 {
-            return Err(TypeError {
-                message: format!(
-                    "Cannot bind rgba[,] to array of dimension  {}",
-                    indices.len()
-                ),
-                position: destination.position,
-            });
-        }
-        for index in indices {
-            let _ = global_env.borrow_mut().add_identifier(
-                index,
-                Type {
-                    position: pos(),
-                    node: TypeType::Int,
-                },
-            );
-        }
-    };
-
-    Ok(())
-}
-
-fn typecheck_write_command<'a>(
-    position: Position,
-    source: &Expression<'a>,
-    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<(), TypeError> {
-    let image_type = typecheck_expression(source, global_env)?;
-
-    let is_rgba_array = matches!(
-        &image_type.borrow().as_ref().unwrap().node,
-        TypeType::Array {
-            element_type,
-            rank: 2,
-        } if matches!(element_type.node, TypeType::Struct { name, .. } if name == "rgba")
-    );
-
-    if !is_rgba_array {
-        Err(TypeError {
-            message: "Expression for write needs to be rgba[,]".to_string(),
-            position,
-        })
-    } else {
-        Ok(())
-    }
-}
-
-fn typecheck_assert_command<'a>(
-    condition: &Expression<'a>,
-    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<(), TypeError> {
-    let condition_type = typecheck_expression(condition, global_env)?;
-    if !matches!(
-        condition_type.borrow().as_ref().unwrap().node,
-        TypeType::Bool
-    ) {
-        return Err(TypeError {
-            message: "Asserted expression must be boolean".to_string(),
-            position: condition.position,
-        });
-    }
-    Ok(())
-}
-
-fn typecheck_let_command<'a>(
-    variable: &LValue<'a>,
-    rvalue: &Expression<'a>,
-    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<(), TypeError> {
-    let rtype = typecheck_expression(rvalue, global_env)?;
-    let cloned_rtype = rtype.borrow().clone().unwrap();
-    bind_lvalue(variable, cloned_rtype, global_env)
-}
-
-fn typecheck_struct_command<'a>(
-    position: Position,
-    name: &'a str,
-    elements: &Vec<(&'a str, Type<'a>)>,
-    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<(), TypeError> {
-    let mut resolved_elements = Vec::new();
-
-    for (element_name, element_type) in elements {
-        // Check if duplicate name exists inside struct
-        if resolved_elements
-            .iter()
-            .any(|(name, _)| name == element_name)
-        {
-            return Err(TypeError {
-                message: format!("Duplicate field name {} in struct", element_name),
-                position,
-            });
-        }
-
-        let type_value = typecheck_type(element_type, global_env)?;
-        resolved_elements.push((*element_name, type_value));
-    }
-
-    // Add the struct to the environment
-    global_env.borrow_mut().add_identifier(
-        name,
-        Type {
-            position,
-            node: TypeType::Struct {
-                name,
-                elements: resolved_elements,
-            },
-        },
-    )
-}
-
-// ----------------------------------------------------------------------------------- Expression Typecheckers ----------------------------------------------------------------------------------------------
 fn typecheck_expression<'a>(
-    expression: &Expression<'a>,
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    match &expression.node {
-        ExpressionType::Int { value: _ } => typecheck_int_expression(expression),
-        ExpressionType::Float { value: _ } => typecheck_float_expression(expression),
-        ExpressionType::True => typecheck_bool_expression(expression),
-        ExpressionType::False => typecheck_bool_expression(expression),
-        ExpressionType::Void => typecheck_void_expression(expression),
+    expression: &mut Expression<'a>,
+    scope: &'a str,
+    environment: &mut TypeEnvironment<'a>,
+) -> Result<Type<'a>, TypeError> {
+    match expression.node.as_mut() {
+        ExpressionType::Int { value: _ } => {
+            expression.resolved_type = Type::Int;
+            Ok(Type::Int)
+        }
+        ExpressionType::Float { value: _ } => {
+            expression.resolved_type = Type::Float;
+            Ok(Type::Float)
+        }
+        ExpressionType::True => {
+            expression.resolved_type = Type::Bool;
+            Ok(Type::Bool)
+        }
+        ExpressionType::False => {
+            expression.resolved_type = Type::Bool;
+            Ok(Type::Bool)
+        }
+        ExpressionType::Void => {
+            expression.resolved_type = Type::Void;
+            Ok(Type::Void)
+        }
         ExpressionType::Variable { name } => {
-            let typ = typecheck_variable_expression(expression, name, environment)?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
+            let identifier_type = environment.get_identifier(scope, expression.position, name)?;
+
+            // Check if it's a function type, which is not allowed for variable expressions
+            if let Type::Function { .. } = identifier_type {
+                return Err(TypeError::new(
+                    format!("Name {} is not defined as a variable", name),
+                    expression.position,
+                ));
+            }
+
+            // Set and return the resolved type
+            expression.resolved_type = identifier_type.clone();
+            Ok(identifier_type)
         }
         ExpressionType::ArrayLiteral { elements } => {
-            let typ =
-                typecheck_array_literal_expression(expression.position, elements, environment)?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
+            if elements.is_empty() {
+                return Err(TypeError::new(
+                    "Array literal cannot be empty".to_string(),
+                    expression.position,
+                ));
+            }
+
+            // Check the type of the first element
+            let first_type =
+                typecheck_expression(elements.get_mut(0).unwrap(), scope, environment)?;
+
+            // Check all other elements have the same type
+            for (i, element) in elements.iter_mut().enumerate().skip(1) {
+                let element_type = typecheck_expression(element, scope, environment)?;
+
+                if !types_equal(&first_type, &element_type) {
+                    return Err(TypeError::new(
+                         format!(
+                            "All elements of array literal must have the same type, element {} differs",
+                            i
+                        ),
+                        expression.position));
+                }
+            }
+
+            // Create and return array type
+            let array_type = Type::Array {
+                element_type: Box::new(first_type),
+                rank: 1,
+            };
+            expression.resolved_type = array_type.clone();
+            Ok(array_type)
         }
         ExpressionType::ArrayIndex { array, indices } => {
-            let typ =
-                typecheck_array_index_expression(expression.position, array, indices, environment)?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
+            let array_type = typecheck_expression(array, scope, environment)?;
+
+            if let Type::Array { element_type, rank } = array_type {
+                // Check number of indices
+                if rank != indices.len() {
+                    return Err(TypeError::new(
+                        format!(
+                            "Expected {} indices for array access got {}",
+                            rank,
+                            indices.len()
+                        ),
+                        expression.position,
+                    ));
+                }
+
+                // Check that all indices are integers
+                for index in indices.iter_mut() {
+                    let index_type = typecheck_expression(index, scope, environment)?;
+                    if !types_equal(&index_type, &Type::Int) {
+                        return Err(TypeError::new(
+                            "Array indices must be integers".to_string(),
+                            index.position,
+                        ));
+                    }
+                }
+
+                // Return element type
+                let element_type = *element_type;
+                expression.resolved_type = element_type.clone();
+                Ok(element_type)
+            } else {
+                Err(TypeError::new(
+                    "Expression is not an array and cannot be indexed".to_string(),
+                    expression.position,
+                ))
+            }
         }
         ExpressionType::Dot {
             struct_variable,
             field,
         } => {
-            let typ =
-                typecheck_dot_expression(expression.position, struct_variable, field, environment)?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
+            let variable_type = typecheck_expression(struct_variable, scope, environment)?;
+            if let Ok(Type::Struct { name: _, elements }) =
+                typecheck_type(variable_type, scope, environment, struct_variable.position)
+            {
+                // Find the field
+                for (elem_name, elem_type) in elements {
+                    if elem_name == *field {
+                        expression.resolved_type = elem_type.clone();
+                        return Ok(elem_type);
+                    }
+                }
+
+                Err(TypeError::new(
+                    format!("Struct has no field named {}", field),
+                    expression.position,
+                ))
+            } else {
+                Err(TypeError::new(
+                    "Expression is not a struct and cannot be indexed into".to_string(),
+                    expression.position,
+                ))
+            }
         }
         ExpressionType::Call {
             function,
             arguments,
         } => {
-            let typ =
-                typecheck_call_expression(expression.position, function, arguments, environment)?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
+            let func_type = environment.get_identifier(scope, expression.position, function)?;
+
+            if let Type::Function {
+                param_types,
+                return_type,
+            } = func_type
+            {
+                // Check number of arguments
+                if param_types.len() != arguments.len() {
+                    return Err(TypeError::new(
+                        format!("Incorrect number of parameters for function {}", function),
+                        expression.position,
+                    ));
+                }
+
+                // Check each argument type
+                for (i, (arg, param_type)) in
+                    arguments.iter_mut().zip(param_types.iter()).enumerate()
+                {
+                    let arg_type = typecheck_expression(arg, scope, environment)?;
+                    if !types_equal(&arg_type, param_type) {
+                        return Err(TypeError::new(
+                            format!(
+                                "Incorrect type of parameter {} for function {}",
+                                i, function
+                            ),
+                            arg.position,
+                        ));
+                    }
+                }
+
+                // Return function's return type
+                let return_type = *return_type;
+                expression.resolved_type = return_type.clone();
+                Ok(return_type)
+            } else {
+                Err(TypeError::new(
+                    format!("{} is not a function", function),
+                    expression.position,
+                ))
+            }
         }
         ExpressionType::StructLiteral { name, fields } => {
-            let typ = typecheck_struct_literal_expression(
-                expression.position,
-                name,
-                fields,
-                environment,
-            )?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
+            let type_value = environment.get_identifier(scope, expression.position, name)?;
+
+            if let Type::Struct { name: _, elements } = type_value.clone() {
+                // Check number of fields
+                if elements.len() != fields.len() {
+                    return Err(TypeError::new(
+                        format!(
+                            "Expected {} fields for struct literal got {}",
+                            elements.len(),
+                            fields.len()
+                        ),
+                        expression.position,
+                    ));
+                }
+
+                // Check each field type
+                for (i, field_expr) in fields.iter_mut().enumerate() {
+                    let expr_type = typecheck_expression(field_expr, scope, environment)?;
+
+                    let struct_field = &elements[i];
+                    let field_type = typecheck_type(
+                        struct_field.1.clone(),
+                        scope,
+                        environment,
+                        field_expr.position,
+                    )?;
+
+                    if !types_equal(&expr_type, &field_type) {
+                        return Err(TypeError::new(
+                            format!(
+                                "Invalid type of element {} for type {}",
+                                struct_field.0, name
+                            ),
+                            expression.position,
+                        ));
+                    }
+                }
+
+                expression.resolved_type = type_value.clone();
+                Ok(type_value)
+            } else {
+                Err(TypeError::new(
+                    format!("{} is not a struct type", name),
+                    expression.position,
+                ))
+            }
         }
         ExpressionType::Unop {
             operator: _,
-            expression: inner,
+            expression: expr,
         } => {
-            let typ = typecheck_expression(inner, environment)?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            // Simply check the expression and return its type
+            let typ = typecheck_expression(expr, scope, environment)?;
+            expression.resolved_type = typ.clone();
             Ok(typ)
         }
         ExpressionType::Binop {
@@ -636,570 +664,181 @@ fn typecheck_expression<'a>(
             left,
             right,
         } => {
-            let typ = typecheck_binop_expression(
-                expression.position,
-                left,
-                right,
-                operator,
-                environment,
-            )?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
+            let left_type = typecheck_expression(left, scope, environment)?;
+            let right_type = typecheck_expression(right, scope, environment)?;
+
+            // Check if left and right have the same type
+            if !types_equal(&left_type, &right_type) {
+                return Err(TypeError::new(
+                    "Left and right hand operators need to have the same type".to_string(),
+                    expression.position,
+                ));
+            }
+
+            // Check required input types
+            let requires_numeric = matches!(
+                *operator,
+                "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">="
+            );
+            let requires_boolean = matches!(*operator, "&&" | "||");
+            let requires_comparable = matches!(*operator, "==" | "!=");
+
+            if requires_numeric && !matches!(left_type, Type::Int | Type::Float) {
+                return Err(TypeError::new(
+                    "Left and right hand operators need to be int or float".to_string(),
+                    expression.position,
+                ));
+            } else if requires_boolean && !matches!(left_type, Type::Bool) {
+                return Err(TypeError::new(
+                    "Left and right hand operators need to be bool".to_string(),
+                    expression.position,
+                ));
+            } else if requires_comparable
+                && !matches!(left_type, Type::Int | Type::Float | Type::Bool)
+            {
+                return Err(TypeError::new(
+                    "Left and right hand operators need to be int, float or bool".to_string(),
+                    expression.position,
+                ));
+            }
+
+            // Set the result type
+            let returns_bool = matches!(
+                *operator,
+                "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||"
+            );
+
+            let result_type = if returns_bool { Type::Bool } else { left_type };
+
+            expression.resolved_type = result_type.clone();
+            Ok(result_type)
         }
         ExpressionType::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            let typ = typecheck_if_expression(
-                expression.position,
-                condition,
-                then_branch,
-                else_branch,
-                environment,
-            )?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
+            // Check that condition is boolean
+            let condition_type = typecheck_expression(condition, scope, environment)?;
+            if !types_equal(&condition_type, &Type::Bool) {
+                return Err(TypeError::new(
+                    "Type of condition for if expression must be boolean".to_string(),
+                    expression.position,
+                ));
+            }
+
+            // Check that both branches have the same type
+            let then_type = typecheck_expression(then_branch, scope, environment)?;
+            let else_type = typecheck_expression(else_branch, scope, environment)?;
+
+            if !types_equal(&then_type, &else_type) {
+                return Err(TypeError::new(
+                    "Type of both branches in if expression must match".to_string(),
+                    expression.position,
+                ));
+            }
+
+            expression.resolved_type = then_type.clone();
+            Ok(then_type)
         }
         ExpressionType::ArrayLoop { range, body } => {
-            let typ =
-                typecheck_array_loop_expression(expression.position, range, body, environment)?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
+            let rank = range.len();
+            if rank == 0 {
+                return Err(TypeError::new(
+                    "Cannot make array of rank 0".to_string(),
+                    expression.position,
+                ));
+            }
+
+            let loop_scope = range.first().unwrap().0;
+            let mut loop_vars = Vec::new();
+
+            // Add loop variables to scope
+            for (variable, bound) in range {
+                let limit_type = typecheck_expression(bound, scope, environment)?;
+
+                if !types_equal(&limit_type, &Type::Int) {
+                    return Err(TypeError::new(
+                        "Cannot iterate to non-integer value".to_string(),
+                        bound.position,
+                    ));
+                }
+
+                loop_vars.push((variable, bound.position));
+            }
+
+            // Create a new environment for loop variables
+            environment.add_scope(loop_scope, scope);
+
+            for var in loop_vars {
+                environment.add_identifier(loop_scope, var.0, Type::Int, var.1)?;
+            }
+
+            // Type check the body
+            let body_type = typecheck_expression(body, loop_scope, environment)?;
+
+            // Remove the loop variables from the environment
+            environment.remove_scope(loop_scope);
+
+            // Create array type
+            let array_type = Type::Array {
+                element_type: Box::new(body_type),
+                rank,
+            };
+
+            expression.resolved_type = array_type.clone();
+            Ok(array_type)
         }
         ExpressionType::SumLoop { range, body } => {
-            let typ = typecheck_sum_loop_expression(expression.position, range, body, environment)?;
-            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
-            Ok(typ)
-        }
-    }
-}
-
-fn typecheck_int_expression<'a>(
-    expression: &Expression<'a>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    *expression.resolved_type.borrow_mut() = Some(Type {
-        position: expression.position,
-        node: TypeType::Int,
-    });
-    Ok(expression.resolved_type.clone())
-}
-
-fn typecheck_float_expression<'a>(
-    expression: &Expression<'a>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    *expression.resolved_type.borrow_mut() = Some(Type {
-        position: expression.position,
-        node: TypeType::Float,
-    });
-    Ok(expression.resolved_type.clone())
-}
-
-fn typecheck_bool_expression<'a>(
-    expression: &Expression<'a>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    *expression.resolved_type.borrow_mut() = Some(Type {
-        position: expression.position,
-        node: TypeType::Bool,
-    });
-    Ok(expression.resolved_type.clone())
-}
-
-fn typecheck_void_expression<'a>(
-    expression: &Expression<'a>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    *expression.resolved_type.borrow_mut() = Some(Type {
-        position: expression.position,
-        node: TypeType::Void,
-    });
-    Ok(expression.resolved_type.clone())
-}
-
-fn typecheck_variable_expression<'a>(
-    expression: &Expression<'a>,
-    name: &'a str,
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    let identifier_type = environment
-        .borrow_mut()
-        .get_identifier(expression.position, name)?;
-
-    // Check if it's a function type, which is not allowed for variable expressions
-    if let TypeType::Function { .. } = identifier_type.node {
-        return Err(TypeError {
-            message: format!("Name {} is not defined as a variable", name),
-            position: expression.position,
-        });
-    }
-
-    // Set and return the resolved type
-    *expression.resolved_type.borrow_mut() = Some(identifier_type.clone());
-    Ok(expression.resolved_type.clone())
-}
-
-fn typecheck_binop_expression<'a>(
-    position: Position,
-    left: &Expression<'a>,
-    right: &Expression<'a>,
-    operator: &Binop,
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    let left_type = typecheck_expression(left, environment)?;
-    let right_type = typecheck_expression(right, environment)?;
-
-    // Check if left and right have the same type
-    if !types_equal(
-        left_type.borrow().as_ref().unwrap(),
-        right_type.borrow().as_ref().unwrap(),
-    ) {
-        return Err(TypeError {
-            message: "Left and right hand operators need to have the same type".to_string(),
-            position,
-        });
-    }
-
-    let left_type_ref = left_type.borrow();
-    let left_type_inner = left_type_ref.as_ref().unwrap();
-
-    match operator {
-        &Binop::Add | Binop::Subtract | Binop::Multiply | Binop::Divide | Binop::Modulo => {
-            // Numeric operators require int or float types
-            if !matches!(left_type_inner.node, TypeType::Int | TypeType::Float) {
-                return Err(TypeError {
-                    message: format!(
-                        "Left and right hand operators need to be int or float for {}",
-                        operator
-                    ),
-                    position,
-                });
+            if range.is_empty() {
+                return Err(TypeError::new(
+                    "Cannot sum over array of rank 0".to_string(),
+                    expression.position,
+                ));
             }
-            // Result type is the same as the operands
-            Ok(left_type.clone())
-        }
-        Binop::Equals | Binop::NotEquals => {
-            // Equality operators support int, float, or boolean
-            if !matches!(
-                left_type_inner.node,
-                TypeType::Int | TypeType::Float | TypeType::Bool
-            ) {
-                return Err(TypeError {
-                    message: format!(
-                        "Left and right hand operators need to be int, float or bool for {}",
-                        operator
-                    ),
-                    position,
-                });
+
+            // Create a new environment for loop variables
+            let loop_scope = range.first().unwrap().0;
+            let mut loop_vars = Vec::new();
+
+            // Add loop variables to scope
+            for (variable, bound) in range {
+                let limit_type = typecheck_expression(bound, scope, environment)?;
+
+                if !types_equal(&limit_type, &Type::Int) {
+                    return Err(TypeError::new(
+                        "Cannot iterate to non-integer value".to_string(),
+                        bound.position,
+                    ));
+                }
+
+                loop_vars.push((variable, bound.position));
             }
-            // Result is boolean
-            let bool_type = RefCell::new(Some(Type {
-                position,
-                node: TypeType::Bool,
-            }));
-            Ok(bool_type)
-        }
-        Binop::Less | Binop::Greater | Binop::LessEquals | Binop::GreaterEquals => {
-            // Comparison operators require int or float types
-            if !matches!(left_type_inner.node, TypeType::Int | TypeType::Float) {
-                return Err(TypeError {
-                    message: format!(
-                        "Left and right hand operators need to be int or float for {}",
-                        operator
-                    ),
-                    position,
-                });
+
+            // Create a new environment for loop variables
+            environment.add_scope(loop_scope, scope);
+
+            for var in loop_vars {
+                environment.add_identifier(loop_scope, var.0, Type::Int, var.1)?;
             }
-            // Result is boolean
-            let bool_type = RefCell::new(Some(Type {
-                position,
-                node: TypeType::Bool,
-            }));
-            Ok(bool_type)
-        }
-        Binop::And | Binop::Or => {
-            // Logical operators require bool types
-            if !matches!(left_type_inner.node, TypeType::Bool) {
-                return Err(TypeError {
-                    message: format!(
-                        "Left and right hand operators need to be bool for {}",
-                        operator
-                    ),
-                    position,
-                });
+
+            // Type check the body
+            let body_type = typecheck_expression(body, loop_scope, environment)?;
+
+            // Remove the loop variables from the environment
+            environment.remove_scope(loop_scope);
+
+            // Check if body type is numeric (int or float)
+            if !matches!(body_type, Type::Int | Type::Float) {
+                return Err(TypeError::new(
+                    "Cannot sum over elements that are not int or float".to_string(),
+                    body.position,
+                ));
             }
-            // Result is boolean (same as operands)
-            Ok(left_type.clone())
+
+            // Return element type (int or float)
+            expression.resolved_type = body_type.clone();
+            Ok(body_type)
         }
     }
-}
-
-fn typecheck_struct_literal_expression<'a>(
-    position: Position,
-    name: &'a str,
-    fields: &[Expression<'a>],
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    // Get the struct type from environment
-    let type_value = environment.borrow_mut().get_identifier(position, name)?;
-
-    if let TypeType::Struct { name: _, elements } = type_value.node.clone() {
-        // Check number of fields
-        if elements.len() != fields.len() {
-            return Err(TypeError {
-                message: format!(
-                    "Expected {} indices for array access got {}",
-                    elements.len(),
-                    fields.len()
-                ),
-                position,
-            });
-        }
-
-        // Check each field type
-        for (i, field_expr) in fields.iter().enumerate() {
-            let field_type = typecheck_expression(field_expr, environment)?;
-            let struct_field = &elements[i];
-
-            if !types_equal(field_type.borrow().as_ref().unwrap(), &struct_field.1) {
-                return Err(TypeError {
-                    message: format!("Invalid type of element {} for type {}", i, name),
-                    position,
-                });
-            }
-        }
-
-        Ok(RefCell::new(Some(type_value)))
-    } else {
-        Err(TypeError {
-            message: format!("{} is not a struct type", name),
-            position,
-        })
-    }
-}
-
-fn typecheck_array_literal_expression<'a>(
-    position: Position,
-    elements: &[Expression<'a>],
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    if elements.is_empty() {
-        return Err(TypeError {
-            message: "Array literal cannot be empty".to_string(),
-            position,
-        });
-    }
-
-    // Check the type of the first element
-    let first_type = typecheck_expression(&elements[0], environment)?;
-
-    // Check all other elements have the same type
-    for (i, element) in elements.iter().enumerate().skip(1) {
-        let element_type = typecheck_expression(element, environment)?;
-
-        if !types_equal(
-            first_type.borrow().as_ref().unwrap(),
-            element_type.borrow().as_ref().unwrap(),
-        ) {
-            return Err(TypeError {
-                message: format!(
-                    "All elements of array literal must have the same type, element {} differs",
-                    i
-                ),
-                position,
-            });
-        }
-    }
-
-    // Create and return array type
-    let array_type = RefCell::new(Some(Type {
-        position,
-        node: TypeType::Array {
-            element_type: Box::new(first_type.borrow().clone().unwrap()),
-            rank: 1,
-        },
-    }));
-
-    Ok(array_type)
-}
-
-fn typecheck_if_expression<'a>(
-    position: Position,
-    condition: &Expression<'a>,
-    then_branch: &Expression<'a>,
-    else_branch: &Expression<'a>,
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    // Check that condition is boolean
-    let condition_type = typecheck_expression(condition, environment)?;
-    if !matches!(
-        condition_type.borrow().as_ref().unwrap().node,
-        TypeType::Bool
-    ) {
-        return Err(TypeError {
-            message: "Type of condition for if expression must be boolean".to_string(),
-            position,
-        });
-    }
-
-    // Check that both branches have the same type
-    let then_type = typecheck_expression(then_branch, environment)?;
-    let else_type = typecheck_expression(else_branch, environment)?;
-
-    if !types_equal(
-        then_type.borrow().as_ref().unwrap(),
-        else_type.borrow().as_ref().unwrap(),
-    ) {
-        return Err(TypeError {
-            message: "Type of both branches in if expression must match".to_string(),
-            position,
-        });
-    }
-
-    Ok(then_type)
-}
-
-fn typecheck_dot_expression<'a>(
-    position: Position,
-    struct_variable: &Expression<'a>,
-    field: &'a str,
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    // Get struct type
-    let variable_type = typecheck_expression(struct_variable, environment)?;
-
-    if let Some(Type {
-        node: TypeType::Struct { name: _, elements },
-        ..
-    }) = &*variable_type.clone().borrow()
-    {
-        // Find the field
-        for (elem_name, elem_type) in elements {
-            if *elem_name == field {
-                return Ok(RefCell::new(Some(elem_type.clone())));
-            }
-        }
-
-        Err(TypeError {
-            message: format!("Struct has no field named {}", field),
-            position,
-        })
-    } else {
-        Err(TypeError {
-            message: "Expression is not a struct and cannot be indexed into".to_string(),
-            position,
-        })
-    }
-}
-
-fn typecheck_array_index_expression<'a>(
-    position: Position,
-    array: &Expression<'a>,
-    indices: &Vec<Expression<'a>>,
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    let array_type = typecheck_expression(array, environment)?;
-
-    if let Some(Type {
-        node: TypeType::Array { element_type, rank },
-        ..
-    }) = &*array_type.clone().borrow()
-    {
-        // Check number of indices
-        if *rank != indices.len() {
-            return Err(TypeError {
-                message: format!(
-                    "Expected {} indices for array access got {}",
-                    rank,
-                    indices.len()
-                ),
-                position,
-            });
-        }
-
-        // Check that all indices are integers
-        for index in indices {
-            let index_type = typecheck_expression(index, environment)?;
-            if !matches!(index_type.borrow().as_ref().unwrap().node, TypeType::Int) {
-                return Err(TypeError {
-                    message: "Array indices must be integers".to_string(),
-                    position: index.position,
-                });
-            }
-        }
-
-        // Return element type
-        Ok(RefCell::new(Some(*element_type.clone())))
-    } else {
-        Err(TypeError {
-            message: "Expression is not an array and cannot be indexed".to_string(),
-            position,
-        })
-    }
-}
-
-fn typecheck_call_expression<'a>(
-    position: Position,
-    function: &'a str,
-    arguments: &[Expression<'a>],
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    // Get function type
-    let func_type = environment.borrow().get_identifier(position, function)?;
-
-    if let Type {
-        node: TypeType::Function {
-            param_types,
-            return_type,
-        },
-        ..
-    } = func_type
-    {
-        // Check number of arguments
-        if param_types.len() != arguments.len() {
-            return Err(TypeError {
-                message: format!("Incorrect number of parameters for function {}", function),
-                position,
-            });
-        }
-
-        // Check each argument type
-        for (i, (arg, param_type)) in arguments.iter().zip(param_types.iter()).enumerate() {
-            let arg_type = typecheck_expression(arg, environment)?;
-            if !types_equal(arg_type.borrow().as_ref().unwrap(), param_type) {
-                return Err(TypeError {
-                    message: format!(
-                        "Incorrect type of parameter {} for function {}",
-                        i, function
-                    ),
-                    position: arg.position,
-                });
-            }
-        }
-
-        // Return function's return type
-        Ok(RefCell::new(Some(*return_type.clone())))
-    } else {
-        Err(TypeError {
-            message: format!("{} is not a function", function),
-            position,
-        })
-    }
-}
-
-fn typecheck_array_loop_expression<'a>(
-    position: Position,
-    range: &Vec<(&'a str, Expression<'a>)>,
-    body: &Expression<'a>,
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    if range.is_empty() {
-        return Err(TypeError {
-            message: "Cannot make array of rank 0".to_string(),
-            position,
-        });
-    }
-
-    let local_env = Rc::new(RefCell::new(TypeEnvironment::new(Some(
-        environment.clone(),
-    ))));
-
-    // Add loop variables to scope
-    for (var_name, limit_expr) in range {
-        let limit_type = typecheck_expression(limit_expr, environment)?;
-
-        if !matches!(limit_type.borrow().as_ref().unwrap().node, TypeType::Int) {
-            return Err(TypeError {
-                message: "Cannot iterate to non-integer value".to_string(),
-                position: limit_expr.position,
-            });
-        }
-
-        local_env
-            .borrow_mut()
-            .add_identifier(
-                var_name,
-                Type {
-                    position,
-                    node: TypeType::Int,
-                },
-            )
-            .map_err(|_| TypeError {
-                message: format!("Cannot redefine variable {}", var_name),
-                position,
-            })?;
-    }
-
-    // Type check the body
-    let element_type = typecheck_expression(body, &local_env)?;
-
-    // Create array type
-    let array_type = RefCell::new(Some(Type {
-        position,
-        node: TypeType::Array {
-            element_type: Box::new(element_type.borrow().clone().unwrap()),
-            rank: range.len(),
-        },
-    }));
-
-    Ok(array_type)
-}
-
-fn typecheck_sum_loop_expression<'a>(
-    position: Position,
-    range: &Vec<(&'a str, Expression<'a>)>,
-    body: &Expression<'a>,
-    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
-) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
-    if range.is_empty() {
-        return Err(TypeError {
-            message: "Cannot sum over array of rank 0".to_string(),
-            position,
-        });
-    }
-
-    let local_env = Rc::new(RefCell::new(TypeEnvironment::new(Some(
-        environment.clone(),
-    ))));
-
-    // Add loop variables to scope
-    for (var_name, limit_expr) in range {
-        let limit_type = typecheck_expression(limit_expr, environment)?;
-
-        if !matches!(limit_type.borrow().as_ref().unwrap().node, TypeType::Int) {
-            return Err(TypeError {
-                message: "Cannot iterate to non-integer value".to_string(),
-                position: limit_expr.position,
-            });
-        }
-
-        local_env
-            .borrow_mut()
-            .add_identifier(
-                var_name,
-                Type {
-                    position,
-                    node: TypeType::Int,
-                },
-            )
-            .map_err(|_| TypeError {
-                message: format!("Cannot redefine variable {}", var_name),
-                position,
-            })?;
-    }
-
-    // Type check the body
-    let element_type = typecheck_expression(body, &local_env)?;
-
-    // Check if body type is numeric (int or float)
-    if !matches!(
-        element_type.borrow().as_ref().unwrap().node,
-        TypeType::Int | TypeType::Float
-    ) {
-        return Err(TypeError {
-            message: "Cannot sum over elements that are not int or float".to_string(),
-            position: body.position,
-        });
-    }
-
-    // Return element type (int or float)
-    Ok(element_type)
 }

@@ -1,5 +1,5 @@
 TEST = ./t.jpl
-COMPILE_MODE = -m lex
+COMPILE_MODE = -m typecheck
 BINARY = target/release/myjplc
 
 $(BINARY):	src/*.rs
@@ -9,7 +9,7 @@ run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
 
 test:
-	$(MAKE) -C ./grader test-hw2 PART=all
+	$(MAKE) -C ./grader test-hw7 PART=all
 
 run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw2 PART=all COMPILE_MODE=" -m lex"
@@ -18,8 +18,7 @@ run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw5 PART=all COMPILE_MODE=" -m parse"
 	$(MAKE) -C ./grader test-hw6 PART=all COMPILE_MODE=" -m typecheck"
 	$(MAKE) -C ./grader test-hw7 PART=all COMPILE_MODE=" -m typecheck"
-#	$(MAKE) -C ./grader test-hw8 PART=all COMPILE_MODE=-i
-#	$(MAKE) -C ./grader test-hw9 PART=all COMPILE_MODE=-i
+#	$(MAKE) -C ./grader test-hw10 PART=all COMPILE_MODE=" -m assembly"
 
 time-all:
 	time $(MAKE) run-all
