@@ -1,3 +1,4 @@
+mod assembly;
 mod ast;
 mod lexer;
 mod parser;
@@ -141,6 +142,26 @@ fn compile() -> Result<(), CompilerError> {
         }
 
         writeln!(buffer, "Compilation succeeded, typechecking complete.")?;
+        buffer.flush()?;
+        return Ok(());
+    }
+
+    // Generate assembly code
+    let assembly = assembly::generate_assembly(commands, environment);
+
+    // Print assembly code if in assembly mode
+    if args.mode == CompilationMode::Assembly {
+        let stdout = io::stdout();
+        let mut buffer = io::BufWriter::new(stdout.lock());
+
+        for line in &assembly {
+            writeln!(buffer, "{}", line)?;
+        }
+
+        writeln!(
+            buffer,
+            "Compilation succeeded, assembly generation complete."
+        )?;
         buffer.flush()?;
         return Ok(());
     }

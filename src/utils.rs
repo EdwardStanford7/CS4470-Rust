@@ -32,7 +32,7 @@ impl Display for Token<'_> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenType<'a> {
     // Values
     IntVal(&'a str),
