@@ -2,12 +2,13 @@ mod ast;
 mod lexer;
 mod parser;
 mod typechecker;
+mod asmgen;
 use clap::Parser;
 use clap::ValueEnum;
 use lexer::LexError;
 use parser::ParseError;
-use std::io::{self, Write};
 use typechecker::TypeError;
+use std::io::{self, Write};
 
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
 enum CompilationMode {
@@ -142,6 +143,20 @@ fn compile() -> Result<(), CompilerError> {
         }
 
         writeln!(buffer, "Compilation succeeded, typechecking complete.")?;
+        buffer.flush()?;
+        return Ok(());
+    }
+
+    // Print asm if in assembly mode
+    if args.mode == CompilationMode::Assembly {
+        let asmcode = asmgen::asmgen(commands, global_env);
+
+        let stdout = io::stdout();
+        let mut buffer = io::BufWriter::new(stdout.lock());
+
+        writeln!(buffer, "{}", asmcode)?;
+
+        writeln!(buffer, "Compilation succeeded, asmgen complete.")?;
         buffer.flush()?;
         return Ok(());
     }

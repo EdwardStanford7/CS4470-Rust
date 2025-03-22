@@ -1,0 +1,3458 @@
+===== ./src/asmgen.rs =====
+use crate::ast::*;
+use crate::typechecker::TypeEnvironment;
+use std::{
+    cell::RefCell,
+    rc::Rc,
+};
+
+
+
+
+pub fn asmgen(
+    mut commands: Vec<Command<'_>>,
+    env: Rc<RefCell<TypeEnvironment<'_>>>
+) -> Rc<str> {
+    let vecstr = "hi";
+    return Rc::new(vecstr);
+}
+===== ./src/main.rs =====
+mod ast;
+mod lexer;
+mod parser;
+mod typechecker;
+mod asmgen;
+use clap::Parser;
+use clap::ValueEnum;
+use lexer::LexError;
+use parser::ParseError;
+use typechecker::TypeError;
+use std::io::{self, Write};
+
+#[derive(Debug, Clone, ValueEnum, PartialEq)]
+enum CompilationMode {
+    /// Only run the lexer
+    Lex,
+    /// Run lexer and parser
+    Parse,
+    /// Typecheck after parsing
+    Typecheck,
+    /// Generate assembly code
+    Assembly,
+    /// Full compilation pipeline
+    Full,
+}
+
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// File name to compile
+    #[arg(required(true))]
+    file_name: String,
+
+    /// Compilation mode (lex, parse, typecheck, IR, Assembly, full)
+    #[arg(short, long, default_value = "f")]
+    mode: CompilationMode,
+}
+
+enum CompilerError {
+    Io(io::Error),
+    Lex(LexError),
+    Parse(ParseError),
+    Type(TypeError),
+}
+
+// Implement Display trait for CompilerError
+impl std::fmt::Display for CompilerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompilerError::Io(err) => write!(f, "Compilation failed: {}", err),
+            CompilerError::Lex(err) => write!(f, "Compilation failed: {}", err),
+            CompilerError::Parse(err) => write!(f, "Compilation failed: {}", err),
+            CompilerError::Type(err) => write!(f, "Compilation failed: {}", err),
+        }
+    }
+}
+
+// Automatic conversion from std::io::Error
+impl From<io::Error> for CompilerError {
+    fn from(err: io::Error) -> Self {
+        CompilerError::Io(err)
+    }
+}
+
+// Automatic conversion from LexerError
+impl From<LexError> for CompilerError {
+    fn from(err: LexError) -> Self {
+        CompilerError::Lex(err)
+    }
+}
+
+// Automatic conversion from ParseError
+impl From<ParseError> for CompilerError {
+    fn from(err: ParseError) -> Self {
+        CompilerError::Parse(err)
+    }
+}
+
+// Automatic conversion from TypeError
+impl From<TypeError> for CompilerError {
+    fn from(err: TypeError) -> Self {
+        CompilerError::Type(err)
+    }
+}
+
+fn main() {
+    if let Err(err) = compile() {
+        println!("{}", err);
+    }
+}
+
+fn compile() -> Result<(), CompilerError> {
+    let args = Args::parse();
+
+    // Open file and read contents
+    let file_contents = std::fs::read_to_string(&args.file_name)?;
+
+    // Lex the file - convert any error to CompilerError
+    let tokens = lexer::lex(&file_contents)?;
+
+    // Print tokens if in lex mode
+    if args.mode == CompilationMode::Lex {
+        let stdout = io::stdout();
+        let mut buffer = io::BufWriter::new(stdout.lock());
+
+        for token in &tokens {
+            writeln!(buffer, "{}", token)?;
+        }
+
+        writeln!(buffer, "Compilation succeeded, lexical analysis complete.")?;
+        buffer.flush()?;
+        return Ok(());
+    }
+
+    // Parse the tokens
+    let commands = parser::parse(tokens)?;
+
+    // Print AST if in parse mode
+    if args.mode == CompilationMode::Parse {
+        let stdout = io::stdout();
+        let mut buffer = io::BufWriter::new(stdout.lock());
+
+        for command in &commands {
+            writeln!(buffer, "{}", command)?;
+        }
+
+        writeln!(buffer, "Compilation succeeded, parsing complete.")?;
+        buffer.flush()?;
+        return Ok(());
+    }
+
+    // Typecheck the AST
+    let (commands, global_env) = typechecker::typecheck(commands)?;
+
+    // Print typechecked AST if in typecheck mode
+    if args.mode == CompilationMode::Typecheck {
+        let stdout = io::stdout();
+        let mut buffer = io::BufWriter::new(stdout.lock());
+
+        for command in &commands {
+            writeln!(buffer, "{}", command)?;
+        }
+
+        writeln!(buffer, "Compilation succeeded, typechecking complete.")?;
+        buffer.flush()?;
+        return Ok(());
+    }
+
+    // Print asm if in assembly mode
+    if args.mode == CompilationMode::Assembly {
+        let asmcode = asmgen::asmgen(commands, global_env);
+
+        let stdout = io::stdout();
+        let mut buffer = io::BufWriter::new(stdout.lock());
+
+        writeln!(buffer, "{}", asmcode)?;
+
+        writeln!(buffer, "Compilation succeeded, asmgen complete.")?;
+        buffer.flush()?;
+        return Ok(());
+    }
+
+    Ok(())
+}
+
+===== ./src/typechecker.rs =====
+use crate::ast::*;
+use crate::lexer::Position;
+use std::{
+    cell::RefCell,
+    collections::{hash_map::Entry, HashMap},
+    fmt::Display,
+    rc::Rc,
+};
+
+pub struct TypeError {
+    pub message: String,
+    pub position: Position,
+}
+
+impl Display for TypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Type error: {}:{}: {}",
+            self.position.line, self.position.column, self.message
+        )
+    }
+}
+
+pub struct TypeEnvironment<'a> {
+    local_environment: HashMap<&'a str, Type<'a>>,
+    parent: Option<Rc<RefCell<TypeEnvironment<'a>>>>,
+}
+
+impl<'a> TypeEnvironment<'a> {
+    pub fn new(parent: Option<Rc<RefCell<TypeEnvironment<'a>>>>) -> TypeEnvironment<'a> {
+        TypeEnvironment {
+            local_environment: HashMap::new(),
+            parent,
+        }
+    }
+
+    pub fn add_identifier(&mut self, name: &'a str, typ: Type<'a>) -> Result<(), TypeError> {
+        match self.local_environment.entry(name) {
+            Entry::Occupied(_) => {
+                return Err(TypeError {
+                    message: format!("Cannot redefine the name {}", name),
+                    position: typ.position,
+                });
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(typ);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn get_identifier(&self, position: Position, name: &'a str) -> Result<Type<'a>, TypeError> {
+        match self.local_environment.get(name) {
+            Some(typ) => Ok(typ.clone()),
+            None => match &self.parent {
+                Some(parent) => parent.borrow().get_identifier(position, name),
+                None => Err(TypeError {
+                    message: format!("Identifier {} is undefined", name),
+                    position,
+                }),
+            },
+        }
+    }
+}
+
+pub fn typecheck(
+    mut commands: Vec<Command<'_>>,
+) -> Result<(Vec<Command<'_>>, Rc<RefCell<TypeEnvironment<'_>>>), TypeError> {
+    let global_env = Rc::new(RefCell::new(TypeEnvironment::new(None)));
+
+    populate_built_ins(&global_env);
+
+    for command in commands.iter_mut() {
+        typecheck_command(command, &global_env)?;
+    }
+
+    Ok((commands, global_env))
+}
+
+fn pos() -> Position {
+    Position { line: 0, column: 0 }
+}
+
+fn populate_built_ins(global_env: &Rc<RefCell<TypeEnvironment<'_>>>) {
+    // Create basic types
+    let float_type = || Type {
+        position: pos(),
+        node: TypeType::Float,
+    };
+
+    let int_type = || Type {
+        position: pos(),
+        node: TypeType::Int,
+    };
+
+    // RGBA struct type
+    let rgba = Type {
+        position: pos(),
+        node: TypeType::Struct {
+            name: "rgba",
+            elements: vec![
+                ("r", float_type()),
+                ("g", float_type()),
+                ("b", float_type()),
+                ("a", float_type()),
+            ],
+        },
+    };
+
+    // Argnum and args
+    let argnum = int_type();
+    let args = Type {
+        position: pos(),
+        node: TypeType::Array {
+            element_type: Box::new(int_type()),
+            rank: 1,
+        },
+    };
+
+    // Function types
+    let one_float_to_float = Type {
+        position: pos(),
+        node: TypeType::Function {
+            param_types: vec![float_type()],
+            return_type: Box::new(float_type()),
+        },
+    };
+
+    let two_floats_to_float = Type {
+        position: pos(),
+        node: TypeType::Function {
+            param_types: vec![float_type(), float_type()],
+            return_type: Box::new(float_type()),
+        },
+    };
+
+    let to_float = Type {
+        position: pos(),
+        node: TypeType::Function {
+            param_types: vec![int_type()],
+            return_type: Box::new(float_type()),
+        },
+    };
+
+    let to_int = Type {
+        position: pos(),
+        node: TypeType::Function {
+            param_types: vec![float_type()],
+            return_type: Box::new(int_type()),
+        },
+    };
+
+    // Add to environment
+    let _ = global_env.borrow_mut().add_identifier("rgba", rgba);
+    let _ = global_env.borrow_mut().add_identifier("argnum", argnum);
+    let _ = global_env.borrow_mut().add_identifier("args", args);
+
+    for name in &[
+        "float", "sqrt", "exp", "sin", "cos", "tan", "asin", "acos", "atan", "log",
+    ] {
+        let _ = global_env
+            .borrow_mut()
+            .add_identifier(name, one_float_to_float.clone());
+    }
+
+    for name in &["pow", "atan2"] {
+        let _ = global_env
+            .borrow_mut()
+            .add_identifier(name, two_floats_to_float.clone());
+    }
+
+    let _ = global_env.borrow_mut().add_identifier("to_float", to_float);
+    let _ = global_env.borrow_mut().add_identifier("to_int", to_int);
+}
+
+fn bind_lvalue<'a>(
+    lvalue: &LValue<'a>,
+    typ: Type<'a>,
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<(), TypeError> {
+    match &lvalue.node {
+        LValueType::Array { indices } => {
+            // Add the identifier with the type
+            environment
+                .borrow_mut()
+                .add_identifier(lvalue.name, typ.clone())?;
+
+            // Check if the type is an array with matching rank
+            if let TypeType::Array {
+                element_type: _,
+                rank,
+            } = &typ.node
+            {
+                if *rank != indices.len() {
+                    return Err(TypeError {
+                        message: format!(
+                            "Rank of array lvalue ({}) does not match right hand side ({})",
+                            indices.len(),
+                            rank
+                        ),
+                        position: lvalue.position,
+                    });
+                }
+            } else {
+                return Err(TypeError {
+                    message: "Incorrect type for array lvalue".to_string(),
+                    position: lvalue.position,
+                });
+            }
+
+            // Bind index variables as integers
+            for &index in indices {
+                environment.borrow_mut().add_identifier(
+                    index,
+                    Type {
+                        position: pos(),
+                        node: TypeType::Int,
+                    },
+                )?;
+            }
+
+            Ok(())
+        }
+        LValueType::Variable => environment
+            .borrow_mut()
+            .add_identifier(lvalue.name, typ.clone()),
+    }
+}
+
+fn typecheck_type<'a>(
+    typ: &Type<'a>,
+    env: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<Type<'a>, TypeError> {
+    match &typ.node {
+        TypeType::Int => Ok(Type {
+            position: typ.position,
+            node: TypeType::Int,
+        }),
+        TypeType::Float => Ok(Type {
+            position: typ.position,
+            node: TypeType::Float,
+        }),
+        TypeType::Bool => Ok(Type {
+            position: typ.position,
+            node: TypeType::Bool,
+        }),
+        TypeType::Void => Ok(Type {
+            position: typ.position,
+            node: TypeType::Void,
+        }),
+        TypeType::Array { element_type, rank } => {
+            let type_value = typecheck_type(element_type, env)?;
+            Ok(Type {
+                position: typ.position,
+                node: TypeType::Array {
+                    element_type: Box::new(type_value),
+                    rank: *rank,
+                },
+            })
+        }
+        TypeType::Struct { name, elements: _ } => {
+            match env.borrow().get_identifier(typ.position, name) {
+                Ok(struct_type) => Ok(struct_type.clone()),
+                Err(err) => Err(err),
+            }
+        }
+        TypeType::Function {
+            param_types,
+            return_type,
+        } => {
+            let mut resolved_param_types = Vec::new();
+            for param_type in param_types {
+                resolved_param_types.push(typecheck_type(param_type, env)?);
+            }
+            let resolved_return_type = typecheck_type(return_type, env)?;
+            Ok(Type {
+                position: typ.position,
+                node: TypeType::Function {
+                    param_types: resolved_param_types,
+                    return_type: Box::new(resolved_return_type),
+                },
+            })
+        }
+    }
+}
+
+fn types_equal<'a>(left: &Type<'a>, right: &Type<'a>) -> bool {
+    match (&left.node, &right.node) {
+        (TypeType::Int, TypeType::Int) => true,
+        (TypeType::Float, TypeType::Float) => true,
+        (TypeType::Bool, TypeType::Bool) => true,
+        (TypeType::Void, TypeType::Void) => true,
+        (
+            TypeType::Array {
+                element_type: left_element,
+                rank: left_rank,
+            },
+            TypeType::Array {
+                element_type: right_element,
+                rank: right_rank,
+            },
+        ) => left_rank == right_rank && types_equal(left_element, right_element),
+        (
+            TypeType::Struct {
+                name: left_name, ..
+            },
+            TypeType::Struct {
+                name: right_name, ..
+            },
+        ) => left_name == right_name,
+        _ => false,
+    }
+}
+
+// ----------------------------------------------------------------------------------- Command Typecheckers ----------------------------------------------------------------------------------------------
+
+fn typecheck_command<'a>(
+    command: &Command<'a>,
+    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<(), TypeError> {
+    match &command.node {
+        CommandType::Read {
+            source: _,
+            destination,
+        } => typecheck_read_command(command.position, destination, global_env),
+        CommandType::Write {
+            source,
+            destination: _,
+        } => typecheck_write_command(command.position, source, global_env),
+        CommandType::Let { variable, rvalue } => {
+            typecheck_let_command(variable, rvalue, global_env)
+        }
+        CommandType::Assert {
+            condition,
+            message: _,
+        } => typecheck_assert_command(condition, global_env),
+        CommandType::Print { message: _ } => Ok(()),
+        CommandType::Show { expression } => {
+            typecheck_expression(expression, global_env)?;
+            Ok(())
+        }
+        CommandType::Time {
+            command: inner_command,
+        } => typecheck_command(inner_command, global_env),
+        CommandType::Struct { name, elements } => {
+            typecheck_struct_command(command.position, name, elements, global_env)
+        }
+        CommandType::Function {
+            name,
+            parameters,
+            return_type,
+            statements,
+            mut has_return,
+            local_env,
+        } => {
+            // Check return type
+            let fn_return_type = typecheck_type(return_type, global_env)?;
+
+            // Create parameter types list
+            let mut param_types = Vec::new();
+
+            // Create local scope
+            *local_env.borrow_mut() = TypeEnvironment::new(Some(Rc::clone(global_env)));
+
+            // Add parameters to local scope
+            for (param, param_type) in parameters {
+                let type_value = typecheck_type(param_type, global_env)?;
+                param_types.push(type_value.clone());
+                bind_lvalue(param, type_value, local_env)?;
+            }
+
+            let position = command.position;
+
+            // Add function to global environment for recursive calls
+            let function_type = Type {
+                position,
+                node: TypeType::Function {
+                    param_types,
+                    return_type: Box::new(fn_return_type.clone()),
+                },
+            };
+
+            if global_env
+                .borrow_mut()
+                .add_identifier(name, function_type)
+                .is_err()
+            {
+                return Err(TypeError {
+                    message: format!("Cannot redefine function {}", name),
+                    position,
+                });
+            }
+
+            // Check all statements in the function
+            for statement in statements {
+                match &statement.node {
+                    StatementType::Let { variable, rvalue } => {
+                        typecheck_let_command(variable, rvalue, local_env)?;
+                    }
+                    StatementType::Assert {
+                        condition,
+                        message: _,
+                    } => {
+                        let cond_type = typecheck_expression(condition, local_env)?;
+                        if !matches!(cond_type.borrow().as_ref().unwrap().node, TypeType::Bool) {
+                            return Err(TypeError {
+                                message: "Asserted expression must be boolean".to_string(),
+                                position: condition.position,
+                            });
+                        }
+                    }
+                    StatementType::Return { value } => {
+                        let ret_type = typecheck_expression(value, local_env)?;
+                        if !types_equal(&fn_return_type, ret_type.borrow().as_ref().unwrap()) {
+                            return Err(TypeError {
+                                message:
+                                    "Type of expression does not match return type of function"
+                                        .to_string(),
+                                position: value.position,
+                            });
+                        }
+                        has_return = true
+                    }
+                }
+            }
+
+            // Check for implicit return
+            if !has_return && !matches!(fn_return_type.node, TypeType::Void) {
+                return Err(TypeError {
+                    message: "Implicit return type (void) does not match return type of function"
+                        .to_string(),
+                    position,
+                });
+            };
+            Ok(())
+        }
+    }
+}
+
+fn typecheck_read_command<'a>(
+    position: Position,
+    destination: &LValue<'a>,
+    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<(), TypeError> {
+    let rgba = global_env.borrow().get_identifier(position, "rgba")?;
+    let rgba_array = Type {
+        position: pos(),
+        node: TypeType::Array {
+            element_type: Box::new(rgba.clone()),
+            rank: 2,
+        },
+    };
+
+    bind_lvalue(destination, rgba_array, global_env)?;
+
+    if let LValueType::Array { indices } = &destination.node {
+        if indices.len() != 2 {
+            return Err(TypeError {
+                message: format!(
+                    "Cannot bind rgba[,] to array of dimension  {}",
+                    indices.len()
+                ),
+                position: destination.position,
+            });
+        }
+        for index in indices {
+            let _ = global_env.borrow_mut().add_identifier(
+                index,
+                Type {
+                    position: pos(),
+                    node: TypeType::Int,
+                },
+            );
+        }
+    };
+
+    Ok(())
+}
+
+fn typecheck_write_command<'a>(
+    position: Position,
+    source: &Expression<'a>,
+    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<(), TypeError> {
+    let image_type = typecheck_expression(source, global_env)?;
+
+    let is_rgba_array = matches!(
+        &image_type.borrow().as_ref().unwrap().node,
+        TypeType::Array {
+            element_type,
+            rank: 2,
+        } if matches!(element_type.node, TypeType::Struct { name, .. } if name == "rgba")
+    );
+
+    if !is_rgba_array {
+        Err(TypeError {
+            message: "Expression for write needs to be rgba[,]".to_string(),
+            position,
+        })
+    } else {
+        Ok(())
+    }
+}
+
+fn typecheck_assert_command<'a>(
+    condition: &Expression<'a>,
+    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<(), TypeError> {
+    let condition_type = typecheck_expression(condition, global_env)?;
+    if !matches!(
+        condition_type.borrow().as_ref().unwrap().node,
+        TypeType::Bool
+    ) {
+        return Err(TypeError {
+            message: "Asserted expression must be boolean".to_string(),
+            position: condition.position,
+        });
+    }
+    Ok(())
+}
+
+fn typecheck_let_command<'a>(
+    variable: &LValue<'a>,
+    rvalue: &Expression<'a>,
+    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<(), TypeError> {
+    let rtype = typecheck_expression(rvalue, global_env)?;
+    let cloned_rtype = rtype.borrow().clone().unwrap();
+    bind_lvalue(variable, cloned_rtype, global_env)
+}
+
+fn typecheck_struct_command<'a>(
+    position: Position,
+    name: &'a str,
+    elements: &Vec<(&'a str, Type<'a>)>,
+    global_env: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<(), TypeError> {
+    let mut resolved_elements = Vec::new();
+
+    for (element_name, element_type) in elements {
+        // Check if duplicate name exists inside struct
+        if resolved_elements
+            .iter()
+            .any(|(name, _)| name == element_name)
+        {
+            return Err(TypeError {
+                message: format!("Duplicate field name {} in struct", element_name),
+                position,
+            });
+        }
+
+        let type_value = typecheck_type(element_type, global_env)?;
+        resolved_elements.push((*element_name, type_value));
+    }
+
+    // Add the struct to the environment
+    global_env.borrow_mut().add_identifier(
+        name,
+        Type {
+            position,
+            node: TypeType::Struct {
+                name,
+                elements: resolved_elements,
+            },
+        },
+    )
+}
+
+// ----------------------------------------------------------------------------------- Expression Typecheckers ----------------------------------------------------------------------------------------------
+fn typecheck_expression<'a>(
+    expression: &Expression<'a>,
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    match &expression.node {
+        ExpressionType::Int { value: _ } => typecheck_int_expression(expression),
+        ExpressionType::Float { value: _ } => typecheck_float_expression(expression),
+        ExpressionType::True => typecheck_bool_expression(expression),
+        ExpressionType::False => typecheck_bool_expression(expression),
+        ExpressionType::Void => typecheck_void_expression(expression),
+        ExpressionType::Variable { name } => {
+            let typ = typecheck_variable_expression(expression, name, environment)?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::ArrayLiteral { elements } => {
+            let typ =
+                typecheck_array_literal_expression(expression.position, elements, environment)?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::ArrayIndex { array, indices } => {
+            let typ =
+                typecheck_array_index_expression(expression.position, array, indices, environment)?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::Dot {
+            struct_variable,
+            field,
+        } => {
+            let typ =
+                typecheck_dot_expression(expression.position, struct_variable, field, environment)?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::Call {
+            function,
+            arguments,
+        } => {
+            let typ =
+                typecheck_call_expression(expression.position, function, arguments, environment)?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::StructLiteral { name, fields } => {
+            let typ = typecheck_struct_literal_expression(
+                expression.position,
+                name,
+                fields,
+                environment,
+            )?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::Unop {
+            operator: _,
+            expression: inner,
+        } => {
+            let typ = typecheck_expression(inner, environment)?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::Binop {
+            operator,
+            left,
+            right,
+        } => {
+            let typ = typecheck_binop_expression(
+                expression.position,
+                left,
+                right,
+                operator,
+                environment,
+            )?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let typ = typecheck_if_expression(
+                expression.position,
+                condition,
+                then_branch,
+                else_branch,
+                environment,
+            )?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::ArrayLoop { range, body } => {
+            let typ =
+                typecheck_array_loop_expression(expression.position, range, body, environment)?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+        ExpressionType::SumLoop { range, body } => {
+            let typ = typecheck_sum_loop_expression(expression.position, range, body, environment)?;
+            *expression.resolved_type.borrow_mut() = typ.borrow().clone();
+            Ok(typ)
+        }
+    }
+}
+
+fn typecheck_int_expression<'a>(
+    expression: &Expression<'a>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    *expression.resolved_type.borrow_mut() = Some(Type {
+        position: expression.position,
+        node: TypeType::Int,
+    });
+    Ok(expression.resolved_type.clone())
+}
+
+fn typecheck_float_expression<'a>(
+    expression: &Expression<'a>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    *expression.resolved_type.borrow_mut() = Some(Type {
+        position: expression.position,
+        node: TypeType::Float,
+    });
+    Ok(expression.resolved_type.clone())
+}
+
+fn typecheck_bool_expression<'a>(
+    expression: &Expression<'a>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    *expression.resolved_type.borrow_mut() = Some(Type {
+        position: expression.position,
+        node: TypeType::Bool,
+    });
+    Ok(expression.resolved_type.clone())
+}
+
+fn typecheck_void_expression<'a>(
+    expression: &Expression<'a>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    *expression.resolved_type.borrow_mut() = Some(Type {
+        position: expression.position,
+        node: TypeType::Void,
+    });
+    Ok(expression.resolved_type.clone())
+}
+
+fn typecheck_variable_expression<'a>(
+    expression: &Expression<'a>,
+    name: &'a str,
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    let identifier_type = environment
+        .borrow_mut()
+        .get_identifier(expression.position, name)?;
+
+    // Check if it's a function type, which is not allowed for variable expressions
+    if let TypeType::Function { .. } = identifier_type.node {
+        return Err(TypeError {
+            message: format!("Name {} is not defined as a variable", name),
+            position: expression.position,
+        });
+    }
+
+    // Set and return the resolved type
+    *expression.resolved_type.borrow_mut() = Some(identifier_type.clone());
+    Ok(expression.resolved_type.clone())
+}
+
+fn typecheck_binop_expression<'a>(
+    position: Position,
+    left: &Expression<'a>,
+    right: &Expression<'a>,
+    operator: &Binop,
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    let left_type = typecheck_expression(left, environment)?;
+    let right_type = typecheck_expression(right, environment)?;
+
+    // Check if left and right have the same type
+    if !types_equal(
+        left_type.borrow().as_ref().unwrap(),
+        right_type.borrow().as_ref().unwrap(),
+    ) {
+        return Err(TypeError {
+            message: "Left and right hand operators need to have the same type".to_string(),
+            position,
+        });
+    }
+
+    let left_type_ref = left_type.borrow();
+    let left_type_inner = left_type_ref.as_ref().unwrap();
+
+    match operator {
+        &Binop::Add | Binop::Subtract | Binop::Multiply | Binop::Divide | Binop::Modulo => {
+            // Numeric operators require int or float types
+            if !matches!(left_type_inner.node, TypeType::Int | TypeType::Float) {
+                return Err(TypeError {
+                    message: format!(
+                        "Left and right hand operators need to be int or float for {}",
+                        operator
+                    ),
+                    position,
+                });
+            }
+            // Result type is the same as the operands
+            Ok(left_type.clone())
+        }
+        Binop::Equals | Binop::NotEquals => {
+            // Equality operators support int, float, or boolean
+            if !matches!(
+                left_type_inner.node,
+                TypeType::Int | TypeType::Float | TypeType::Bool
+            ) {
+                return Err(TypeError {
+                    message: format!(
+                        "Left and right hand operators need to be int, float or bool for {}",
+                        operator
+                    ),
+                    position,
+                });
+            }
+            // Result is boolean
+            let bool_type = RefCell::new(Some(Type {
+                position,
+                node: TypeType::Bool,
+            }));
+            Ok(bool_type)
+        }
+        Binop::Less | Binop::Greater | Binop::LessEquals | Binop::GreaterEquals => {
+            // Comparison operators require int or float types
+            if !matches!(left_type_inner.node, TypeType::Int | TypeType::Float) {
+                return Err(TypeError {
+                    message: format!(
+                        "Left and right hand operators need to be int or float for {}",
+                        operator
+                    ),
+                    position,
+                });
+            }
+            // Result is boolean
+            let bool_type = RefCell::new(Some(Type {
+                position,
+                node: TypeType::Bool,
+            }));
+            Ok(bool_type)
+        }
+        Binop::And | Binop::Or => {
+            // Logical operators require bool types
+            if !matches!(left_type_inner.node, TypeType::Bool) {
+                return Err(TypeError {
+                    message: format!(
+                        "Left and right hand operators need to be bool for {}",
+                        operator
+                    ),
+                    position,
+                });
+            }
+            // Result is boolean (same as operands)
+            Ok(left_type.clone())
+        }
+    }
+}
+
+fn typecheck_struct_literal_expression<'a>(
+    position: Position,
+    name: &'a str,
+    fields: &[Expression<'a>],
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    // Get the struct type from environment
+    let type_value = environment.borrow_mut().get_identifier(position, name)?;
+
+    if let TypeType::Struct { name: _, elements } = type_value.node.clone() {
+        // Check number of fields
+        if elements.len() != fields.len() {
+            return Err(TypeError {
+                message: format!(
+                    "Expected {} indices for array access got {}",
+                    elements.len(),
+                    fields.len()
+                ),
+                position,
+            });
+        }
+
+        // Check each field type
+        for (i, field_expr) in fields.iter().enumerate() {
+            let field_type = typecheck_expression(field_expr, environment)?;
+            let struct_field = &elements[i];
+
+            if !types_equal(field_type.borrow().as_ref().unwrap(), &struct_field.1) {
+                return Err(TypeError {
+                    message: format!("Invalid type of element {} for type {}", i, name),
+                    position,
+                });
+            }
+        }
+
+        Ok(RefCell::new(Some(type_value)))
+    } else {
+        Err(TypeError {
+            message: format!("{} is not a struct type", name),
+            position,
+        })
+    }
+}
+
+fn typecheck_array_literal_expression<'a>(
+    position: Position,
+    elements: &[Expression<'a>],
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    if elements.is_empty() {
+        return Err(TypeError {
+            message: "Array literal cannot be empty".to_string(),
+            position,
+        });
+    }
+
+    // Check the type of the first element
+    let first_type = typecheck_expression(&elements[0], environment)?;
+
+    // Check all other elements have the same type
+    for (i, element) in elements.iter().enumerate().skip(1) {
+        let element_type = typecheck_expression(element, environment)?;
+
+        if !types_equal(
+            first_type.borrow().as_ref().unwrap(),
+            element_type.borrow().as_ref().unwrap(),
+        ) {
+            return Err(TypeError {
+                message: format!(
+                    "All elements of array literal must have the same type, element {} differs",
+                    i
+                ),
+                position,
+            });
+        }
+    }
+
+    // Create and return array type
+    let array_type = RefCell::new(Some(Type {
+        position,
+        node: TypeType::Array {
+            element_type: Box::new(first_type.borrow().clone().unwrap()),
+            rank: 1,
+        },
+    }));
+
+    Ok(array_type)
+}
+
+fn typecheck_if_expression<'a>(
+    position: Position,
+    condition: &Expression<'a>,
+    then_branch: &Expression<'a>,
+    else_branch: &Expression<'a>,
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    // Check that condition is boolean
+    let condition_type = typecheck_expression(condition, environment)?;
+    if !matches!(
+        condition_type.borrow().as_ref().unwrap().node,
+        TypeType::Bool
+    ) {
+        return Err(TypeError {
+            message: "Type of condition for if expression must be boolean".to_string(),
+            position,
+        });
+    }
+
+    // Check that both branches have the same type
+    let then_type = typecheck_expression(then_branch, environment)?;
+    let else_type = typecheck_expression(else_branch, environment)?;
+
+    if !types_equal(
+        then_type.borrow().as_ref().unwrap(),
+        else_type.borrow().as_ref().unwrap(),
+    ) {
+        return Err(TypeError {
+            message: "Type of both branches in if expression must match".to_string(),
+            position,
+        });
+    }
+
+    Ok(then_type)
+}
+
+fn typecheck_dot_expression<'a>(
+    position: Position,
+    struct_variable: &Expression<'a>,
+    field: &'a str,
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    // Get struct type
+    let variable_type = typecheck_expression(struct_variable, environment)?;
+
+    if let Some(Type {
+        node: TypeType::Struct { name: _, elements },
+        ..
+    }) = &*variable_type.clone().borrow()
+    {
+        // Find the field
+        for (elem_name, elem_type) in elements {
+            if *elem_name == field {
+                return Ok(RefCell::new(Some(elem_type.clone())));
+            }
+        }
+
+        Err(TypeError {
+            message: format!("Struct has no field named {}", field),
+            position,
+        })
+    } else {
+        Err(TypeError {
+            message: "Expression is not a struct and cannot be indexed into".to_string(),
+            position,
+        })
+    }
+}
+
+fn typecheck_array_index_expression<'a>(
+    position: Position,
+    array: &Expression<'a>,
+    indices: &Vec<Expression<'a>>,
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    let array_type = typecheck_expression(array, environment)?;
+
+    if let Some(Type {
+        node: TypeType::Array { element_type, rank },
+        ..
+    }) = &*array_type.clone().borrow()
+    {
+        // Check number of indices
+        if *rank != indices.len() {
+            return Err(TypeError {
+                message: format!(
+                    "Expected {} indices for array access got {}",
+                    rank,
+                    indices.len()
+                ),
+                position,
+            });
+        }
+
+        // Check that all indices are integers
+        for index in indices {
+            let index_type = typecheck_expression(index, environment)?;
+            if !matches!(index_type.borrow().as_ref().unwrap().node, TypeType::Int) {
+                return Err(TypeError {
+                    message: "Array indices must be integers".to_string(),
+                    position: index.position,
+                });
+            }
+        }
+
+        // Return element type
+        Ok(RefCell::new(Some(*element_type.clone())))
+    } else {
+        Err(TypeError {
+            message: "Expression is not an array and cannot be indexed".to_string(),
+            position,
+        })
+    }
+}
+
+fn typecheck_call_expression<'a>(
+    position: Position,
+    function: &'a str,
+    arguments: &[Expression<'a>],
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    // Get function type
+    let func_type = environment.borrow().get_identifier(position, function)?;
+
+    if let Type {
+        node: TypeType::Function {
+            param_types,
+            return_type,
+        },
+        ..
+    } = func_type
+    {
+        // Check number of arguments
+        if param_types.len() != arguments.len() {
+            return Err(TypeError {
+                message: format!("Incorrect number of parameters for function {}", function),
+                position,
+            });
+        }
+
+        // Check each argument type
+        for (i, (arg, param_type)) in arguments.iter().zip(param_types.iter()).enumerate() {
+            let arg_type = typecheck_expression(arg, environment)?;
+            if !types_equal(arg_type.borrow().as_ref().unwrap(), param_type) {
+                return Err(TypeError {
+                    message: format!(
+                        "Incorrect type of parameter {} for function {}",
+                        i, function
+                    ),
+                    position: arg.position,
+                });
+            }
+        }
+
+        // Return function's return type
+        Ok(RefCell::new(Some(*return_type.clone())))
+    } else {
+        Err(TypeError {
+            message: format!("{} is not a function", function),
+            position,
+        })
+    }
+}
+
+fn typecheck_array_loop_expression<'a>(
+    position: Position,
+    range: &Vec<(&'a str, Expression<'a>)>,
+    body: &Expression<'a>,
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    if range.is_empty() {
+        return Err(TypeError {
+            message: "Cannot make array of rank 0".to_string(),
+            position,
+        });
+    }
+
+    let local_env = Rc::new(RefCell::new(TypeEnvironment::new(Some(
+        environment.clone(),
+    ))));
+
+    // Add loop variables to scope
+    for (var_name, limit_expr) in range {
+        let limit_type = typecheck_expression(limit_expr, environment)?;
+
+        if !matches!(limit_type.borrow().as_ref().unwrap().node, TypeType::Int) {
+            return Err(TypeError {
+                message: "Cannot iterate to non-integer value".to_string(),
+                position: limit_expr.position,
+            });
+        }
+
+        local_env
+            .borrow_mut()
+            .add_identifier(
+                var_name,
+                Type {
+                    position,
+                    node: TypeType::Int,
+                },
+            )
+            .map_err(|_| TypeError {
+                message: format!("Cannot redefine variable {}", var_name),
+                position,
+            })?;
+    }
+
+    // Type check the body
+    let element_type = typecheck_expression(body, &local_env)?;
+
+    // Create array type
+    let array_type = RefCell::new(Some(Type {
+        position,
+        node: TypeType::Array {
+            element_type: Box::new(element_type.borrow().clone().unwrap()),
+            rank: range.len(),
+        },
+    }));
+
+    Ok(array_type)
+}
+
+fn typecheck_sum_loop_expression<'a>(
+    position: Position,
+    range: &Vec<(&'a str, Expression<'a>)>,
+    body: &Expression<'a>,
+    environment: &Rc<RefCell<TypeEnvironment<'a>>>,
+) -> Result<RefCell<Option<Type<'a>>>, TypeError> {
+    if range.is_empty() {
+        return Err(TypeError {
+            message: "Cannot sum over array of rank 0".to_string(),
+            position,
+        });
+    }
+
+    let local_env = Rc::new(RefCell::new(TypeEnvironment::new(Some(
+        environment.clone(),
+    ))));
+
+    // Add loop variables to scope
+    for (var_name, limit_expr) in range {
+        let limit_type = typecheck_expression(limit_expr, environment)?;
+
+        if !matches!(limit_type.borrow().as_ref().unwrap().node, TypeType::Int) {
+            return Err(TypeError {
+                message: "Cannot iterate to non-integer value".to_string(),
+                position: limit_expr.position,
+            });
+        }
+
+        local_env
+            .borrow_mut()
+            .add_identifier(
+                var_name,
+                Type {
+                    position,
+                    node: TypeType::Int,
+                },
+            )
+            .map_err(|_| TypeError {
+                message: format!("Cannot redefine variable {}", var_name),
+                position,
+            })?;
+    }
+
+    // Type check the body
+    let element_type = typecheck_expression(body, &local_env)?;
+
+    // Check if body type is numeric (int or float)
+    if !matches!(
+        element_type.borrow().as_ref().unwrap().node,
+        TypeType::Int | TypeType::Float
+    ) {
+        return Err(TypeError {
+            message: "Cannot sum over elements that are not int or float".to_string(),
+            position: body.position,
+        });
+    }
+
+    // Return element type (int or float)
+    Ok(element_type)
+}
+
+===== ./src/ast.rs =====
+use crate::{lexer::Position, typechecker::TypeEnvironment};
+use core::str;
+use std::{cell::RefCell, fmt::Display, rc::Rc};
+
+// -------------------------------------------------------------------------------------------- Command Nodes -----------------------------------------------------------------------------------------------
+
+pub struct Command<'a> {
+    pub position: Position,
+    pub node: CommandType<'a>,
+}
+
+pub enum CommandType<'a> {
+    Read {
+        source: &'a str,
+        destination: Box<LValue<'a>>,
+    },
+    Write {
+        source: Box<Expression<'a>>,
+        destination: &'a str,
+    },
+    Let {
+        variable: Box<LValue<'a>>,
+        rvalue: Box<Expression<'a>>,
+    },
+    Assert {
+        condition: Box<Expression<'a>>,
+        message: &'a str,
+    },
+    Print {
+        message: &'a str,
+    },
+    Show {
+        expression: Box<Expression<'a>>,
+    },
+    Time {
+        command: Box<Command<'a>>,
+    },
+    Function {
+        name: &'a str,
+        parameters: Vec<(LValue<'a>, Type<'a>)>,
+        return_type: Box<Type<'a>>,
+        statements: Vec<Statement<'a>>,
+        has_return: bool,
+        local_env: Rc<RefCell<TypeEnvironment<'a>>>,
+    },
+    Struct {
+        name: &'a str,
+        elements: Vec<(&'a str, Type<'a>)>,
+    },
+}
+
+impl Display for Command<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.node {
+            CommandType::Read {
+                source,
+                destination,
+            } => {
+                write!(f, "(ReadCmd {} {})", source, destination)
+            }
+            CommandType::Write {
+                source,
+                destination,
+            } => {
+                write!(f, "(WriteCmd {} {})", source, destination)
+            }
+            CommandType::Let { variable, rvalue } => {
+                write!(f, "(LetCmd {} {})", variable, rvalue)
+            }
+            CommandType::Assert { condition, message } => {
+                write!(f, "(AssertCmd {} {})", condition, message)
+            }
+            CommandType::Print { message } => {
+                write!(f, "(PrintCmd {})", message)
+            }
+            CommandType::Show { expression } => {
+                write!(f, "(ShowCmd {})", expression)
+            }
+            CommandType::Time { command } => {
+                write!(f, "(TimeCmd {})", command)
+            }
+            CommandType::Function {
+                name,
+                parameters,
+                return_type,
+                statements,
+                has_return: _,
+                local_env: _,
+            } => {
+                let mut result = format!("(FnCmd {} ((", name);
+                let mut first = true;
+                for (var, typ) in parameters {
+                    if !first {
+                        result.push(' ');
+                    }
+                    result.push_str(&format!("{} {}", var, typ));
+                    first = false;
+                }
+                result.push_str(&format!(")) {}", return_type));
+                for stmt in statements {
+                    result.push_str(&format!(" {}", stmt));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+            CommandType::Struct { name, elements } => {
+                let mut result = format!("(StructCmd {}", name);
+                for (field, typ) in elements {
+                    result.push_str(&format!(" {} {}", field, typ));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------- Expression Nodes -----------------------------------------------------------------------------------------------
+
+pub enum Unop {
+    Negative,
+    Not,
+}
+
+impl Display for Unop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Unop::Negative => write!(f, "-"),
+            Unop::Not => write!(f, "!"),
+        }
+    }
+}
+
+impl Unop {
+    pub fn from_str(s: &str) -> Unop {
+        match s {
+            "-" => Unop::Negative,
+            "!" => Unop::Not,
+            _ => panic!("Invalid unary operator: {}", s),
+        }
+    }
+}
+
+pub enum Binop {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulo,
+    Less,
+    Greater,
+    Equals,
+    NotEquals,
+    LessEquals,
+    GreaterEquals,
+    And,
+    Or,
+}
+
+impl Display for Binop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Binop::Add => write!(f, "+"),
+            Binop::Subtract => write!(f, "-"),
+            Binop::Multiply => write!(f, "*"),
+            Binop::Divide => write!(f, "/"),
+            Binop::Modulo => write!(f, "%"),
+            Binop::Less => write!(f, "<"),
+            Binop::Greater => write!(f, ">"),
+            Binop::Equals => write!(f, "=="),
+            Binop::NotEquals => write!(f, "!="),
+            Binop::LessEquals => write!(f, "<="),
+            Binop::GreaterEquals => write!(f, ">="),
+            Binop::And => write!(f, "&&"),
+            Binop::Or => write!(f, "||"),
+        }
+    }
+}
+
+impl Binop {
+    pub fn from_str(s: &str) -> Binop {
+        match s {
+            "+" => Binop::Add,
+            "-" => Binop::Subtract,
+            "*" => Binop::Multiply,
+            "/" => Binop::Divide,
+            "%" => Binop::Modulo,
+            "<" => Binop::Less,
+            ">" => Binop::Greater,
+            "==" => Binop::Equals,
+            "!=" => Binop::NotEquals,
+            "<=" => Binop::LessEquals,
+            ">=" => Binop::GreaterEquals,
+            "&&" => Binop::And,
+            "||" => Binop::Or,
+            _ => panic!("Invalid binary operator: {}", s),
+        }
+    }
+}
+
+pub struct Expression<'a> {
+    pub position: Position,
+    pub node: ExpressionType<'a>,
+    pub resolved_type: RefCell<Option<Type<'a>>>,
+}
+
+pub enum ExpressionType<'a> {
+    Int {
+        value: i64,
+    },
+    Float {
+        value: f64,
+    },
+    True,
+    False,
+    Void,
+    Variable {
+        name: &'a str,
+    },
+    ArrayLiteral {
+        elements: Vec<Expression<'a>>,
+    },
+    ArrayIndex {
+        array: Box<Expression<'a>>,
+        indices: Vec<Expression<'a>>,
+    },
+    Dot {
+        struct_variable: Box<Expression<'a>>,
+        field: &'a str,
+    },
+    Call {
+        function: &'a str,
+        arguments: Vec<Expression<'a>>,
+    },
+    StructLiteral {
+        name: &'a str,
+        fields: Vec<Expression<'a>>,
+    },
+    Unop {
+        operator: Unop,
+        expression: Box<Expression<'a>>,
+    },
+    Binop {
+        operator: Binop,
+        left: Box<Expression<'a>>,
+        right: Box<Expression<'a>>,
+    },
+    If {
+        condition: Box<Expression<'a>>,
+        then_branch: Box<Expression<'a>>,
+        else_branch: Box<Expression<'a>>,
+    },
+    ArrayLoop {
+        range: Vec<(&'a str, Expression<'a>)>,
+        body: Box<Expression<'a>>,
+    },
+    SumLoop {
+        range: Vec<(&'a str, Expression<'a>)>,
+        body: Box<Expression<'a>>,
+    },
+}
+
+impl Display for Expression<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let type_str = if let Some(typ) = self.resolved_type.borrow().as_ref() {
+            format!(" {}", typ)
+        } else {
+            String::new()
+        };
+
+        match &self.node {
+            ExpressionType::Int { value } => write!(f, "(IntExpr{} {})", type_str, value),
+            ExpressionType::Float { value } => {
+                write!(f, "(FloatExpr{} {})", type_str, *value as i64)
+            }
+            ExpressionType::True => write!(f, "(TrueExpr{})", type_str),
+            ExpressionType::False => write!(f, "(FalseExpr{})", type_str),
+            ExpressionType::Void => write!(f, "(VoidExpr{})", type_str),
+            ExpressionType::Variable { name } => write!(f, "(VarExpr{} {})", type_str, name),
+            ExpressionType::ArrayLiteral { elements } => {
+                let mut result = format!("(ArrayLiteralExpr{}", type_str);
+                for element in elements {
+                    result.push_str(&format!(" {}", element));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+            ExpressionType::ArrayIndex { array, indices } => {
+                let mut result = format!("(ArrayIndexExpr{} {}", type_str, array);
+                for index in indices {
+                    result.push_str(&format!(" {}", index));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+            ExpressionType::Dot {
+                struct_variable,
+                field,
+            } => {
+                write!(f, "(DotExpr{} {} {})", type_str, struct_variable, field)
+            }
+            ExpressionType::Call {
+                function,
+                arguments,
+            } => {
+                let mut result = format!("(CallExpr{} {}", type_str, function);
+                for arg in arguments {
+                    result.push_str(&format!(" {}", arg));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+            ExpressionType::StructLiteral { name, fields } => {
+                let mut result = format!("(StructLiteralExpr{} {}", type_str, name);
+                for field in fields {
+                    result.push_str(&format!(" {}", field));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+            ExpressionType::Unop {
+                operator,
+                expression,
+            } => {
+                write!(f, "(UnopExpr{} {} {})", type_str, operator, expression)
+            }
+            ExpressionType::Binop {
+                operator,
+                left,
+                right,
+            } => write!(f, "(BinopExpr{} {} {} {})", type_str, left, operator, right),
+            ExpressionType::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => write!(
+                f,
+                "(IfExpr{} {} {} {})",
+                type_str, condition, then_branch, else_branch
+            ),
+            ExpressionType::ArrayLoop { range, body } => {
+                let mut result = format!("(ArrayLoopExpr{}", type_str);
+                for (var, expr) in range {
+                    result.push_str(&format!(" {} {}", var, expr));
+                }
+                result.push_str(&format!(" {})", body));
+                write!(f, "{}", result)
+            }
+            ExpressionType::SumLoop { range, body } => {
+                let mut result = format!("(SumLoopExpr{}", type_str);
+                for (var, expr) in range {
+                    result.push_str(&format!(" {} {}", var, expr));
+                }
+                result.push_str(&format!(" {})", body));
+                write!(f, "{}", result)
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------- Statement Nodes -----------------------------------------------------------------------------------------------
+
+pub struct Statement<'a> {
+    pub node: StatementType<'a>,
+}
+
+pub enum StatementType<'a> {
+    Let {
+        variable: Box<LValue<'a>>,
+        rvalue: Box<Expression<'a>>,
+    },
+    Assert {
+        condition: Box<Expression<'a>>,
+        message: &'a str,
+    },
+    Return {
+        value: Box<Expression<'a>>,
+    },
+}
+
+impl Display for Statement<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.node {
+            StatementType::Let { variable, rvalue } => {
+                write!(f, "(LetStmt {} {})", variable, rvalue)
+            }
+            StatementType::Assert { condition, message } => {
+                write!(f, "(AssertStmt {} {})", condition, message)
+            }
+            StatementType::Return { value } => {
+                write!(f, "(ReturnStmt {})", value)
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------- Type Nodes -----------------------------------------------------------------------------------------------
+
+#[derive(Clone)]
+pub struct Type<'a> {
+    pub position: Position,
+    pub node: TypeType<'a>,
+}
+
+#[derive(Clone)]
+pub enum TypeType<'a> {
+    Int,
+    Float,
+    Bool,
+    Void,
+    Struct {
+        name: &'a str,
+        elements: Vec<(&'a str, Type<'a>)>,
+    },
+    Array {
+        element_type: Box<Type<'a>>,
+        rank: usize,
+    },
+    Function {
+        param_types: Vec<Type<'a>>,
+        return_type: Box<Type<'a>>,
+    },
+}
+
+impl Display for Type<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.node {
+            TypeType::Int => write!(f, "(IntType)"),
+            TypeType::Float => write!(f, "(FloatType)"),
+            TypeType::Bool => write!(f, "(BoolType)"),
+            TypeType::Void => write!(f, "(VoidType)"),
+            TypeType::Struct { name, elements: _ } => write!(f, "(StructType {})", name),
+            TypeType::Array { element_type, rank } => {
+                write!(f, "(ArrayType {} {})", element_type, rank)
+            }
+            TypeType::Function {
+                param_types: _,
+                return_type,
+            } => write!(f, "{}", return_type),
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------- LValue Nodes -----------------------------------------------------------------------------------------------
+
+pub struct LValue<'a> {
+    pub position: Position,
+    pub name: &'a str,
+    pub node: LValueType<'a>,
+}
+
+pub enum LValueType<'a> {
+    Variable,
+    Array { indices: Vec<&'a str> },
+}
+
+impl Display for LValue<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.node {
+            LValueType::Variable => write!(f, "(VarLValue {})", self.name),
+            LValueType::Array { indices } => {
+                let mut result = format!("(ArrayLValue {}", self.name);
+                for idx in indices {
+                    result.push_str(&format!(" {}", idx));
+                }
+                result.push(')');
+                write!(f, "{}", result)
+            }
+        }
+    }
+}
+
+===== ./src/lexer.rs =====
+use core::{fmt, str};
+use std::fmt::Display;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct Position {
+    pub line: usize,
+    pub column: usize,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Token<'a> {
+    pub position: Position,
+    pub token_type: TokenType<'a>,
+}
+
+impl Display for Token<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.token_type)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum TokenType<'a> {
+    // Values
+    IntVal(&'a str),
+    FloatVal(&'a str),
+    Variable(&'a str),
+    String(&'a str),
+
+    // Keywords
+    Array,
+    Assert,
+    Bool,
+    Else,
+    Fn,
+    If,
+    Image,
+    Int,
+    Float,
+    Let,
+    Print,
+    Read,
+    Return,
+    Show,
+    Struct,
+    Sum,
+    Then,
+    Time,
+    To,
+    Void,
+    Write,
+
+    // Literals
+    True,
+    False,
+
+    // Operators
+    Op(&'a str),
+    Equals,
+
+    // Delimiters
+    LParen,
+    RParen,
+    LCurly,
+    RCurly,
+    LSquare,
+    RSquare,
+    Comma,
+    Colon,
+    Dot,
+
+    // Other
+    Newline,
+    EndOfFile,
+}
+
+impl Display for TokenType<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TokenType::IntVal(contents) => write!(f, "INTVAL '{}'", contents),
+            TokenType::FloatVal(contents) => write!(f, "FLOATVAL '{}'", contents),
+            TokenType::Variable(contents) => write!(f, "VARIABLE '{}'", contents),
+            TokenType::String(contents) => write!(f, "STRING '{}'", contents),
+            TokenType::Op(contents) => write!(f, "OP '{}'", contents),
+            TokenType::Array => write!(f, "ARRAY 'array'"),
+            TokenType::Assert => write!(f, "ASSERT 'assert'"),
+            TokenType::Bool => write!(f, "BOOL 'bool'"),
+            TokenType::Else => write!(f, "ELSE 'else'"),
+            TokenType::Fn => write!(f, "FN 'fn'"),
+            TokenType::If => write!(f, "IF 'if'"),
+            TokenType::Image => write!(f, "IMAGE 'image'"),
+            TokenType::Int => write!(f, "INT 'int'"),
+            TokenType::Float => write!(f, "FLOAT 'float'"),
+            TokenType::Let => write!(f, "LET 'let'"),
+            TokenType::Print => write!(f, "PRINT 'print'"),
+            TokenType::Read => write!(f, "READ 'read'"),
+            TokenType::Return => write!(f, "RETURN 'return'"),
+            TokenType::Show => write!(f, "SHOW 'show'"),
+            TokenType::Struct => write!(f, "STRUCT 'struct'"),
+            TokenType::Sum => write!(f, "SUM 'sum'"),
+            TokenType::Then => write!(f, "THEN 'then'"),
+            TokenType::Time => write!(f, "TIME 'time'"),
+            TokenType::To => write!(f, "TO 'to'"),
+            TokenType::Void => write!(f, "VOID 'void'"),
+            TokenType::Write => write!(f, "WRITE 'write'"),
+            TokenType::True => write!(f, "TRUE 'true'"),
+            TokenType::False => write!(f, "FALSE 'false'"),
+            TokenType::Equals => write!(f, "EQUALS '='"),
+            TokenType::LParen => write!(f, "LPAREN '('"),
+            TokenType::RParen => write!(f, "RPAREN ')'"),
+            TokenType::LCurly => write!(f, "LCURLY '{{'"),
+            TokenType::RCurly => write!(f, "RCURLY '}}'"),
+            TokenType::LSquare => write!(f, "LSQUARE '['"),
+            TokenType::RSquare => write!(f, "RSQUARE ']'"),
+            TokenType::Comma => write!(f, "COMMA ','"),
+            TokenType::Colon => write!(f, "COLON ':'"),
+            TokenType::Dot => write!(f, "DOT '.'"),
+            TokenType::Newline => write!(f, "NEWLINE"),
+            TokenType::EndOfFile => write!(f, "END_OF_FILE"),
+        }
+    }
+}
+
+pub struct LexError {
+    message: String,
+    position: Position,
+}
+
+impl Display for LexError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Lex error: {}:{}: {}",
+            self.position.line, self.position.column, self.message
+        )
+    }
+}
+
+/// Represents the state of the lexer and provides helper methods
+struct Lexer<'a> {
+    program: &'a str,
+    position: usize,
+    line: usize,
+    column: usize,
+}
+
+impl<'a> Lexer<'a> {
+    /// Creates a new lexer for the given program
+    fn new(program: &'a str) -> Self {
+        Lexer {
+            program,
+            position: 0,
+            line: 1,
+            column: 0,
+        }
+    }
+
+    // Helper function to check if a character is valid
+    fn is_valid(c: u8) -> bool {
+        (32..=126).contains(&c)
+    }
+
+    /// Get the current byte
+    /// Returns 0 if the position is at the end of the program
+    fn current_byte(&self) -> u8 {
+        self.program
+            .as_bytes()
+            .get(self.position)
+            .cloned()
+            .unwrap_or(0)
+    }
+
+    /// Get the next byte
+    /// Returns 0 if the position is at the end of the program
+    fn peek_byte(&self) -> u8 {
+        self.program
+            .as_bytes()
+            .get(self.position + 1)
+            .cloned()
+            .unwrap_or(0)
+    }
+
+    /// Advance position by one character
+    fn advance(&mut self) {
+        self.position += 1;
+        self.column += 1;
+    }
+
+    /// Advance the lexer after encountering a newline
+    fn advance_newline(&mut self) {
+        self.position += 1;
+        self.line += 1;
+        self.column = 0;
+    }
+
+    /// Create an error at the current position
+    fn error(&self, message: &str) -> LexError {
+        LexError {
+            message: message.to_string(),
+            position: Position {
+                line: self.line,
+                column: self.column,
+            },
+        }
+    }
+
+    /// Get the current position in a Position struct
+    fn current_position(&self) -> Position {
+        Position {
+            line: self.line,
+            column: self.column,
+        }
+    }
+
+    /// Lex an identifier or keyword
+    fn lex_identifier(&mut self) -> Token<'a> {
+        let start = self.position;
+
+        // Consume all alphanumeric characters
+        loop {
+            let c = self.current_byte();
+            if !(c.is_ascii_alphanumeric() || c == b'_') {
+                break;
+            }
+            self.advance();
+        }
+
+        let word = &self.program[start..self.position];
+        let pos = self.current_position();
+
+        // Check if this is a keyword
+        match word {
+            "array" => Token {
+                position: pos,
+                token_type: TokenType::Array,
+            },
+            "assert" => Token {
+                position: pos,
+                token_type: TokenType::Assert,
+            },
+            "bool" => Token {
+                position: pos,
+                token_type: TokenType::Bool,
+            },
+            "else" => Token {
+                position: pos,
+                token_type: TokenType::Else,
+            },
+            "false" => Token {
+                position: pos,
+                token_type: TokenType::False,
+            },
+            "float" => Token {
+                position: pos,
+                token_type: TokenType::Float,
+            },
+            "fn" => Token {
+                position: pos,
+                token_type: TokenType::Fn,
+            },
+            "if" => Token {
+                position: pos,
+                token_type: TokenType::If,
+            },
+            "image" => Token {
+                position: pos,
+                token_type: TokenType::Image,
+            },
+            "int" => Token {
+                position: pos,
+                token_type: TokenType::Int,
+            },
+            "let" => Token {
+                position: pos,
+                token_type: TokenType::Let,
+            },
+            "print" => Token {
+                position: pos,
+                token_type: TokenType::Print,
+            },
+            "read" => Token {
+                position: pos,
+                token_type: TokenType::Read,
+            },
+            "return" => Token {
+                position: pos,
+                token_type: TokenType::Return,
+            },
+            "show" => Token {
+                position: pos,
+                token_type: TokenType::Show,
+            },
+            "struct" => Token {
+                position: pos,
+                token_type: TokenType::Struct,
+            },
+            "sum" => Token {
+                position: pos,
+                token_type: TokenType::Sum,
+            },
+            "then" => Token {
+                position: pos,
+                token_type: TokenType::Then,
+            },
+            "time" => Token {
+                position: pos,
+                token_type: TokenType::Time,
+            },
+            "to" => Token {
+                position: pos,
+                token_type: TokenType::To,
+            },
+            "true" => Token {
+                position: pos,
+                token_type: TokenType::True,
+            },
+            "void" => Token {
+                position: pos,
+                token_type: TokenType::Void,
+            },
+            "write" => Token {
+                position: pos,
+                token_type: TokenType::Write,
+            },
+            _ => Token {
+                position: pos,
+                token_type: TokenType::Variable(word),
+            },
+        }
+    }
+
+    /// Lex a number (integer or float)
+    fn lex_number(&mut self) -> Token<'a> {
+        let start = self.position;
+        let mut has_dot = false;
+
+        // Consume all numeric characters
+        loop {
+            let c = self.current_byte();
+            if c.is_ascii_digit() {
+                self.advance();
+            } else if c == b'.' && !has_dot {
+                has_dot = true;
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        let number = &self.program[start..self.position];
+        let position = self.current_position();
+
+        if has_dot {
+            Token {
+                position,
+                token_type: TokenType::FloatVal(number),
+            }
+        } else {
+            Token {
+                position,
+                token_type: TokenType::IntVal(number),
+            }
+        }
+    }
+
+    /// Lex a dot (could be a float or struct access)
+    fn lex_dot(&mut self) -> Token<'a> {
+        let start = self.position;
+        self.advance(); // Consume the dot
+
+        // Check if it's a float starting with a dot
+        if self.current_byte().is_ascii_digit() {
+            while self.current_byte().is_ascii_digit() {
+                self.advance();
+            }
+
+            return Token {
+                position: Position {
+                    line: self.line,
+                    column: self.column,
+                },
+                token_type: TokenType::FloatVal(&self.program[start..self.position]),
+            };
+        }
+
+        // It's just a dot
+        Token {
+            position: Position {
+                line: self.line,
+                column: self.column - 1,
+            },
+            token_type: TokenType::Dot,
+        }
+    }
+
+    /// Lex a string literal
+    fn lex_string(&mut self) -> Result<Token<'a>, LexError> {
+        let start = self.position;
+        self.advance(); // Skip opening quote
+
+        while self.current_byte() != b'"' {
+            let c = self.current_byte();
+
+            if c == 0 {
+                return Err(self.error("unterminated string"));
+            }
+
+            if !Self::is_valid(c) {
+                return Err(self.error("invalid character in string"));
+            }
+
+            self.advance();
+        }
+
+        self.advance(); // Skip closing quote
+
+        Ok(Token {
+            position: Position {
+                line: self.line,
+                column: self.column,
+            },
+            token_type: TokenType::String(&self.program[start..self.position]),
+        })
+    }
+
+    /// Lex a comment (line or block)
+    fn lex_comment(&mut self) -> Result<(), LexError> {
+        self.advance(); // Skip the first /
+        let mut c = self.current_byte();
+
+        if c == b'/' {
+            // Line comment
+            self.advance(); // Skip the second /
+
+            while self.current_byte() != b'\n' {
+                if !Self::is_valid(self.current_byte()) {
+                    return Err(self.error("invalid character in comment"));
+                }
+                self.advance();
+            }
+            Ok(())
+        } else {
+            // Block comment
+            self.advance(); // Skip the *
+
+            // let mut found_end = false;
+            loop {
+                c = self.current_byte();
+                if c == b'*' && self.peek_byte() == b'/' {
+                    self.advance(); // Skip *
+                    self.advance(); // Skip /
+                    break;
+                } else if c == 0 {
+                    return Err(self.error("unterminated block comment"));
+                } else if c == b'\n' {
+                    self.advance_newline();
+                } else {
+                    if !Self::is_valid(c) && c != b'\n' {
+                        return Err(self.error("invalid character in block comment"));
+                    }
+                    self.advance();
+                }
+            }
+
+            Ok(())
+        }
+    }
+
+    /// Lex operators and delimiters
+    fn lex_operator(&mut self) -> Token<'a> {
+        let pos = self.current_position();
+
+        // Check for two-character operators
+        if self.peek_byte() != 0 {
+            let potential_op = &self.program[self.position..self.position + 2];
+            if ["==", "<=", ">=", "!=", "&&", "||"].contains(&potential_op) {
+                self.position += 2;
+                self.column += 2;
+                return Token {
+                    position: pos,
+                    token_type: TokenType::Op(potential_op),
+                };
+            }
+        }
+
+        // Single-character tokens
+        let token = match self.current_byte() {
+            b'(' => Token {
+                position: pos,
+                token_type: TokenType::LParen,
+            },
+            b')' => Token {
+                position: pos,
+                token_type: TokenType::RParen,
+            },
+            b'{' => Token {
+                position: pos,
+                token_type: TokenType::LCurly,
+            },
+            b'}' => Token {
+                position: pos,
+                token_type: TokenType::RCurly,
+            },
+            b'[' => Token {
+                position: pos,
+                token_type: TokenType::LSquare,
+            },
+            b']' => Token {
+                position: pos,
+                token_type: TokenType::RSquare,
+            },
+            b',' => Token {
+                position: pos,
+                token_type: TokenType::Comma,
+            },
+            b'=' => Token {
+                position: pos,
+                token_type: TokenType::Equals,
+            },
+            b':' => Token {
+                position: pos,
+                token_type: TokenType::Colon,
+            },
+            _ => Token {
+                position: pos,
+                token_type: TokenType::Op(&self.program[self.position..self.position + 1]),
+            },
+        };
+
+        self.advance();
+        token
+    }
+
+    /// Run the lexer to produce tokens
+    fn lex(&mut self) -> Result<Vec<Token<'a>>, LexError> {
+        let mut tokens: Vec<Token<'a>> = Vec::with_capacity(self.program.len() / 4);
+
+        while self.current_byte() != 0 {
+            let c = self.current_byte();
+
+            match c {
+                // Alphabetic characters (keywords or variables)
+                b'a'..=b'z' | b'A'..=b'Z' => {
+                    tokens.push(self.lex_identifier());
+                }
+
+                // Number literals
+                b'0'..=b'9' => {
+                    tokens.push(self.lex_number());
+                }
+
+                // Dot (could be a float or struct access)
+                b'.' => {
+                    tokens.push(self.lex_dot());
+                }
+
+                // String literals
+                b'"' => {
+                    tokens.push(self.lex_string()?);
+                }
+
+                // Comments or division
+                b'/' => {
+                    let next = self.peek_byte();
+                    if next == b'/' || next == b'*' {
+                        self.lex_comment()?;
+                    } else {
+                        tokens.push(Token {
+                            position: Position {
+                                line: self.line,
+                                column: self.column,
+                            },
+                            token_type: TokenType::Op(
+                                &self.program[self.position..self.position + 1],
+                            ),
+                        });
+                        self.advance();
+                    }
+                }
+
+                // Line continuation
+                b'\\' => {
+                    self.advance();
+                    if self.current_byte() == b'\n' {
+                        self.advance_newline();
+                    } else {
+                        return Err(self.error("invalid line continuation"));
+                    }
+                }
+
+                // Newline
+                b'\n' => {
+                    // Add newline token if the last token is not a newline
+                    if tokens.is_empty()
+                        || !matches!(tokens.last().unwrap().token_type, TokenType::Newline)
+                    {
+                        tokens.push(Token {
+                            position: Position {
+                                line: self.line,
+                                column: self.column,
+                            },
+                            token_type: TokenType::Newline,
+                        });
+                    }
+
+                    self.advance_newline();
+                }
+
+                // Whitespace
+                b' ' => {
+                    self.advance();
+                }
+
+                // Operators and delimiters
+                _ if Self::is_valid(c) => {
+                    tokens.push(self.lex_operator());
+                }
+
+                // Invalid character
+                _ => {
+                    return Err(self.error("invalid character"));
+                }
+            }
+        }
+
+        // Add EOF token
+        tokens.push(Token {
+            position: Position {
+                line: self.line,
+                column: self.column,
+            },
+            token_type: TokenType::EndOfFile,
+        });
+
+        Ok(tokens)
+    }
+}
+
+pub fn lex(program: &str) -> Result<Vec<Token>, LexError> {
+    let mut lexer = Lexer::new(program);
+    lexer.lex()
+}
+
+===== ./src/parser.rs =====
+use crate::ast::*;
+use crate::lexer::*;
+use crate::typechecker::TypeEnvironment;
+use core::fmt;
+use std::cell::RefCell;
+use std::fmt::Display;
+use std::rc::Rc;
+
+pub struct ParseError {
+    message: String,
+    position: Position,
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Parse error: {}:{}: {}",
+            self.position.line, self.position.column, self.message
+        )
+    }
+}
+
+struct Parser<'a> {
+    tokens: Vec<Token<'a>>,
+    index: usize,
+}
+
+impl<'a> Parser<'a> {
+    fn new(tokens: Vec<Token<'a>>) -> Self {
+        Self { tokens, index: 0 }
+    }
+
+    fn parse(&mut self) -> Result<Vec<Command<'a>>, ParseError> {
+        let mut commands = Vec::new();
+
+        if self.peek_token().token_type == TokenType::Newline {
+            self.expect_token(TokenType::Newline)?;
+        }
+
+        while self.peek_token().token_type != TokenType::EndOfFile {
+            commands.push(self.parse_command()?);
+            self.expect_token(TokenType::Newline)?;
+            if self.peek_token().token_type == TokenType::EndOfFile {
+                break;
+            }
+        }
+
+        Ok(commands)
+    }
+
+    fn expect_token(&mut self, expected: TokenType) -> Result<Position, ParseError> {
+        let token = &self.tokens[self.index];
+        self.index += 1;
+
+        if token.token_type == expected {
+            Ok(token.position)
+        } else {
+            Err(ParseError {
+                message: format!("Expected token {}, got {}", expected, token.token_type),
+                position: token.position,
+            })
+        }
+    }
+
+    fn expect_token_match(
+        &mut self,
+        does_match: impl FnOnce(&TokenType<'a>) -> bool,
+    ) -> Result<(Position, &'a str), ParseError> {
+        let token = &self.tokens[self.index];
+        self.index += 1;
+
+        match &token.token_type {
+            TokenType::IntVal(value)
+            | TokenType::FloatVal(value)
+            | TokenType::Variable(value)
+            | TokenType::String(value)
+            | TokenType::Op(value) => {
+                if does_match(&token.token_type) {
+                    return Ok((token.position, value));
+                }
+            }
+            _ => {}
+        }
+
+        Err(ParseError {
+            message: format!("Expected value token, got {}", token.token_type),
+            position: token.position,
+        })
+    }
+
+    fn peek_token(&self) -> &Token<'a> {
+        self.tokens.get(self.index).unwrap()
+    }
+
+    fn peek_next_token(&self) -> &Token<'a> {
+        self.tokens.get(self.index + 1).unwrap()
+    }
+
+    // ----------------------------------------------------------------------------------- Command Parsers ----------------------------------------------------------------------------------------------
+
+    fn parse_command(&mut self) -> Result<Command<'a>, ParseError> {
+        match self.peek_token().token_type {
+            TokenType::Read => self.parse_read_command(),
+            TokenType::Write => self.parse_write_command(),
+            TokenType::Let => self.parse_let_command(),
+            TokenType::Assert => self.parse_assert_command(),
+            TokenType::Print => self.parse_print_command(),
+            TokenType::Show => self.parse_show_command(),
+            TokenType::Time => self.parse_time_command(),
+            TokenType::Fn => self.parse_fn_command(),
+            TokenType::Struct => self.parse_struct_command(),
+            _ => Err(ParseError {
+                message: format!("Expected command, got {}", self.peek_token()),
+                position: self.peek_token().position,
+            }),
+        }
+    }
+
+    fn parse_read_command(&mut self) -> Result<Command<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Read)?;
+        self.expect_token(TokenType::Image)?;
+        let (_, source) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
+        self.expect_token(TokenType::To)?;
+        let destination = self.parse_lvalue()?;
+
+        Ok(Command {
+            position,
+            node: CommandType::Read {
+                source,
+                destination: Box::new(destination),
+            },
+        })
+    }
+
+    fn parse_write_command(&mut self) -> Result<Command<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Write)?;
+        self.expect_token(TokenType::Image)?;
+        let source = self.parse_precedence1_expr()?;
+        self.expect_token(TokenType::To)?;
+        let (_, destination) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
+
+        Ok(Command {
+            position,
+            node: CommandType::Write {
+                source: Box::new(source),
+                destination,
+            },
+        })
+    }
+
+    fn parse_let_command(&mut self) -> Result<Command<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Let)?;
+        let variable = self.parse_lvalue()?;
+        self.expect_token(TokenType::Equals)?;
+        let expression = self.parse_precedence1_expr()?;
+
+        Ok(Command {
+            position,
+            node: CommandType::Let {
+                variable: Box::new(variable),
+                rvalue: Box::new(expression),
+            },
+        })
+    }
+
+    fn parse_assert_command(&mut self) -> Result<Command<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Assert)?;
+        let expression = self.parse_precedence1_expr()?;
+        self.expect_token(TokenType::Comma)?;
+        let (_, message) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
+        Ok(Command {
+            position,
+            node: CommandType::Assert {
+                condition: Box::new(expression),
+                message,
+            },
+        })
+    }
+
+    fn parse_print_command(&mut self) -> Result<Command<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Print)?;
+        let (_, message) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
+        Ok(Command {
+            position,
+            node: CommandType::Print { message },
+        })
+    }
+
+    fn parse_show_command(&mut self) -> Result<Command<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Show)?;
+        let expression = self.parse_precedence1_expr()?;
+        Ok(Command {
+            position,
+            node: CommandType::Show {
+                expression: Box::new(expression),
+            },
+        })
+    }
+
+    fn parse_time_command(&mut self) -> Result<Command<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Time)?;
+        let command = self.parse_command()?;
+        Ok(Command {
+            position,
+            node: CommandType::Time {
+                command: Box::new(command),
+            },
+        })
+    }
+
+    fn parse_struct_command(&mut self) -> Result<Command<'a>, ParseError> {
+        let start_position = self.expect_token(TokenType::Struct)?;
+        let (_, struct_name) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+        self.expect_token(TokenType::LCurly)?;
+        self.expect_token(TokenType::Newline)?;
+
+        let mut elements = Vec::new();
+        while self.peek_token().token_type != TokenType::RCurly {
+            let (_, field_name) =
+                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+            self.expect_token(TokenType::Colon)?;
+            let field_type = self.parse_type()?;
+            self.expect_token(TokenType::Newline)?;
+            elements.push((field_name, field_type));
+        }
+        self.expect_token(TokenType::RCurly)?;
+        Ok(Command {
+            position: start_position,
+            node: CommandType::Struct {
+                name: struct_name,
+                elements,
+            },
+        })
+    }
+
+    fn parse_fn_command(&mut self) -> Result<Command<'a>, ParseError> {
+        let start_position = self.expect_token(TokenType::Fn)?;
+        let (_, function_name) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+        self.expect_token(TokenType::LParen)?;
+
+        let mut parameters = Vec::new();
+        if self.peek_token().token_type != TokenType::RParen {
+            let param_lvalue = self.parse_lvalue()?;
+            self.expect_token(TokenType::Colon)?;
+            let param_type = self.parse_type()?; // Still todo
+            parameters.push((param_lvalue, param_type));
+            while self.peek_token().token_type != TokenType::RParen {
+                self.expect_token(TokenType::Comma)?;
+                let param_lvalue = self.parse_lvalue()?;
+                self.expect_token(TokenType::Colon)?;
+                let param_type = self.parse_type()?;
+                parameters.push((param_lvalue, param_type));
+            }
+        }
+        self.expect_token(TokenType::RParen)?;
+        self.expect_token(TokenType::Colon)?;
+        let return_type = self.parse_type()?; // Still todo
+        self.expect_token(TokenType::LCurly)?;
+        self.expect_token(TokenType::Newline)?;
+
+        let mut statements = Vec::new();
+        while self.peek_token().token_type != TokenType::RCurly {
+            statements.push(self.parse_statement()?);
+            self.expect_token(TokenType::Newline)?;
+        }
+        self.expect_token(TokenType::RCurly)?;
+        Ok(Command {
+            position: start_position,
+            node: CommandType::Function {
+                name: function_name,
+                parameters,
+                return_type: Box::new(return_type),
+                statements,
+                has_return: false,
+                local_env: Rc::new(RefCell::new(TypeEnvironment::new(None))),
+            },
+        })
+    }
+
+    // ----------------------------------------------------------------------------------- Expression Parsers ----------------------------------------------------------------------------------------------
+
+    fn parse_int_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let (position, value_str) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::IntVal(_)))?;
+        let value = value_str.parse::<i64>().map_err(|_| ParseError {
+            message: format!("Integer constant {} is too large", value_str),
+            position,
+        })?;
+        Ok(Expression {
+            position,
+            node: ExpressionType::Int { value },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_float_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let (position, value_str) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::FloatVal(_)))?;
+        let value = value_str.parse::<f64>().map_err(|_| ParseError {
+            message: format!("Float constant {} is not valid", value_str),
+            position,
+        })?;
+        if value.is_infinite() {
+            return Err(ParseError {
+                message: format!("Float constant {} is too large", value_str),
+                position,
+            });
+        }
+        Ok(Expression {
+            position,
+            node: ExpressionType::Float { value },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_true_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(TokenType::True)?;
+        Ok(Expression {
+            position,
+            node: ExpressionType::True,
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_false_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(TokenType::False)?;
+        Ok(Expression {
+            position,
+            node: ExpressionType::False,
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_variable_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let (position, name) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+        Ok(Expression {
+            position,
+            node: ExpressionType::Variable { name },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_array_literal_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(TokenType::LSquare)?;
+        // Empty array literal.
+        if self.peek_token().token_type == TokenType::RSquare {
+            self.expect_token(TokenType::RSquare)?;
+            return Ok(Expression {
+                position,
+                node: ExpressionType::ArrayLiteral {
+                    elements: Vec::new(),
+                },
+                resolved_type: RefCell::new(None),
+            });
+        }
+        let mut elements = Vec::new();
+        // First element.
+        elements.push(self.parse_precedence1_expr()?);
+        while self.peek_token().token_type != TokenType::RSquare {
+            self.expect_token(TokenType::Comma)?;
+            elements.push(self.parse_precedence1_expr()?);
+        }
+        self.expect_token(TokenType::RSquare)?;
+        Ok(Expression {
+            position,
+            node: ExpressionType::ArrayLiteral { elements },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_call_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let (start_position, func_name) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+
+        self.expect_token(TokenType::LParen)?;
+        let mut arguments = Vec::new();
+        if self.peek_token().token_type != TokenType::RParen {
+            arguments.push(self.parse_precedence1_expr()?);
+            while self.peek_token().token_type != TokenType::RParen {
+                self.expect_token(TokenType::Comma)?;
+                arguments.push(self.parse_precedence1_expr()?);
+            }
+        }
+        self.expect_token(TokenType::RParen)?;
+        Ok(Expression {
+            position: start_position,
+            node: ExpressionType::Call {
+                function: func_name,
+                arguments,
+            },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_struct_literal_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let (start_position, struct_name) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+
+        self.expect_token(TokenType::LCurly)?;
+        let mut fields = Vec::new();
+        if self.peek_token().token_type != TokenType::RCurly {
+            fields.push(self.parse_precedence1_expr()?);
+            while self.peek_token().token_type != TokenType::RCurly {
+                self.expect_token(TokenType::Comma)?;
+                fields.push(self.parse_precedence1_expr()?);
+            }
+        }
+        self.expect_token(TokenType::RCurly)?;
+        Ok(Expression {
+            position: start_position,
+            node: ExpressionType::StructLiteral {
+                name: struct_name,
+                fields,
+            },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_dot_expr(&mut self, left: Expression<'a>) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Dot)?;
+        let (_, field) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+
+        Ok(Expression {
+            position,
+            node: ExpressionType::Dot {
+                struct_variable: Box::new(left),
+                field,
+            },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_array_index_expr(
+        &mut self,
+        array: Expression<'a>,
+    ) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(TokenType::LSquare)?;
+        let mut indices = Vec::new();
+        if self.peek_token().token_type == TokenType::RSquare {
+            self.expect_token(TokenType::RSquare)?;
+            return Ok(Expression {
+                position,
+                node: ExpressionType::ArrayIndex {
+                    array: Box::new(array),
+                    indices,
+                },
+                resolved_type: RefCell::new(None),
+            });
+        }
+        indices.push(self.parse_precedence1_expr()?);
+        while self.peek_token().token_type != TokenType::RSquare {
+            self.expect_token(TokenType::Comma)?;
+            indices.push(self.parse_precedence1_expr()?);
+        }
+        self.expect_token(TokenType::RSquare)?;
+        Ok(Expression {
+            position,
+            node: ExpressionType::ArrayIndex {
+                array: Box::new(array),
+                indices,
+            },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_precedent_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        self.expect_token(TokenType::LParen)?;
+        let expr = self.parse_precedence1_expr()?;
+        self.expect_token(TokenType::RParen)?;
+        Ok(expr)
+    }
+
+    fn parse_void_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Void)?;
+        Ok(Expression {
+            position,
+            node: ExpressionType::Void,
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_if_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(TokenType::If)?;
+        let condition = Box::new(self.parse_precedence1_expr()?);
+        self.expect_token(TokenType::Then)?;
+        let then_branch = Box::new(self.parse_precedence1_expr()?);
+        self.expect_token(TokenType::Else)?;
+        let else_branch = Box::new(self.parse_precedence1_expr()?);
+        Ok(Expression {
+            position,
+            node: ExpressionType::If {
+                condition,
+                then_branch,
+                else_branch,
+            },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_array_loop_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Array)?;
+        self.expect_token(TokenType::LSquare)?;
+        let mut iterations = Vec::new();
+        if self.peek_token().token_type != TokenType::RSquare {
+            let (_, variable) =
+                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+
+            self.expect_token(TokenType::Colon)?;
+            let expr = self.parse_precedence1_expr()?;
+            iterations.push((variable, expr));
+        }
+        while self.peek_token().token_type != TokenType::RSquare {
+            self.expect_token(TokenType::Comma)?;
+            let (_, variable) =
+                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+            self.expect_token(TokenType::Colon)?;
+            let expr = self.parse_precedence1_expr()?;
+            iterations.push((variable, expr));
+        }
+        self.expect_token(TokenType::RSquare)?;
+        let element_expr = Box::new(self.parse_precedence1_expr()?);
+        Ok(Expression {
+            position,
+            node: ExpressionType::ArrayLoop {
+                range: iterations,
+                body: element_expr,
+            },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_sum_loop_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Sum)?;
+        self.expect_token(TokenType::LSquare)?;
+        let mut iterations = Vec::new();
+        if self.peek_token().token_type != TokenType::RSquare {
+            let (_, variable) =
+                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+            self.expect_token(TokenType::Colon)?;
+            let expr = self.parse_precedence1_expr()?;
+            iterations.push((variable, expr));
+        }
+        while self.peek_token().token_type != TokenType::RSquare {
+            self.expect_token(TokenType::Comma)?;
+            let (_, variable) =
+                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+            self.expect_token(TokenType::Colon)?;
+            let expr = self.parse_precedence1_expr()?;
+            iterations.push((variable, expr));
+        }
+        self.expect_token(TokenType::RSquare)?;
+        let element_expr = Box::new(self.parse_precedence1_expr()?);
+        Ok(Expression {
+            position,
+            node: ExpressionType::SumLoop {
+                range: iterations,
+                body: element_expr,
+            },
+            resolved_type: RefCell::new(None),
+        })
+    }
+
+    fn parse_precedence7_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        match self.peek_token().token_type {
+            TokenType::IntVal(_) => self.parse_int_expr(),
+            TokenType::FloatVal(_) => self.parse_float_expr(),
+            TokenType::True => self.parse_true_expr(),
+            TokenType::False => self.parse_false_expr(),
+            TokenType::Variable(_) => {
+                // Peek ahead to decide between struct literal, call, or plain variable.
+                match self.peek_next_token().token_type {
+                    TokenType::LCurly => self.parse_struct_literal_expr(),
+                    TokenType::LParen => self.parse_call_expr(),
+                    _ => self.parse_variable_expr(),
+                }
+            }
+            TokenType::LSquare => self.parse_array_literal_expr(),
+            TokenType::LParen => self.parse_precedent_expr(),
+            TokenType::Void => self.parse_void_expr(),
+            _ => Err(ParseError {
+                message: format!("{} is not a valid expression", self.peek_token().token_type),
+                position: self.peek_token().position,
+            }),
+        }
+    }
+
+    fn parse_precedence6_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let mut expr = self.parse_precedence7_expr()?;
+        loop {
+            match self.peek_token().token_type {
+                TokenType::Dot => {
+                    expr = self.parse_dot_expr(expr)?;
+                }
+                TokenType::LSquare => {
+                    expr = self.parse_array_index_expr(expr)?;
+                }
+                _ => break,
+            }
+        }
+        Ok(expr)
+    }
+
+    fn parse_precedence5_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let token = self.peek_token();
+        let position = token.position;
+
+        match token.token_type {
+            TokenType::Op(operator) => {
+                if operator == "-" || operator == "!" {
+                    self.index += 1;
+                    let right = self.parse_precedence5_expr()?;
+                    return Ok(Expression {
+                        position,
+                        node: ExpressionType::Unop {
+                            operator: Unop::from_str(operator),
+                            expression: Box::new(right),
+                        },
+                        resolved_type: RefCell::new(None),
+                    });
+                }
+            }
+            TokenType::Array => {
+                return self.parse_array_loop_expr();
+            }
+            TokenType::Sum => {
+                return self.parse_sum_loop_expr();
+            }
+            TokenType::If => {
+                return self.parse_if_expr();
+            }
+            _ => {
+                // Do nothing
+            }
+        }
+
+        self.parse_precedence6_expr()
+    }
+
+    fn parse_precedence4_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let mut left = self.parse_precedence5_expr()?;
+
+        while let TokenType::Op(operator) = self.peek_token().token_type {
+            if operator == "*" || operator == "/" || operator == "%" {
+                self.index += 1;
+                let right = self.parse_precedence5_expr()?;
+                left = Expression {
+                    position: left.position,
+                    node: ExpressionType::Binop {
+                        operator: Binop::from_str(operator),
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    resolved_type: RefCell::new(None),
+                };
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_precedence3_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let mut left = self.parse_precedence4_expr()?;
+
+        while let TokenType::Op(operator) = self.peek_token().token_type {
+            if operator == "+" || operator == "-" {
+                self.index += 1;
+                let right = self.parse_precedence4_expr()?;
+                left = Expression {
+                    position: left.position,
+                    node: ExpressionType::Binop {
+                        operator: Binop::from_str(operator),
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    resolved_type: RefCell::new(None),
+                };
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_precedence2_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let mut left = self.parse_precedence3_expr()?;
+
+        while let TokenType::Op(operator) = self.peek_token().token_type {
+            if operator == "<"
+                || operator == "<="
+                || operator == ">"
+                || operator == ">="
+                || operator == "=="
+                || operator == "!="
+            {
+                self.index += 1;
+                let right = self.parse_precedence3_expr()?;
+                left = Expression {
+                    position: left.position,
+                    node: ExpressionType::Binop {
+                        operator: Binop::from_str(operator),
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    resolved_type: RefCell::new(None),
+                };
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_precedence1_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        let mut left = self.parse_precedence2_expr()?;
+
+        while let TokenType::Op(operator) = self.peek_token().token_type {
+            if operator == "&&" || operator == "||" {
+                self.index += 1;
+                let right = self.parse_precedence2_expr()?;
+                left = Expression {
+                    position: left.position,
+                    node: ExpressionType::Binop {
+                        operator: Binop::from_str(operator),
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    resolved_type: RefCell::new(None),
+                };
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
+    // ----------------------------------------------------------------------------------- Statement Parsers ----------------------------------------------------------------------------------------------
+
+    fn parse_statement(&mut self) -> Result<Statement<'a>, ParseError> {
+        match self.peek_token().token_type {
+            TokenType::Let => self.parse_let_statement(),
+            TokenType::Assert => self.parse_assert_statement(),
+            TokenType::Return => self.parse_return_statement(),
+            _ => Err(ParseError {
+                message: format!("Expected statement, got {}", self.peek_token().token_type),
+                position: self.peek_token().position,
+            }),
+        }
+    }
+
+    fn parse_let_statement(&mut self) -> Result<Statement<'a>, ParseError> {
+        self.expect_token(TokenType::Let)?;
+        let variable = self.parse_lvalue()?;
+        self.expect_token(TokenType::Equals)?;
+        let expression = self.parse_precedence1_expr()?;
+        Ok(Statement {
+            node: StatementType::Let {
+                variable: Box::new(variable),
+                rvalue: Box::new(expression),
+            },
+        })
+    }
+
+    fn parse_assert_statement(&mut self) -> Result<Statement<'a>, ParseError> {
+        self.expect_token(TokenType::Assert)?;
+        let expression = self.parse_precedence1_expr()?;
+        self.expect_token(TokenType::Comma)?;
+        let (_, message) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
+        Ok(Statement {
+            node: StatementType::Assert {
+                condition: Box::new(expression),
+                message,
+            },
+        })
+    }
+
+    fn parse_return_statement(&mut self) -> Result<Statement<'a>, ParseError> {
+        self.expect_token(TokenType::Return)?;
+        let return_value = self.parse_precedence1_expr()?;
+        Ok(Statement {
+            node: StatementType::Return {
+                value: Box::new(return_value),
+            },
+        })
+    }
+
+    // ----------------------------------------------------------------------------------- LValue Parsers ----------------------------------------------------------------------------------------------
+
+    fn parse_lvalue(&mut self) -> Result<LValue<'a>, ParseError> {
+        if self.peek_next_token().token_type == TokenType::LSquare {
+            // Array LValue branch
+            let (position, name) =
+                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+            self.expect_token(TokenType::LSquare)?;
+
+            // Empty array.
+            if self.peek_token().token_type == TokenType::RSquare {
+                self.expect_token(TokenType::RSquare)?;
+                return Ok(LValue {
+                    position,
+                    name,
+                    node: LValueType::Array {
+                        indices: Vec::new(),
+                    },
+                });
+            }
+
+            let mut indices = Vec::new();
+            // First element.
+            let (_, elem_name) =
+                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+
+            indices.push(elem_name);
+
+            // Parse remaining elements.
+            while self.peek_token().token_type != TokenType::RSquare {
+                self.expect_token(TokenType::Comma)?;
+                // let elem_token = self.expect_token(TokenType::Variable)?;
+                let (_, elem_name) = self.expect_token_match(|token_type| {
+                    matches!(token_type, TokenType::Variable(_))
+                })?;
+                indices.push(elem_name);
+            }
+
+            self.expect_token(TokenType::RSquare)?;
+            Ok(LValue {
+                position,
+                name,
+                node: LValueType::Array { indices },
+            })
+        } else {
+            // Variable LValue
+            // let token = self.expect_token(TokenType::Variable)?;
+            let (position, name) =
+                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+            Ok(LValue {
+                position,
+                name,
+                node: LValueType::Variable,
+            })
+        }
+    }
+
+    // ----------------------------------------------------------------------------------- Type Parsers ----------------------------------------------------------------------------------------------
+
+    fn parse_type(&mut self) -> Result<Type<'a>, ParseError> {
+        let mut typ = self.parse_type_terminal()?;
+        while self.peek_token().token_type == TokenType::LSquare {
+            typ = self.parse_array_type(typ)?;
+        }
+        Ok(typ)
+    }
+
+    fn parse_type_terminal(&mut self) -> Result<Type<'a>, ParseError> {
+        match self.peek_token().token_type {
+            TokenType::Int => self.parse_int_type(),
+            TokenType::Float => self.parse_float_type(),
+            TokenType::Bool => self.parse_bool_type(),
+            TokenType::Void => self.parse_void_type(),
+            TokenType::Variable(_) => self.parse_struct_type(),
+            _ => Err(ParseError {
+                message: format!("{} is not a valid type", self.peek_token().token_type),
+                position: self.peek_token().position,
+            }),
+        }
+    }
+
+    fn parse_int_type(&mut self) -> Result<Type<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Int)?;
+        Ok(Type {
+            position,
+            node: TypeType::Int,
+        })
+    }
+
+    fn parse_float_type(&mut self) -> Result<Type<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Float)?;
+        Ok(Type {
+            position,
+            node: TypeType::Float,
+        })
+    }
+
+    fn parse_bool_type(&mut self) -> Result<Type<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Bool)?;
+        Ok(Type {
+            position,
+            node: TypeType::Bool,
+        })
+    }
+
+    fn parse_void_type(&mut self) -> Result<Type<'a>, ParseError> {
+        let position = self.expect_token(TokenType::Void)?;
+        Ok(Type {
+            position,
+            node: TypeType::Void,
+        })
+    }
+
+    fn parse_struct_type(&mut self) -> Result<Type<'a>, ParseError> {
+        let (position, name) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+        Ok(Type {
+            position,
+            node: TypeType::Struct {
+                name,
+                elements: Vec::new(),
+            },
+        })
+    }
+
+    fn parse_array_type(&mut self, base: Type<'a>) -> Result<Type<'a>, ParseError> {
+        let position = self.expect_token(TokenType::LSquare)?;
+        let mut rank = 1;
+        while self.peek_token().token_type == TokenType::Comma {
+            self.expect_token(TokenType::Comma)?;
+            rank += 1;
+        }
+        self.expect_token(TokenType::RSquare)?;
+        Ok(Type {
+            position,
+            node: TypeType::Array {
+                element_type: Box::new(base),
+                rank,
+            },
+        })
+    }
+}
+
+pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Command<'_>>, ParseError> {
+    let mut parser = Parser::new(tokens);
+    parser.parse()
+}
+
