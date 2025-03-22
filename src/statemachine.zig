@@ -14,7 +14,6 @@ const double_ops = defs.double_ops;
 const illegal_table = defs.illegal_table;
 const illegal_string = defs.illegal_string;
 const tipe = defs.tipe;
-const finish_state = defs.finish_state;
 const state_type = defs.state_type;
 
 const StateMachine = struct {
@@ -32,8 +31,7 @@ const StateMachine = struct {
         sm.t[accept_state] = .accept;
         sm.t[start_state] = .start;
         sm.t[ignore_state] = .ignore;
-        sm.t[finish_state] = .ignore;
-        sm.tabs_alloc = finish_state + 1; // Start after the predefined states
+        sm.tabs_alloc = ignore_state + 1; // Start after the predefined states
 
         // Set up basic transitions
         setStateLoopAll(&sm, error_state); // Error state loops back to itself

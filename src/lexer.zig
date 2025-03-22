@@ -7,7 +7,6 @@ const start_state = defs.start_state;
 const error_state = defs.error_state;
 const accept_state = defs.accept_state;
 const ignore_state = defs.ignore_state;
-const finish_state = defs.finish_state;
 const value = defs.value;
 const tipe = defs.tipe;
 const state_type = defs.state_type;

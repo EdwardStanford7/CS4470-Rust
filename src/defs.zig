@@ -87,7 +87,6 @@ pub const error_state: state_type = 0;
 pub const start_state: state_type = 1;
 pub const accept_state: state_type = 2;
 pub const ignore_state: state_type = 3; // The ignore state
-pub const finish_state: state_type = 4;
 
 pub const double_ops = [_][2]u8{
     .{ '|', '|' },
