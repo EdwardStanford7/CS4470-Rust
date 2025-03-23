@@ -1,25 +1,6 @@
 use crate::ast::*;
-use crate::lexer::*;
-use crate::typechecker::TypeEnvironment;
-use core::fmt;
-use std::cell::RefCell;
-use std::fmt::Display;
-use std::rc::Rc;
-
-pub struct ParseError {
-    message: String,
-    position: Position,
-}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Parse error: {}:{}: {}",
-            self.position.line, self.position.column, self.message
-        )
-    }
-}
+use crate::utils::*;
+use std::cell::Cell;
 
 struct Parser<'a> {
     tokens: Vec<Token<'a>>,
@@ -56,10 +37,10 @@ impl<'a> Parser<'a> {
         if token.token_type == expected {
             Ok(token.position)
         } else {
-            Err(ParseError {
-                message: format!("Expected token {}, got {}", expected, token.token_type),
-                position: token.position,
-            })
+            Err(ParseError::new(
+                format!("Expected token {}, got {}", expected, token.token_type),
+                token.position,
+            ))
         }
     }
 
@@ -83,10 +64,10 @@ impl<'a> Parser<'a> {
             _ => {}
         }
 
-        Err(ParseError {
-            message: format!("Expected value token, got {}", token.token_type),
-            position: token.position,
-        })
+        Err(ParseError::new(
+            format!("Expected value token, got {}", token.token_type),
+            token.position,
+        ))
     }
 
     fn peek_token(&self) -> &Token<'a> {
@@ -98,344 +79,192 @@ impl<'a> Parser<'a> {
     }
 
     // ----------------------------------------------------------------------------------- Command Parsers ----------------------------------------------------------------------------------------------
-
     fn parse_command(&mut self) -> Result<Command<'a>, ParseError> {
         match self.peek_token().token_type {
-            TokenType::Read => self.parse_read_command(),
-            TokenType::Write => self.parse_write_command(),
-            TokenType::Let => self.parse_let_command(),
-            TokenType::Assert => self.parse_assert_command(),
-            TokenType::Print => self.parse_print_command(),
-            TokenType::Show => self.parse_show_command(),
-            TokenType::Time => self.parse_time_command(),
-            TokenType::Fn => self.parse_fn_command(),
-            TokenType::Struct => self.parse_struct_command(),
-            _ => Err(ParseError {
-                message: format!("Expected command, got {}", self.peek_token()),
-                position: self.peek_token().position,
-            }),
-        }
-    }
+            TokenType::Read => {
+                let position = self.expect_token(TokenType::Read)?;
+                self.expect_token(TokenType::Image)?;
+                let (_, source) = self
+                    .expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
+                self.expect_token(TokenType::To)?;
+                let destination = self.parse_lvalue()?;
 
-    fn parse_read_command(&mut self) -> Result<Command<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Read)?;
-        self.expect_token(TokenType::Image)?;
-        let (_, source) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
-        self.expect_token(TokenType::To)?;
-        let destination = self.parse_lvalue()?;
-
-        Ok(Command {
-            position,
-            node: CommandType::Read {
-                source,
-                destination: Box::new(destination),
-            },
-        })
-    }
-
-    fn parse_write_command(&mut self) -> Result<Command<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Write)?;
-        self.expect_token(TokenType::Image)?;
-        let source = self.parse_precedence1_expr()?;
-        self.expect_token(TokenType::To)?;
-        let (_, destination) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
-
-        Ok(Command {
-            position,
-            node: CommandType::Write {
-                source: Box::new(source),
-                destination,
-            },
-        })
-    }
-
-    fn parse_let_command(&mut self) -> Result<Command<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Let)?;
-        let variable = self.parse_lvalue()?;
-        self.expect_token(TokenType::Equals)?;
-        let expression = self.parse_precedence1_expr()?;
-
-        Ok(Command {
-            position,
-            node: CommandType::Let {
-                variable: Box::new(variable),
-                rvalue: Box::new(expression),
-            },
-        })
-    }
-
-    fn parse_assert_command(&mut self) -> Result<Command<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Assert)?;
-        let expression = self.parse_precedence1_expr()?;
-        self.expect_token(TokenType::Comma)?;
-        let (_, message) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
-        Ok(Command {
-            position,
-            node: CommandType::Assert {
-                condition: Box::new(expression),
-                message,
-            },
-        })
-    }
-
-    fn parse_print_command(&mut self) -> Result<Command<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Print)?;
-        let (_, message) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
-        Ok(Command {
-            position,
-            node: CommandType::Print { message },
-        })
-    }
-
-    fn parse_show_command(&mut self) -> Result<Command<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Show)?;
-        let expression = self.parse_precedence1_expr()?;
-        Ok(Command {
-            position,
-            node: CommandType::Show {
-                expression: Box::new(expression),
-            },
-        })
-    }
-
-    fn parse_time_command(&mut self) -> Result<Command<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Time)?;
-        let command = self.parse_command()?;
-        Ok(Command {
-            position,
-            node: CommandType::Time {
-                command: Box::new(command),
-            },
-        })
-    }
-
-    fn parse_struct_command(&mut self) -> Result<Command<'a>, ParseError> {
-        let start_position = self.expect_token(TokenType::Struct)?;
-        let (_, struct_name) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-        self.expect_token(TokenType::LCurly)?;
-        self.expect_token(TokenType::Newline)?;
-
-        let mut elements = Vec::new();
-        while self.peek_token().token_type != TokenType::RCurly {
-            let (_, field_name) =
-                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-            self.expect_token(TokenType::Colon)?;
-            let field_type = self.parse_type()?;
-            self.expect_token(TokenType::Newline)?;
-            elements.push((field_name, field_type));
-        }
-        self.expect_token(TokenType::RCurly)?;
-        Ok(Command {
-            position: start_position,
-            node: CommandType::Struct {
-                name: struct_name,
-                elements,
-            },
-        })
-    }
-
-    fn parse_fn_command(&mut self) -> Result<Command<'a>, ParseError> {
-        let start_position = self.expect_token(TokenType::Fn)?;
-        let (_, function_name) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-        self.expect_token(TokenType::LParen)?;
-
-        let mut parameters = Vec::new();
-        if self.peek_token().token_type != TokenType::RParen {
-            let param_lvalue = self.parse_lvalue()?;
-            self.expect_token(TokenType::Colon)?;
-            let param_type = self.parse_type()?; // Still todo
-            parameters.push((param_lvalue, param_type));
-            while self.peek_token().token_type != TokenType::RParen {
-                self.expect_token(TokenType::Comma)?;
-                let param_lvalue = self.parse_lvalue()?;
-                self.expect_token(TokenType::Colon)?;
-                let param_type = self.parse_type()?;
-                parameters.push((param_lvalue, param_type));
+                Ok(Command {
+                    position,
+                    node: Box::new(CommandType::Read {
+                        source,
+                        destination,
+                    }),
+                })
             }
-        }
-        self.expect_token(TokenType::RParen)?;
-        self.expect_token(TokenType::Colon)?;
-        let return_type = self.parse_type()?; // Still todo
-        self.expect_token(TokenType::LCurly)?;
-        self.expect_token(TokenType::Newline)?;
+            TokenType::Write => {
+                let position = self.expect_token(TokenType::Write)?;
+                self.expect_token(TokenType::Image)?;
+                let source = self.parse_precedence1_expr()?;
+                self.expect_token(TokenType::To)?;
+                let (_, destination) = self
+                    .expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
 
-        let mut statements = Vec::new();
-        while self.peek_token().token_type != TokenType::RCurly {
-            statements.push(self.parse_statement()?);
-            self.expect_token(TokenType::Newline)?;
+                Ok(Command {
+                    position,
+                    node: Box::new(CommandType::Write {
+                        source,
+                        destination,
+                    }),
+                })
+            }
+            TokenType::Let => {
+                let position = self.expect_token(TokenType::Let)?;
+                let variable = self.parse_lvalue()?;
+                self.expect_token(TokenType::Equals)?;
+                let rvalue = self.parse_precedence1_expr()?;
+
+                Ok(Command {
+                    position,
+                    node: Box::new(CommandType::Let { variable, rvalue }),
+                })
+            }
+            TokenType::Assert => {
+                let position = self.expect_token(TokenType::Assert)?;
+                let condition = self.parse_precedence1_expr()?;
+                self.expect_token(TokenType::Comma)?;
+                let (_, message) = self
+                    .expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
+                Ok(Command {
+                    position,
+                    node: Box::new(CommandType::Assert { condition, message }),
+                })
+            }
+            TokenType::Print => {
+                let position = self.expect_token(TokenType::Print)?;
+                let (_, message) = self
+                    .expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
+                Ok(Command {
+                    position,
+                    node: Box::new(CommandType::Print { message }),
+                })
+            }
+            TokenType::Show => {
+                let position = self.expect_token(TokenType::Show)?;
+                let expression = self.parse_precedence1_expr()?;
+                Ok(Command {
+                    position,
+                    node: Box::new(CommandType::Show { expression }),
+                })
+            }
+            TokenType::Time => {
+                let position = self.expect_token(TokenType::Time)?;
+                let command = self.parse_command()?;
+                Ok(Command {
+                    position,
+                    node: Box::new(CommandType::Time { command }),
+                })
+            }
+            TokenType::Struct => {
+                let start_position = self.expect_token(TokenType::Struct)?;
+                let (_, name) = self.expect_token_match(|token_type| {
+                    matches!(token_type, TokenType::Variable(_))
+                })?;
+                self.expect_token(TokenType::LCurly)?;
+                self.expect_token(TokenType::Newline)?;
+
+                let mut elements = Vec::new();
+                while self.peek_token().token_type != TokenType::RCurly {
+                    let (_, field_name) = self.expect_token_match(|token_type| {
+                        matches!(token_type, TokenType::Variable(_))
+                    })?;
+                    self.expect_token(TokenType::Colon)?;
+                    let field_type = self.parse_type()?;
+                    self.expect_token(TokenType::Newline)?;
+                    elements.push((field_name, field_type));
+                }
+                self.expect_token(TokenType::RCurly)?;
+                Ok(Command {
+                    position: start_position,
+                    node: Box::new(CommandType::Struct { name, elements }),
+                })
+            }
+            TokenType::Fn => {
+                let start_position = self.expect_token(TokenType::Fn)?;
+                let (_, name) = self.expect_token_match(|token_type| {
+                    matches!(token_type, TokenType::Variable(_))
+                })?;
+                self.expect_token(TokenType::LParen)?;
+
+                let mut parameters = Vec::new();
+                if self.peek_token().token_type != TokenType::RParen {
+                    let param_lvalue = self.parse_lvalue()?;
+                    self.expect_token(TokenType::Colon)?;
+                    let param_type = self.parse_type()?;
+                    parameters.push((param_lvalue, param_type));
+                    while self.peek_token().token_type != TokenType::RParen {
+                        self.expect_token(TokenType::Comma)?;
+                        let param_lvalue = self.parse_lvalue()?;
+                        self.expect_token(TokenType::Colon)?;
+                        let param_type = self.parse_type()?;
+                        parameters.push((param_lvalue, param_type));
+                    }
+                }
+                self.expect_token(TokenType::RParen)?;
+                self.expect_token(TokenType::Colon)?;
+                let return_type = self.parse_type()?;
+                self.expect_token(TokenType::LCurly)?;
+                self.expect_token(TokenType::Newline)?;
+
+                let mut statements = Vec::new();
+                while self.peek_token().token_type != TokenType::RCurly {
+                    statements.push(self.parse_statement()?);
+                    self.expect_token(TokenType::Newline)?;
+                }
+                self.expect_token(TokenType::RCurly)?;
+                Ok(Command {
+                    position: start_position,
+                    node: Box::new(CommandType::Function {
+                        name,
+                        parameters,
+                        return_type,
+                        statements,
+                        has_return: Cell::new(false),
+                    }),
+                })
+            }
+            _ => Err(ParseError::new(
+                format!("Expected command, got {}", self.peek_token()),
+                self.peek_token().position,
+            )),
         }
-        self.expect_token(TokenType::RCurly)?;
-        Ok(Command {
-            position: start_position,
-            node: CommandType::Function {
-                name: function_name,
-                parameters,
-                return_type: Box::new(return_type),
-                statements,
-                has_return: false,
-                local_env: Rc::new(RefCell::new(TypeEnvironment::new(None))),
-            },
-        })
     }
 
     // ----------------------------------------------------------------------------------- Expression Parsers ----------------------------------------------------------------------------------------------
-
-    fn parse_int_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let (position, value_str) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::IntVal(_)))?;
-        let value = value_str.parse::<i64>().map_err(|_| ParseError {
-            message: format!("Integer constant {} is too large", value_str),
-            position,
-        })?;
-        Ok(Expression {
-            position,
-            node: ExpressionType::Int { value },
-            resolved_type: RefCell::new(None),
-        })
-    }
-
-    fn parse_float_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let (position, value_str) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::FloatVal(_)))?;
-        let value = value_str.parse::<f64>().map_err(|_| ParseError {
-            message: format!("Float constant {} is not valid", value_str),
-            position,
-        })?;
-        if value.is_infinite() {
-            return Err(ParseError {
-                message: format!("Float constant {} is too large", value_str),
-                position,
-            });
-        }
-        Ok(Expression {
-            position,
-            node: ExpressionType::Float { value },
-            resolved_type: RefCell::new(None),
-        })
-    }
-
-    fn parse_true_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let position = self.expect_token(TokenType::True)?;
-        Ok(Expression {
-            position,
-            node: ExpressionType::True,
-            resolved_type: RefCell::new(None),
-        })
-    }
-
-    fn parse_false_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let position = self.expect_token(TokenType::False)?;
-        Ok(Expression {
-            position,
-            node: ExpressionType::False,
-            resolved_type: RefCell::new(None),
-        })
-    }
-
-    fn parse_variable_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let (position, name) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-        Ok(Expression {
-            position,
-            node: ExpressionType::Variable { name },
-            resolved_type: RefCell::new(None),
-        })
-    }
-
-    fn parse_array_literal_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let position = self.expect_token(TokenType::LSquare)?;
-        // Empty array literal.
-        if self.peek_token().token_type == TokenType::RSquare {
-            self.expect_token(TokenType::RSquare)?;
-            return Ok(Expression {
-                position,
-                node: ExpressionType::ArrayLiteral {
-                    elements: Vec::new(),
-                },
-                resolved_type: RefCell::new(None),
-            });
-        }
+    fn parse_comma_separated_exprs(
+        &mut self,
+        end_token: TokenType,
+    ) -> Result<Vec<Expression<'a>>, ParseError> {
         let mut elements = Vec::new();
         // First element.
         elements.push(self.parse_precedence1_expr()?);
-        while self.peek_token().token_type != TokenType::RSquare {
+        while self.peek_token().token_type != end_token {
             self.expect_token(TokenType::Comma)?;
             elements.push(self.parse_precedence1_expr()?);
         }
-        self.expect_token(TokenType::RSquare)?;
-        Ok(Expression {
-            position,
-            node: ExpressionType::ArrayLiteral { elements },
-            resolved_type: RefCell::new(None),
-        })
+        Ok(elements)
     }
 
-    fn parse_call_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let (start_position, func_name) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-
-        self.expect_token(TokenType::LParen)?;
-        let mut arguments = Vec::new();
-        if self.peek_token().token_type != TokenType::RParen {
-            arguments.push(self.parse_precedence1_expr()?);
-            while self.peek_token().token_type != TokenType::RParen {
-                self.expect_token(TokenType::Comma)?;
-                arguments.push(self.parse_precedence1_expr()?);
-            }
-        }
-        self.expect_token(TokenType::RParen)?;
-        Ok(Expression {
-            position: start_position,
-            node: ExpressionType::Call {
-                function: func_name,
-                arguments,
-            },
-            resolved_type: RefCell::new(None),
-        })
-    }
-
-    fn parse_struct_literal_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let (start_position, struct_name) =
-            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-
-        self.expect_token(TokenType::LCurly)?;
-        let mut fields = Vec::new();
-        if self.peek_token().token_type != TokenType::RCurly {
-            fields.push(self.parse_precedence1_expr()?);
-            while self.peek_token().token_type != TokenType::RCurly {
-                self.expect_token(TokenType::Comma)?;
-                fields.push(self.parse_precedence1_expr()?);
-            }
-        }
-        self.expect_token(TokenType::RCurly)?;
-        Ok(Expression {
-            position: start_position,
-            node: ExpressionType::StructLiteral {
-                name: struct_name,
-                fields,
-            },
-            resolved_type: RefCell::new(None),
-        })
-    }
-
-    fn parse_dot_expr(&mut self, left: Expression<'a>) -> Result<Expression<'a>, ParseError> {
+    fn parse_dot_expr(
+        &mut self,
+        struct_variable: Expression<'a>,
+    ) -> Result<Expression<'a>, ParseError> {
         let position = self.expect_token(TokenType::Dot)?;
         let (_, field) =
             self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
 
         Ok(Expression {
             position,
-            node: ExpressionType::Dot {
-                struct_variable: Box::new(left),
+            node: Box::new(ExpressionType::Dot {
+                struct_variable,
                 field,
-            },
-            resolved_type: RefCell::new(None),
+            }),
+            resolved_type: Type::Unresolved,
         })
     }
 
@@ -444,152 +273,246 @@ impl<'a> Parser<'a> {
         array: Expression<'a>,
     ) -> Result<Expression<'a>, ParseError> {
         let position = self.expect_token(TokenType::LSquare)?;
-        let mut indices = Vec::new();
-        if self.peek_token().token_type == TokenType::RSquare {
-            self.expect_token(TokenType::RSquare)?;
-            return Ok(Expression {
-                position,
-                node: ExpressionType::ArrayIndex {
-                    array: Box::new(array),
-                    indices,
-                },
-                resolved_type: RefCell::new(None),
-            });
-        }
-        indices.push(self.parse_precedence1_expr()?);
-        while self.peek_token().token_type != TokenType::RSquare {
-            self.expect_token(TokenType::Comma)?;
-            indices.push(self.parse_precedence1_expr()?);
-        }
+
+        let indices = if self.peek_token().token_type == TokenType::RSquare {
+            Vec::new()
+        } else {
+            self.parse_comma_separated_exprs(TokenType::RSquare)?
+        };
+
         self.expect_token(TokenType::RSquare)?;
+
         Ok(Expression {
             position,
-            node: ExpressionType::ArrayIndex {
-                array: Box::new(array),
-                indices,
-            },
-            resolved_type: RefCell::new(None),
+            node: Box::new(ExpressionType::ArrayIndex { array, indices }),
+            resolved_type: Type::Unresolved,
         })
     }
 
-    fn parse_precedent_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        self.expect_token(TokenType::LParen)?;
+    fn parse_range_variable(&mut self) -> Result<(&'a str, Expression<'a>), ParseError> {
+        let (_, variable) =
+            self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
+        self.expect_token(TokenType::Colon)?;
         let expr = self.parse_precedence1_expr()?;
-        self.expect_token(TokenType::RParen)?;
-        Ok(expr)
+        Ok((variable, expr))
     }
 
-    fn parse_void_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Void)?;
+    fn parse_loop_expr(&mut self, loop_type: TokenType) -> Result<Expression<'a>, ParseError> {
+        let position = self.expect_token(loop_type.clone())?;
+        self.expect_token(TokenType::LSquare)?;
+        let mut range = Vec::new();
+
+        // Parse variable ranges
+        if self.peek_token().token_type != TokenType::RSquare {
+            range.push(self.parse_range_variable()?);
+
+            while self.peek_token().token_type != TokenType::RSquare {
+                self.expect_token(TokenType::Comma)?;
+                range.push(self.parse_range_variable()?);
+            }
+        }
+
+        self.expect_token(TokenType::RSquare)?;
+        let body = self.parse_precedence1_expr()?;
+
+        // Create the appropriate expression type
+        let node = match loop_type {
+            TokenType::Array => Box::new(ExpressionType::ArrayLoop { range, body }),
+            TokenType::Sum => Box::new(ExpressionType::SumLoop { range, body }),
+            _ => unreachable!(), // This should never happen given the function's intended use
+        };
+
         Ok(Expression {
             position,
-            node: ExpressionType::Void,
-            resolved_type: RefCell::new(None),
+            node,
+            resolved_type: Type::Unresolved,
         })
     }
 
     fn parse_if_expr(&mut self) -> Result<Expression<'a>, ParseError> {
         let position = self.expect_token(TokenType::If)?;
-        let condition = Box::new(self.parse_precedence1_expr()?);
+        let condition = self.parse_precedence1_expr()?;
         self.expect_token(TokenType::Then)?;
-        let then_branch = Box::new(self.parse_precedence1_expr()?);
+        let then_branch = self.parse_precedence1_expr()?;
         self.expect_token(TokenType::Else)?;
-        let else_branch = Box::new(self.parse_precedence1_expr()?);
+        let else_branch = self.parse_precedence1_expr()?;
         Ok(Expression {
             position,
-            node: ExpressionType::If {
+            node: Box::new(ExpressionType::If {
                 condition,
                 then_branch,
                 else_branch,
-            },
-            resolved_type: RefCell::new(None),
-        })
-    }
-
-    fn parse_array_loop_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Array)?;
-        self.expect_token(TokenType::LSquare)?;
-        let mut iterations = Vec::new();
-        if self.peek_token().token_type != TokenType::RSquare {
-            let (_, variable) =
-                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-
-            self.expect_token(TokenType::Colon)?;
-            let expr = self.parse_precedence1_expr()?;
-            iterations.push((variable, expr));
-        }
-        while self.peek_token().token_type != TokenType::RSquare {
-            self.expect_token(TokenType::Comma)?;
-            let (_, variable) =
-                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-            self.expect_token(TokenType::Colon)?;
-            let expr = self.parse_precedence1_expr()?;
-            iterations.push((variable, expr));
-        }
-        self.expect_token(TokenType::RSquare)?;
-        let element_expr = Box::new(self.parse_precedence1_expr()?);
-        Ok(Expression {
-            position,
-            node: ExpressionType::ArrayLoop {
-                range: iterations,
-                body: element_expr,
-            },
-            resolved_type: RefCell::new(None),
-        })
-    }
-
-    fn parse_sum_loop_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Sum)?;
-        self.expect_token(TokenType::LSquare)?;
-        let mut iterations = Vec::new();
-        if self.peek_token().token_type != TokenType::RSquare {
-            let (_, variable) =
-                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-            self.expect_token(TokenType::Colon)?;
-            let expr = self.parse_precedence1_expr()?;
-            iterations.push((variable, expr));
-        }
-        while self.peek_token().token_type != TokenType::RSquare {
-            self.expect_token(TokenType::Comma)?;
-            let (_, variable) =
-                self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-            self.expect_token(TokenType::Colon)?;
-            let expr = self.parse_precedence1_expr()?;
-            iterations.push((variable, expr));
-        }
-        self.expect_token(TokenType::RSquare)?;
-        let element_expr = Box::new(self.parse_precedence1_expr()?);
-        Ok(Expression {
-            position,
-            node: ExpressionType::SumLoop {
-                range: iterations,
-                body: element_expr,
-            },
-            resolved_type: RefCell::new(None),
+            }),
+            resolved_type: Type::Unresolved,
         })
     }
 
     fn parse_precedence7_expr(&mut self) -> Result<Expression<'a>, ParseError> {
         match self.peek_token().token_type {
-            TokenType::IntVal(_) => self.parse_int_expr(),
-            TokenType::FloatVal(_) => self.parse_float_expr(),
-            TokenType::True => self.parse_true_expr(),
-            TokenType::False => self.parse_false_expr(),
+            TokenType::IntVal(_) => {
+                // Inline parse_int_expr
+                let (position, value_str) = self
+                    .expect_token_match(|token_type| matches!(token_type, TokenType::IntVal(_)))?;
+                let value = value_str.parse::<i64>().map_err(|_| {
+                    ParseError::new(
+                        format!("Integer constant {} is too large", value_str),
+                        position,
+                    )
+                })?;
+                Ok(Expression {
+                    position,
+                    node: Box::new(ExpressionType::Int { value }),
+                    resolved_type: Type::Unresolved,
+                })
+            }
+            TokenType::FloatVal(_) => {
+                // Inline parse_float_expr
+                let (position, value_str) = self.expect_token_match(|token_type| {
+                    matches!(token_type, TokenType::FloatVal(_))
+                })?;
+                let value = value_str.parse::<f64>().map_err(|_| {
+                    ParseError::new(
+                        format!("Float constant {} is not valid", value_str),
+                        position,
+                    )
+                })?;
+                if value.is_infinite() {
+                    return Err(ParseError::new(
+                        format!("Float constant {} is too large", value_str),
+                        position,
+                    ));
+                }
+                Ok(Expression {
+                    position,
+                    node: Box::new(ExpressionType::Float { value }),
+                    resolved_type: Type::Unresolved,
+                })
+            }
+            TokenType::True => {
+                // Inline parse_true_expr
+                let position = self.expect_token(TokenType::True)?;
+                Ok(Expression {
+                    position,
+                    node: Box::new(ExpressionType::True),
+                    resolved_type: Type::Unresolved,
+                })
+            }
+            TokenType::False => {
+                // Inline parse_false_expr
+                let position = self.expect_token(TokenType::False)?;
+                Ok(Expression {
+                    position,
+                    node: Box::new(ExpressionType::False),
+                    resolved_type: Type::Unresolved,
+                })
+            }
             TokenType::Variable(_) => {
                 // Peek ahead to decide between struct literal, call, or plain variable.
                 match self.peek_next_token().token_type {
-                    TokenType::LCurly => self.parse_struct_literal_expr(),
-                    TokenType::LParen => self.parse_call_expr(),
-                    _ => self.parse_variable_expr(),
+                    TokenType::LCurly => {
+                        // Inline parse_struct_literal_expr
+                        let (start_position, name) = self.expect_token_match(|token_type| {
+                            matches!(token_type, TokenType::Variable(_))
+                        })?;
+
+                        self.expect_token(TokenType::LCurly)?;
+
+                        let fields = if self.peek_token().token_type != TokenType::RCurly {
+                            self.parse_comma_separated_exprs(TokenType::RCurly)?
+                        } else {
+                            Vec::new()
+                        };
+
+                        self.expect_token(TokenType::RCurly)?;
+
+                        Ok(Expression {
+                            position: start_position,
+                            node: Box::new(ExpressionType::StructLiteral { name, fields }),
+                            resolved_type: Type::Unresolved,
+                        })
+                    }
+                    TokenType::LParen => {
+                        // Inline parse_call_expr
+                        let (start_position, function) = self.expect_token_match(|token_type| {
+                            matches!(token_type, TokenType::Variable(_))
+                        })?;
+
+                        self.expect_token(TokenType::LParen)?;
+
+                        let arguments = if self.peek_token().token_type != TokenType::RParen {
+                            self.parse_comma_separated_exprs(TokenType::RParen)?
+                        } else {
+                            Vec::new()
+                        };
+
+                        self.expect_token(TokenType::RParen)?;
+
+                        Ok(Expression {
+                            position: start_position,
+                            node: Box::new(ExpressionType::Call {
+                                function,
+                                arguments,
+                            }),
+                            resolved_type: Type::Unresolved,
+                        })
+                    }
+                    _ => {
+                        // Inline parse_variable_expr
+                        let (position, name) = self.expect_token_match(|token_type| {
+                            matches!(token_type, TokenType::Variable(_))
+                        })?;
+                        Ok(Expression {
+                            position,
+                            node: Box::new(ExpressionType::Variable { name }),
+                            resolved_type: Type::Unresolved,
+                        })
+                    }
                 }
             }
-            TokenType::LSquare => self.parse_array_literal_expr(),
-            TokenType::LParen => self.parse_precedent_expr(),
-            TokenType::Void => self.parse_void_expr(),
-            _ => Err(ParseError {
-                message: format!("{} is not a valid expression", self.peek_token().token_type),
-                position: self.peek_token().position,
-            }),
+            TokenType::LSquare => {
+                // Inline parse_array_literal_expr
+                let position = self.expect_token(TokenType::LSquare)?;
+                // Empty array literal.
+                if self.peek_token().token_type == TokenType::RSquare {
+                    self.expect_token(TokenType::RSquare)?;
+                    return Ok(Expression {
+                        position,
+                        node: Box::new(ExpressionType::ArrayLiteral {
+                            elements: Vec::new(),
+                        }),
+                        resolved_type: Type::Unresolved,
+                    });
+                }
+
+                let elements = self.parse_comma_separated_exprs(TokenType::RSquare)?;
+                self.expect_token(TokenType::RSquare)?;
+
+                Ok(Expression {
+                    position,
+                    node: Box::new(ExpressionType::ArrayLiteral { elements }),
+                    resolved_type: Type::Unresolved,
+                })
+            }
+            TokenType::LParen => {
+                // Inline parse_precedent_expr
+                self.expect_token(TokenType::LParen)?;
+                let expr = self.parse_precedence1_expr()?;
+                self.expect_token(TokenType::RParen)?;
+                Ok(expr)
+            }
+            TokenType::Void => {
+                // Inline parse_void_expr
+                let position = self.expect_token(TokenType::Void)?;
+                Ok(Expression {
+                    position,
+                    node: Box::new(ExpressionType::Void),
+                    resolved_type: Type::Unresolved,
+                })
+            }
+            _ => Err(ParseError::new(
+                format!("{} is not a valid expression", self.peek_token().token_type),
+                self.peek_token().position,
+            )),
         }
     }
 
@@ -617,22 +540,24 @@ impl<'a> Parser<'a> {
             TokenType::Op(operator) => {
                 if operator == "-" || operator == "!" {
                     self.index += 1;
-                    let right = self.parse_precedence5_expr()?;
+                    let expression = self.parse_precedence5_expr()?;
                     return Ok(Expression {
                         position,
-                        node: ExpressionType::Unop {
-                            operator: Unop::from_str(operator),
-                            expression: Box::new(right),
-                        },
-                        resolved_type: RefCell::new(None),
+                        node: Box::new(ExpressionType::Unop {
+                            operator,
+                            expression,
+                        }),
+                        resolved_type: Type::Unresolved,
                     });
                 }
             }
             TokenType::Array => {
-                return self.parse_array_loop_expr();
+                // Directly call parse_loop_expr instead of using parse_array_loop_expr
+                return self.parse_loop_expr(TokenType::Array);
             }
             TokenType::Sum => {
-                return self.parse_sum_loop_expr();
+                // Directly call parse_loop_expr instead of using parse_sum_loop_expr
+                return self.parse_loop_expr(TokenType::Sum);
             }
             TokenType::If => {
                 return self.parse_if_expr();
@@ -645,21 +570,36 @@ impl<'a> Parser<'a> {
         self.parse_precedence6_expr()
     }
 
-    fn parse_precedence4_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let mut left = self.parse_precedence5_expr()?;
+    fn parse_binary_expr(
+        &mut self,
+        parse_higher_precedence: fn(&mut Self) -> Result<Expression<'a>, ParseError>,
+        operators: &[&str],
+    ) -> Result<Expression<'a>, ParseError> {
+        let mut left = parse_higher_precedence(self)?;
 
-        while let TokenType::Op(operator) = self.peek_token().token_type {
-            if operator == "*" || operator == "/" || operator == "%" {
-                self.index += 1;
-                let right = self.parse_precedence5_expr()?;
+        loop {
+            // Check if the next token is an operator we're looking for
+            let is_target_op = matches!(&self.peek_token().token_type, TokenType::Op(op) if operators.contains(op));
+
+            if is_target_op {
+                // Use expect_token_match to safely advance the token and get the operator
+                let (_, op) = self.expect_token_match(|token_type| {
+                    if let TokenType::Op(op) = token_type {
+                        operators.contains(op)
+                    } else {
+                        false
+                    }
+                })?;
+
+                let right = parse_higher_precedence(self)?;
                 left = Expression {
                     position: left.position,
-                    node: ExpressionType::Binop {
-                        operator: Binop::from_str(operator),
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    resolved_type: RefCell::new(None),
+                    node: Box::new(ExpressionType::Binop {
+                        operator: op,
+                        left,
+                        right,
+                    }),
+                    resolved_type: Type::Unresolved,
                 };
             } else {
                 break;
@@ -667,84 +607,25 @@ impl<'a> Parser<'a> {
         }
 
         Ok(left)
+    }
+
+    fn parse_precedence4_expr(&mut self) -> Result<Expression<'a>, ParseError> {
+        self.parse_binary_expr(Self::parse_precedence5_expr, &["*", "/", "%"])
     }
 
     fn parse_precedence3_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let mut left = self.parse_precedence4_expr()?;
-
-        while let TokenType::Op(operator) = self.peek_token().token_type {
-            if operator == "+" || operator == "-" {
-                self.index += 1;
-                let right = self.parse_precedence4_expr()?;
-                left = Expression {
-                    position: left.position,
-                    node: ExpressionType::Binop {
-                        operator: Binop::from_str(operator),
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    resolved_type: RefCell::new(None),
-                };
-            } else {
-                break;
-            }
-        }
-
-        Ok(left)
+        self.parse_binary_expr(Self::parse_precedence4_expr, &["+", "-"])
     }
 
     fn parse_precedence2_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let mut left = self.parse_precedence3_expr()?;
-
-        while let TokenType::Op(operator) = self.peek_token().token_type {
-            if operator == "<"
-                || operator == "<="
-                || operator == ">"
-                || operator == ">="
-                || operator == "=="
-                || operator == "!="
-            {
-                self.index += 1;
-                let right = self.parse_precedence3_expr()?;
-                left = Expression {
-                    position: left.position,
-                    node: ExpressionType::Binop {
-                        operator: Binop::from_str(operator),
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    resolved_type: RefCell::new(None),
-                };
-            } else {
-                break;
-            }
-        }
-
-        Ok(left)
+        self.parse_binary_expr(
+            Self::parse_precedence3_expr,
+            &["<", "<=", ">", ">=", "==", "!="],
+        )
     }
 
     fn parse_precedence1_expr(&mut self) -> Result<Expression<'a>, ParseError> {
-        let mut left = self.parse_precedence2_expr()?;
-
-        while let TokenType::Op(operator) = self.peek_token().token_type {
-            if operator == "&&" || operator == "||" {
-                self.index += 1;
-                let right = self.parse_precedence2_expr()?;
-                left = Expression {
-                    position: left.position,
-                    node: ExpressionType::Binop {
-                        operator: Binop::from_str(operator),
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    resolved_type: RefCell::new(None),
-                };
-            } else {
-                break;
-            }
-        }
-
-        Ok(left)
+        self.parse_binary_expr(Self::parse_precedence2_expr, &["&&", "||"])
     }
 
     // ----------------------------------------------------------------------------------- Statement Parsers ----------------------------------------------------------------------------------------------
@@ -754,10 +635,10 @@ impl<'a> Parser<'a> {
             TokenType::Let => self.parse_let_statement(),
             TokenType::Assert => self.parse_assert_statement(),
             TokenType::Return => self.parse_return_statement(),
-            _ => Err(ParseError {
-                message: format!("Expected statement, got {}", self.peek_token().token_type),
-                position: self.peek_token().position,
-            }),
+            _ => Err(ParseError::new(
+                format!("Expected statement, got {}", self.peek_token().token_type),
+                self.peek_token().position,
+            )),
         }
     }
 
@@ -765,36 +646,28 @@ impl<'a> Parser<'a> {
         self.expect_token(TokenType::Let)?;
         let variable = self.parse_lvalue()?;
         self.expect_token(TokenType::Equals)?;
-        let expression = self.parse_precedence1_expr()?;
+        let rvalue = self.parse_precedence1_expr()?;
         Ok(Statement {
-            node: StatementType::Let {
-                variable: Box::new(variable),
-                rvalue: Box::new(expression),
-            },
+            node: StatementType::Let { variable, rvalue },
         })
     }
 
     fn parse_assert_statement(&mut self) -> Result<Statement<'a>, ParseError> {
         self.expect_token(TokenType::Assert)?;
-        let expression = self.parse_precedence1_expr()?;
+        let condition = self.parse_precedence1_expr()?;
         self.expect_token(TokenType::Comma)?;
         let (_, message) =
             self.expect_token_match(|token_type| matches!(token_type, TokenType::String(_)))?;
         Ok(Statement {
-            node: StatementType::Assert {
-                condition: Box::new(expression),
-                message,
-            },
+            node: StatementType::Assert { condition, message },
         })
     }
 
     fn parse_return_statement(&mut self) -> Result<Statement<'a>, ParseError> {
         self.expect_token(TokenType::Return)?;
-        let return_value = self.parse_precedence1_expr()?;
+        let value = self.parse_precedence1_expr()?;
         Ok(Statement {
-            node: StatementType::Return {
-                value: Box::new(return_value),
-            },
+            node: StatementType::Return { value },
         })
     }
 
@@ -872,71 +745,53 @@ impl<'a> Parser<'a> {
             TokenType::Bool => self.parse_bool_type(),
             TokenType::Void => self.parse_void_type(),
             TokenType::Variable(_) => self.parse_struct_type(),
-            _ => Err(ParseError {
-                message: format!("{} is not a valid type", self.peek_token().token_type),
-                position: self.peek_token().position,
-            }),
+            _ => Err(ParseError::new(
+                format!("{} is not a valid type", self.peek_token().token_type),
+                self.peek_token().position,
+            )),
         }
     }
 
     fn parse_int_type(&mut self) -> Result<Type<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Int)?;
-        Ok(Type {
-            position,
-            node: TypeType::Int,
-        })
+        self.expect_token(TokenType::Int)?;
+        Ok(Type::Int)
     }
 
     fn parse_float_type(&mut self) -> Result<Type<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Float)?;
-        Ok(Type {
-            position,
-            node: TypeType::Float,
-        })
+        self.expect_token(TokenType::Float)?;
+        Ok(Type::Float)
     }
 
     fn parse_bool_type(&mut self) -> Result<Type<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Bool)?;
-        Ok(Type {
-            position,
-            node: TypeType::Bool,
-        })
+        self.expect_token(TokenType::Bool)?;
+        Ok(Type::Bool)
     }
 
     fn parse_void_type(&mut self) -> Result<Type<'a>, ParseError> {
-        let position = self.expect_token(TokenType::Void)?;
-        Ok(Type {
-            position,
-            node: TypeType::Void,
-        })
+        self.expect_token(TokenType::Void)?;
+        Ok(Type::Void)
     }
 
     fn parse_struct_type(&mut self) -> Result<Type<'a>, ParseError> {
-        let (position, name) =
+        let (_, name) =
             self.expect_token_match(|token_type| matches!(token_type, TokenType::Variable(_)))?;
-        Ok(Type {
-            position,
-            node: TypeType::Struct {
-                name,
-                elements: Vec::new(),
-            },
+        Ok(Type::Struct {
+            name,
+            elements: Vec::new(),
         })
     }
 
-    fn parse_array_type(&mut self, base: Type<'a>) -> Result<Type<'a>, ParseError> {
-        let position = self.expect_token(TokenType::LSquare)?;
+    fn parse_array_type(&mut self, element_type: Type<'a>) -> Result<Type<'a>, ParseError> {
+        self.expect_token(TokenType::LSquare)?;
         let mut rank = 1;
         while self.peek_token().token_type == TokenType::Comma {
             self.expect_token(TokenType::Comma)?;
             rank += 1;
         }
         self.expect_token(TokenType::RSquare)?;
-        Ok(Type {
-            position,
-            node: TypeType::Array {
-                element_type: Box::new(base),
-                rank,
-            },
+        Ok(Type::Array {
+            element_type: Box::new(element_type),
+            rank,
         })
     }
 }

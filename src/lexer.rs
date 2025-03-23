@@ -1,140 +1,5 @@
-use core::{fmt, str};
-use std::fmt::Display;
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct Position {
-    pub line: usize,
-    pub column: usize,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Token<'a> {
-    pub position: Position,
-    pub token_type: TokenType<'a>,
-}
-
-impl Display for Token<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.token_type)
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum TokenType<'a> {
-    // Values
-    IntVal(&'a str),
-    FloatVal(&'a str),
-    Variable(&'a str),
-    String(&'a str),
-
-    // Keywords
-    Array,
-    Assert,
-    Bool,
-    Else,
-    Fn,
-    If,
-    Image,
-    Int,
-    Float,
-    Let,
-    Print,
-    Read,
-    Return,
-    Show,
-    Struct,
-    Sum,
-    Then,
-    Time,
-    To,
-    Void,
-    Write,
-
-    // Literals
-    True,
-    False,
-
-    // Operators
-    Op(&'a str),
-    Equals,
-
-    // Delimiters
-    LParen,
-    RParen,
-    LCurly,
-    RCurly,
-    LSquare,
-    RSquare,
-    Comma,
-    Colon,
-    Dot,
-
-    // Other
-    Newline,
-    EndOfFile,
-}
-
-impl Display for TokenType<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TokenType::IntVal(contents) => write!(f, "INTVAL '{}'", contents),
-            TokenType::FloatVal(contents) => write!(f, "FLOATVAL '{}'", contents),
-            TokenType::Variable(contents) => write!(f, "VARIABLE '{}'", contents),
-            TokenType::String(contents) => write!(f, "STRING '{}'", contents),
-            TokenType::Op(contents) => write!(f, "OP '{}'", contents),
-            TokenType::Array => write!(f, "ARRAY 'array'"),
-            TokenType::Assert => write!(f, "ASSERT 'assert'"),
-            TokenType::Bool => write!(f, "BOOL 'bool'"),
-            TokenType::Else => write!(f, "ELSE 'else'"),
-            TokenType::Fn => write!(f, "FN 'fn'"),
-            TokenType::If => write!(f, "IF 'if'"),
-            TokenType::Image => write!(f, "IMAGE 'image'"),
-            TokenType::Int => write!(f, "INT 'int'"),
-            TokenType::Float => write!(f, "FLOAT 'float'"),
-            TokenType::Let => write!(f, "LET 'let'"),
-            TokenType::Print => write!(f, "PRINT 'print'"),
-            TokenType::Read => write!(f, "READ 'read'"),
-            TokenType::Return => write!(f, "RETURN 'return'"),
-            TokenType::Show => write!(f, "SHOW 'show'"),
-            TokenType::Struct => write!(f, "STRUCT 'struct'"),
-            TokenType::Sum => write!(f, "SUM 'sum'"),
-            TokenType::Then => write!(f, "THEN 'then'"),
-            TokenType::Time => write!(f, "TIME 'time'"),
-            TokenType::To => write!(f, "TO 'to'"),
-            TokenType::Void => write!(f, "VOID 'void'"),
-            TokenType::Write => write!(f, "WRITE 'write'"),
-            TokenType::True => write!(f, "TRUE 'true'"),
-            TokenType::False => write!(f, "FALSE 'false'"),
-            TokenType::Equals => write!(f, "EQUALS '='"),
-            TokenType::LParen => write!(f, "LPAREN '('"),
-            TokenType::RParen => write!(f, "RPAREN ')'"),
-            TokenType::LCurly => write!(f, "LCURLY '{{'"),
-            TokenType::RCurly => write!(f, "RCURLY '}}'"),
-            TokenType::LSquare => write!(f, "LSQUARE '['"),
-            TokenType::RSquare => write!(f, "RSQUARE ']'"),
-            TokenType::Comma => write!(f, "COMMA ','"),
-            TokenType::Colon => write!(f, "COLON ':'"),
-            TokenType::Dot => write!(f, "DOT '.'"),
-            TokenType::Newline => write!(f, "NEWLINE"),
-            TokenType::EndOfFile => write!(f, "END_OF_FILE"),
-        }
-    }
-}
-
-pub struct LexError {
-    message: String,
-    position: Position,
-}
-
-impl Display for LexError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Lex error: {}:{}: {}",
-            self.position.line, self.position.column, self.message
-        )
-    }
-}
+use crate::utils::*;
+use core::str;
 
 /// Represents the state of the lexer and provides helper methods
 struct Lexer<'a> {
@@ -195,21 +60,12 @@ impl<'a> Lexer<'a> {
 
     /// Create an error at the current position
     fn error(&self, message: &str) -> LexError {
-        LexError {
-            message: message.to_string(),
-            position: Position {
-                line: self.line,
-                column: self.column,
-            },
-        }
+        LexError::new(message.to_string(), self.current_position())
     }
 
     /// Get the current position in a Position struct
     fn current_position(&self) -> Position {
-        Position {
-            line: self.line,
-            column: self.column,
-        }
+        Position::new(self.line, self.column)
     }
 
     /// Lex an identifier or keyword
@@ -375,20 +231,14 @@ impl<'a> Lexer<'a> {
             }
 
             return Token {
-                position: Position {
-                    line: self.line,
-                    column: self.column,
-                },
+                position: self.current_position(),
                 token_type: TokenType::FloatVal(&self.program[start..self.position]),
             };
         }
 
         // It's just a dot
         Token {
-            position: Position {
-                line: self.line,
-                column: self.column - 1,
-            },
+            position: Position::new(self.line, self.column - 1),
             token_type: TokenType::Dot,
         }
     }
@@ -415,10 +265,7 @@ impl<'a> Lexer<'a> {
         self.advance(); // Skip closing quote
 
         Ok(Token {
-            position: Position {
-                line: self.line,
-                column: self.column,
-            },
+            position: self.current_position(),
             token_type: TokenType::String(&self.program[start..self.position]),
         })
     }
@@ -566,10 +413,7 @@ impl<'a> Lexer<'a> {
                         self.lex_comment()?;
                     } else {
                         tokens.push(Token {
-                            position: Position {
-                                line: self.line,
-                                column: self.column,
-                            },
+                            position: self.current_position(),
                             token_type: TokenType::Op(
                                 &self.program[self.position..self.position + 1],
                             ),
@@ -595,10 +439,7 @@ impl<'a> Lexer<'a> {
                         || !matches!(tokens.last().unwrap().token_type, TokenType::Newline)
                     {
                         tokens.push(Token {
-                            position: Position {
-                                line: self.line,
-                                column: self.column,
-                            },
+                            position: self.current_position(),
                             token_type: TokenType::Newline,
                         });
                     }
@@ -625,10 +466,7 @@ impl<'a> Lexer<'a> {
 
         // Add EOF token
         tokens.push(Token {
-            position: Position {
-                line: self.line,
-                column: self.column,
-            },
+            position: self.current_position(),
             token_type: TokenType::EndOfFile,
         });
 

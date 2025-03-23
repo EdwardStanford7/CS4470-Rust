@@ -1,47 +1,45 @@
-use crate::{lexer::Position, typechecker::TypeEnvironment};
-use core::str;
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use crate::utils::Position;
+use std::{cell::Cell, fmt::Display};
 
 // -------------------------------------------------------------------------------------------- Command Nodes -----------------------------------------------------------------------------------------------
 
 pub struct Command<'a> {
     pub position: Position,
-    pub node: CommandType<'a>,
+    pub node: Box<CommandType<'a>>,
 }
 
 pub enum CommandType<'a> {
     Read {
         source: &'a str,
-        destination: Box<LValue<'a>>,
+        destination: LValue<'a>,
     },
     Write {
-        source: Box<Expression<'a>>,
+        source: Expression<'a>,
         destination: &'a str,
     },
     Let {
-        variable: Box<LValue<'a>>,
-        rvalue: Box<Expression<'a>>,
+        variable: LValue<'a>,
+        rvalue: Expression<'a>,
     },
     Assert {
-        condition: Box<Expression<'a>>,
+        condition: Expression<'a>,
         message: &'a str,
     },
     Print {
         message: &'a str,
     },
     Show {
-        expression: Box<Expression<'a>>,
+        expression: Expression<'a>,
     },
     Time {
-        command: Box<Command<'a>>,
+        command: Command<'a>,
     },
     Function {
         name: &'a str,
         parameters: Vec<(LValue<'a>, Type<'a>)>,
-        return_type: Box<Type<'a>>,
+        return_type: Type<'a>,
         statements: Vec<Statement<'a>>,
-        has_return: bool,
-        local_env: Rc<RefCell<TypeEnvironment<'a>>>,
+        has_return: Cell<bool>,
     },
     Struct {
         name: &'a str,
@@ -51,7 +49,7 @@ pub enum CommandType<'a> {
 
 impl Display for Command<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.node {
+        match &self.node.as_ref() {
             CommandType::Read {
                 source,
                 destination,
@@ -85,7 +83,6 @@ impl Display for Command<'_> {
                 return_type,
                 statements,
                 has_return: _,
-                local_env: _,
             } => {
                 let mut result = format!("(FnCmd {} ((", name);
                 let mut first = true;
@@ -93,10 +90,10 @@ impl Display for Command<'_> {
                     if !first {
                         result.push(' ');
                     }
-                    result.push_str(&format!("{} {}", var, typ));
+                    result.push_str(&format!("{}{}", var, typ));
                     first = false;
                 }
-                result.push_str(&format!(")) {}", return_type));
+                result.push_str(&format!(")){}", return_type));
                 for stmt in statements {
                     result.push_str(&format!(" {}", stmt));
                 }
@@ -106,7 +103,7 @@ impl Display for Command<'_> {
             CommandType::Struct { name, elements } => {
                 let mut result = format!("(StructCmd {}", name);
                 for (field, typ) in elements {
-                    result.push_str(&format!(" {} {}", field, typ));
+                    result.push_str(&format!(" {}{}", field, typ));
                 }
                 result.push(')');
                 write!(f, "{}", result)
@@ -117,93 +114,14 @@ impl Display for Command<'_> {
 
 // -------------------------------------------------------------------------------------------- Expression Nodes -----------------------------------------------------------------------------------------------
 
-pub enum Unop {
-    Negative,
-    Not,
-}
-
-impl Display for Unop {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Unop::Negative => write!(f, "-"),
-            Unop::Not => write!(f, "!"),
-        }
-    }
-}
-
-impl Unop {
-    pub fn from_str(s: &str) -> Unop {
-        match s {
-            "-" => Unop::Negative,
-            "!" => Unop::Not,
-            _ => panic!("Invalid unary operator: {}", s),
-        }
-    }
-}
-
-pub enum Binop {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Modulo,
-    Less,
-    Greater,
-    Equals,
-    NotEquals,
-    LessEquals,
-    GreaterEquals,
-    And,
-    Or,
-}
-
-impl Display for Binop {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Binop::Add => write!(f, "+"),
-            Binop::Subtract => write!(f, "-"),
-            Binop::Multiply => write!(f, "*"),
-            Binop::Divide => write!(f, "/"),
-            Binop::Modulo => write!(f, "%"),
-            Binop::Less => write!(f, "<"),
-            Binop::Greater => write!(f, ">"),
-            Binop::Equals => write!(f, "=="),
-            Binop::NotEquals => write!(f, "!="),
-            Binop::LessEquals => write!(f, "<="),
-            Binop::GreaterEquals => write!(f, ">="),
-            Binop::And => write!(f, "&&"),
-            Binop::Or => write!(f, "||"),
-        }
-    }
-}
-
-impl Binop {
-    pub fn from_str(s: &str) -> Binop {
-        match s {
-            "+" => Binop::Add,
-            "-" => Binop::Subtract,
-            "*" => Binop::Multiply,
-            "/" => Binop::Divide,
-            "%" => Binop::Modulo,
-            "<" => Binop::Less,
-            ">" => Binop::Greater,
-            "==" => Binop::Equals,
-            "!=" => Binop::NotEquals,
-            "<=" => Binop::LessEquals,
-            ">=" => Binop::GreaterEquals,
-            "&&" => Binop::And,
-            "||" => Binop::Or,
-            _ => panic!("Invalid binary operator: {}", s),
-        }
-    }
-}
-
+#[derive(Debug)]
 pub struct Expression<'a> {
     pub position: Position,
-    pub node: ExpressionType<'a>,
-    pub resolved_type: RefCell<Option<Type<'a>>>,
+    pub node: Box<ExpressionType<'a>>,
+    pub resolved_type: Type<'a>,
 }
 
+#[derive(Debug)]
 pub enum ExpressionType<'a> {
     Int {
         value: i64,
@@ -221,11 +139,11 @@ pub enum ExpressionType<'a> {
         elements: Vec<Expression<'a>>,
     },
     ArrayIndex {
-        array: Box<Expression<'a>>,
+        array: Expression<'a>,
         indices: Vec<Expression<'a>>,
     },
     Dot {
-        struct_variable: Box<Expression<'a>>,
+        struct_variable: Expression<'a>,
         field: &'a str,
     },
     Call {
@@ -237,48 +155,44 @@ pub enum ExpressionType<'a> {
         fields: Vec<Expression<'a>>,
     },
     Unop {
-        operator: Unop,
-        expression: Box<Expression<'a>>,
+        operator: &'a str,
+        expression: Expression<'a>,
     },
     Binop {
-        operator: Binop,
-        left: Box<Expression<'a>>,
-        right: Box<Expression<'a>>,
+        operator: &'a str,
+        left: Expression<'a>,
+        right: Expression<'a>,
     },
     If {
-        condition: Box<Expression<'a>>,
-        then_branch: Box<Expression<'a>>,
-        else_branch: Box<Expression<'a>>,
+        condition: Expression<'a>,
+        then_branch: Expression<'a>,
+        else_branch: Expression<'a>,
     },
     ArrayLoop {
         range: Vec<(&'a str, Expression<'a>)>,
-        body: Box<Expression<'a>>,
+        body: Expression<'a>,
     },
     SumLoop {
         range: Vec<(&'a str, Expression<'a>)>,
-        body: Box<Expression<'a>>,
+        body: Expression<'a>,
     },
 }
 
 impl Display for Expression<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let type_str = if let Some(typ) = self.resolved_type.borrow().as_ref() {
-            format!(" {}", typ)
-        } else {
-            String::new()
-        };
-
-        match &self.node {
-            ExpressionType::Int { value } => write!(f, "(IntExpr{} {})", type_str, value),
+        match &self.node.as_ref() {
+            ExpressionType::Int { value } => write!(f, "(IntExpr{} {})", self.resolved_type, value),
             ExpressionType::Float { value } => {
-                write!(f, "(FloatExpr{} {})", type_str, *value as i64)
+                write!(f, "(FloatExpr{} {})", self.resolved_type, *value as i64)
             }
-            ExpressionType::True => write!(f, "(TrueExpr{})", type_str),
-            ExpressionType::False => write!(f, "(FalseExpr{})", type_str),
-            ExpressionType::Void => write!(f, "(VoidExpr{})", type_str),
-            ExpressionType::Variable { name } => write!(f, "(VarExpr{} {})", type_str, name),
+            ExpressionType::True => write!(f, "(TrueExpr{})", self.resolved_type),
+            ExpressionType::False => write!(f, "(FalseExpr{})", self.resolved_type),
+            ExpressionType::Void => write!(f, "(VoidExpr{})", self.resolved_type),
+            ExpressionType::Variable { name } => {
+                write!(f, "(VarExpr{} {})", self.resolved_type, name)
+            }
             ExpressionType::ArrayLiteral { elements } => {
-                let mut result = format!("(ArrayLiteralExpr{}", type_str);
+                let mut result = format!("(ArrayLiteralExpr{}", self.resolved_type);
                 for element in elements {
                     result.push_str(&format!(" {}", element));
                 }
@@ -286,7 +200,7 @@ impl Display for Expression<'_> {
                 write!(f, "{}", result)
             }
             ExpressionType::ArrayIndex { array, indices } => {
-                let mut result = format!("(ArrayIndexExpr{} {}", type_str, array);
+                let mut result = format!("(ArrayIndexExpr{} {}", self.resolved_type, array);
                 for index in indices {
                     result.push_str(&format!(" {}", index));
                 }
@@ -297,13 +211,17 @@ impl Display for Expression<'_> {
                 struct_variable,
                 field,
             } => {
-                write!(f, "(DotExpr{} {} {})", type_str, struct_variable, field)
+                write!(
+                    f,
+                    "(DotExpr{} {} {})",
+                    self.resolved_type, struct_variable, field
+                )
             }
             ExpressionType::Call {
                 function,
                 arguments,
             } => {
-                let mut result = format!("(CallExpr{} {}", type_str, function);
+                let mut result = format!("(CallExpr{} {}", self.resolved_type, function);
                 for arg in arguments {
                     result.push_str(&format!(" {}", arg));
                 }
@@ -311,7 +229,7 @@ impl Display for Expression<'_> {
                 write!(f, "{}", result)
             }
             ExpressionType::StructLiteral { name, fields } => {
-                let mut result = format!("(StructLiteralExpr{} {}", type_str, name);
+                let mut result = format!("(StructLiteralExpr{} {}", self.resolved_type, name);
                 for field in fields {
                     result.push_str(&format!(" {}", field));
                 }
@@ -322,13 +240,21 @@ impl Display for Expression<'_> {
                 operator,
                 expression,
             } => {
-                write!(f, "(UnopExpr{} {} {})", type_str, operator, expression)
+                write!(
+                    f,
+                    "(UnopExpr{} {} {})",
+                    self.resolved_type, operator, expression
+                )
             }
             ExpressionType::Binop {
                 operator,
                 left,
                 right,
-            } => write!(f, "(BinopExpr{} {} {} {})", type_str, left, operator, right),
+            } => write!(
+                f,
+                "(BinopExpr{} {} {} {})",
+                self.resolved_type, left, operator, right
+            ),
             ExpressionType::If {
                 condition,
                 then_branch,
@@ -336,10 +262,10 @@ impl Display for Expression<'_> {
             } => write!(
                 f,
                 "(IfExpr{} {} {} {})",
-                type_str, condition, then_branch, else_branch
+                self.resolved_type, condition, then_branch, else_branch
             ),
             ExpressionType::ArrayLoop { range, body } => {
-                let mut result = format!("(ArrayLoopExpr{}", type_str);
+                let mut result = format!("(ArrayLoopExpr{}", self.resolved_type);
                 for (var, expr) in range {
                     result.push_str(&format!(" {} {}", var, expr));
                 }
@@ -347,7 +273,7 @@ impl Display for Expression<'_> {
                 write!(f, "{}", result)
             }
             ExpressionType::SumLoop { range, body } => {
-                let mut result = format!("(SumLoopExpr{}", type_str);
+                let mut result = format!("(SumLoopExpr{}", self.resolved_type);
                 for (var, expr) in range {
                     result.push_str(&format!(" {} {}", var, expr));
                 }
@@ -366,15 +292,15 @@ pub struct Statement<'a> {
 
 pub enum StatementType<'a> {
     Let {
-        variable: Box<LValue<'a>>,
-        rvalue: Box<Expression<'a>>,
+        variable: LValue<'a>,
+        rvalue: Expression<'a>,
     },
     Assert {
-        condition: Box<Expression<'a>>,
+        condition: Expression<'a>,
         message: &'a str,
     },
     Return {
-        value: Box<Expression<'a>>,
+        value: Expression<'a>,
     },
 }
 
@@ -396,14 +322,9 @@ impl Display for Statement<'_> {
 
 // -------------------------------------------------------------------------------------------- Type Nodes -----------------------------------------------------------------------------------------------
 
-#[derive(Clone)]
-pub struct Type<'a> {
-    pub position: Position,
-    pub node: TypeType<'a>,
-}
-
-#[derive(Clone)]
-pub enum TypeType<'a> {
+#[derive(Debug, Clone)]
+pub enum Type<'a> {
+    Unresolved,
     Int,
     Float,
     Bool,
@@ -424,16 +345,17 @@ pub enum TypeType<'a> {
 
 impl Display for Type<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.node {
-            TypeType::Int => write!(f, "(IntType)"),
-            TypeType::Float => write!(f, "(FloatType)"),
-            TypeType::Bool => write!(f, "(BoolType)"),
-            TypeType::Void => write!(f, "(VoidType)"),
-            TypeType::Struct { name, elements: _ } => write!(f, "(StructType {})", name),
-            TypeType::Array { element_type, rank } => {
-                write!(f, "(ArrayType {} {})", element_type, rank)
+        match &self {
+            Type::Unresolved => write!(f, ""),
+            Type::Int => write!(f, " (IntType)"),
+            Type::Float => write!(f, " (FloatType)"),
+            Type::Bool => write!(f, " (BoolType)"),
+            Type::Void => write!(f, " (VoidType)"),
+            Type::Struct { name, elements: _ } => write!(f, " (StructType {})", name),
+            Type::Array { element_type, rank } => {
+                write!(f, " (ArrayType{} {})", element_type, rank)
             }
-            TypeType::Function {
+            Type::Function {
                 param_types: _,
                 return_type,
             } => write!(f, "{}", return_type),
