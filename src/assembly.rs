@@ -25,6 +25,7 @@ struct AssemblyGenerator {
     functions: Vec<String>,
     constants: HashMap<AssemblyValue, String>,
     jump_counter: usize,
+    aligned: bool,
 }
 
 impl Display for AssemblyGenerator {
@@ -49,7 +50,8 @@ impl<'a> AssemblyGenerator {
             data_section: Vec::new(),
             functions: Vec::new(),
             constants: HashMap::new(),
-            jump_counter: 0,
+            jump_counter: 1,
+            aligned: true,
         }
     }
 
@@ -202,13 +204,23 @@ impl<'a> AssemblyGenerator {
                 left,
                 right,
             } => {
-                let _ = self.generate_expression(function, right, environment);
-                let (_, left_typ) = self.generate_expression(function, left, environment);
+                // Reference compiler is stupid so I have to decentralize logic. hw10/ok/028.jpl
+                if *operator == "%" && matches!(left.resolved_type, Type::Float) && self.aligned {
+                    function.push_str("\n\tsub rsp, 8; Add padding to align stack");
+                }
 
-                match left_typ {
-                    Type::Int => Self::generate_int_op(function, operator),
-                    Type::Float => Self::generate_float_op(function, operator),
-                    Type::Bool => Self::generate_bool_op(function, operator),
+                let _ = self.generate_expression(function, right, environment);
+                let (_, left_type) = self.generate_expression(function, left, environment);
+
+                match expression.resolved_type {
+                    Type::Int => self.generate_int_op(function, operator),
+                    Type::Float => self.generate_float_op(function, operator),
+                    Type::Bool => match left_type {
+                        Type::Int => self.generate_bool_op(function, operator, Type::Int),
+                        Type::Float => self.generate_bool_op(function, operator, Type::Float),
+                        Type::Bool => self.generate_bool_op(function, operator, Type::Bool),
+                        _ => unreachable!(),
+                    },
                     _ => unreachable!(),
                 }
             }
@@ -219,20 +231,50 @@ impl<'a> AssemblyGenerator {
         }
     }
 
-    fn generate_int_op(function: &mut String, operator: &str) -> (usize, Type<'a>) {
+    fn generate_int_op(&mut self, function: &mut String, operator: &str) -> (usize, Type<'a>) {
         match operator {
             "+" => function.push_str("\n\tpop rax\n\tpop r10\n\tadd rax, r10\n\tpush rax"),
             "-" => function.push_str("\n\tpop rax\n\tpop r10\n\tsub rax, r10\n\tpush rax"),
             "*" => function.push_str("\n\tpop rax\n\tpop r10\n\timul rax, r10\n\tpush rax"),
             "/" | "%" => {
-                // TODO: Add division by zero handling
+                function.push_str("\n\tpop rax\n\tpop r10\n\tcmp r10, 0");
+                let jump_label = format!(".jump{}", self.jump_counter);
+                self.jump_counter += 1;
+                function.push_str(&format!("\n\tjne {}", jump_label));
+                if self.aligned {
+                    function.push_str("\n\tsub rsp, 8; Add padding to align stack");
+                }
+                function.push_str(&format!(
+                    "\n\tlea rdi, [rel {}]",
+                    self.get_constant(AssemblyValue::String(
+                        if operator == "/" {
+                            "divide by zero"
+                        } else {
+                            "mod by zero"
+                        }
+                        .to_string()
+                    ))
+                ));
+                function.push_str("\n\tcall _fail_assertion");
+                if self.aligned {
+                    function.push_str("\n\tadd rsp, 8; Remove padding to align stack");
+                }
+                function.push_str(&format!("\n{}:", jump_label));
+                function.push_str("\n\tcqo\n\tidiv r10");
+
+                if operator == "%" {
+                    function.push_str("\n\tmov rax, rdx");
+                }
+                function.push_str("\n\tpush rax");
             }
-            _ => unreachable!(),
+            _ => {
+                unreachable!();
+            }
         }
         (8, Type::Int)
     }
 
-    fn generate_float_op(function: &mut String, operator: &str) -> (usize, Type<'a>) {
+    fn generate_float_op(&mut self, function: &mut String, operator: &str) -> (usize, Type<'a>) {
         match operator {
             "+" | "-" | "*" | "/" => {
                 let op_instruction = match operator {
@@ -244,28 +286,97 @@ impl<'a> AssemblyGenerator {
                 };
 
                 function.push_str(&format!(
-                    "\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8\
-                    \n\t{} xmm0, xmm1\
-                    \n\tsub rsp, 8\
-                    \n\tmovsd [rsp], xmm0",
+                    "\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8\n\t{} xmm0, xmm1\n\tsub rsp, 8\n\tmovsd [rsp], xmm0",
                     op_instruction
                 ));
             }
             "%" => {
-                // TODO:  call _fmod
+                function.push_str("\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8\n\tcall _fmod");
+
+                if self.aligned {
+                    function.push_str("\n\tadd rsp, 8; Remove padding to align stack");
+                }
+
+                function.push_str("\n\tsub rsp, 8\n\tmovsd [rsp], xmm0");
             }
             _ => unreachable!(),
         }
         (8, Type::Float)
     }
 
-    fn generate_bool_op(function: &mut String, operator: &str) -> (usize, Type<'a>) {
-        match operator {
-            "&&" => function.push_str("\n\tpop rax\n\tpop r10\n\tand rax, r10\n\tpush rax"),
-            "||" => function.push_str("\n\tpop rax\n\tpop r10\n\tor rax, r10\n\tpush rax"),
+    fn generate_bool_op(
+        &mut self,
+        function: &mut String,
+        operator: &str,
+        left_type: Type<'a>,
+    ) -> (usize, Type<'a>) {
+        match left_type {
+            Type::Int => self.generate_int_comparison(function, operator),
+            Type::Float => self.generate_float_comparison(function, operator),
+            Type::Bool => self.generate_bool_comparison(function, operator),
             _ => unreachable!(),
         }
         (8, Type::Bool)
+    }
+
+    fn generate_int_comparison(&self, function: &mut String, operator: &str) {
+        let set_instruction = match operator {
+            "<" => "setl",
+            "<=" => "setle",
+            ">" => "setg",
+            ">=" => "setge",
+            "==" => "sete",
+            "!=" => "setne",
+            _ => unreachable!(),
+        };
+
+        function.push_str(&format!(
+            "\n\tpop rax\n\tpop r10\n\tcmp rax, r10\n\t{} al\n\tand rax, 1\n\tpush rax",
+            set_instruction
+        ));
+    }
+
+    fn generate_float_comparison(&self, function: &mut String, operator: &str) {
+        function.push_str("\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8");
+
+        let (cmp_instruction, swap_operands) = match operator {
+            "<" => ("cmpltsd", false),
+            "<=" => ("cmplesd", false),
+            ">" => ("cmpltsd", true),
+            ">=" => ("cmplesd", true),
+            "==" => ("cmpeqsd", false),
+            "!=" => ("cmpneqsd", false),
+            _ => unreachable!(),
+        };
+
+        let cmp_code = if swap_operands {
+            format!(
+                "\n\t{} xmm1, xmm0\n\tmovq rax, xmm1\n\tand rax, 1\n\tpush rax",
+                cmp_instruction
+            )
+        } else {
+            format!(
+                "\n\t{} xmm0, xmm1\n\tmovq rax, xmm0\n\tand rax, 1\n\tpush rax",
+                cmp_instruction
+            )
+        };
+
+        function.push_str(&cmp_code);
+    }
+
+    fn generate_bool_comparison(&self, function: &mut String, operator: &str) {
+        match operator {
+            "&&" => function.push_str("\n\tpop rax\n\tpop r10\n\tand rax, r10\n\tpush rax"),
+            "||" => function.push_str("\n\tpop rax\n\tpop r10\n\tor rax, r10\n\tpush rax"),
+            "==" | "!=" => {
+                function.push_str(
+                    &"\n\tpop rax\n\tpop r10\n\tcmp rax, r10\n\t\
+                     {} al\n\tand rax, 1\n\tpush rax"
+                        .replace("{}", if operator == "==" { "sete" } else { "setne" }),
+                );
+            }
+            _ => unreachable!(),
+        }
     }
 
     fn get_constant(&mut self, value: AssemblyValue) -> &str {
