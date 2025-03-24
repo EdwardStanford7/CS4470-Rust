@@ -92,7 +92,7 @@ impl<'a> AssemblyGenerator<'a> {
         let mut main_function = AssemblyFunction::new("jpl_main");
 
         // jpl_main prelude
-        main_function.code.push("\t; jpl_main prelude".to_string());
+        main_function.add_line("\t; jpl_main prelude".to_string());
         main_function.add_line("\tpush rbp".to_string());
         main_function.add_line("\tmov rbp, rsp".to_string());
         main_function.add_line("\tpush r12".to_string());
@@ -128,7 +128,6 @@ impl<'a> AssemblyGenerator<'a> {
                 let (size, typ_str) = self.generate_expression(function, expression, environment);
                 let const_name = self.get_constant(AssemblyValue::String(typ_str));
 
-                function.add_line("\tpush rax".to_string());
                 function.add_line(format!("\tlea rdi, [rel {}]", const_name));
                 function.add_line("\tlea rsi, [rsp]".to_string());
                 function.add_line("\tcall _show".to_string());
@@ -175,7 +174,8 @@ impl<'a> AssemblyGenerator<'a> {
         match expression.node.as_ref() {
             ExpressionType::Int { value } => {
                 let constant = self.get_constant(AssemblyValue::Number(value.to_string()));
-                function.code.push(format!("\tmov rax, [rel {}]", constant));
+                function.add_line(format!("\tmov rax, [rel {}]", constant));
+                function.add_line("\tpush rax".to_string());
                 (8, "(IntType)".to_string())
             }
             ExpressionType::Float { value } => {
@@ -187,18 +187,51 @@ impl<'a> AssemblyGenerator<'a> {
                 };
                 let constant = self.get_constant(AssemblyValue::Number(formatted_value));
 
-                function.code.push(format!("\tmov rax, [rel {}]", constant));
+                function.add_line(format!("\tmov rax, [rel {}]", constant));
+                function.add_line("\tpush rax".to_string());
                 (8, "(FloatType)".to_string())
             }
             ExpressionType::True => {
                 let constant = self.get_constant(AssemblyValue::Number("1".to_string()));
-                function.code.push(format!("\tmov rax, [rel {}]", constant));
+                function.add_line(format!("\tmov rax, [rel {}]", constant));
+                function.add_line("\tpush rax".to_string());
                 (8, "(BoolType)".to_string())
             }
             ExpressionType::False => {
                 let constant = self.get_constant(AssemblyValue::Number("0".to_string()));
-                function.code.push(format!("\tmov rax, [rel {}]", constant));
+                function.add_line(format!("\tmov rax, [rel {}]", constant));
+                function.add_line("\tpush rax".to_string());
                 (8, "(BoolType)".to_string())
+            }
+            ExpressionType::Unop {
+                operator,
+                expression,
+            } => {
+                let (size, typ_str) = self.generate_expression(function, expression, environment);
+
+                match typ_str.as_str() {
+                    "(IntType)" => {
+                        function.add_line("\tpop rax".to_string());
+                        function.add_line("\tneg rax".to_string());
+                        function.add_line("\tpush rax".to_string());
+                    }
+                    "(FloatType)" => {
+                        function.add_line("\tmovsd xmm1, [rsp]".to_string());
+                        function.add_line("\tadd rsp, 8".to_string());
+                        function.add_line("\tpxor xmm0, xmm0".to_string());
+                        function.add_line("\tsubsd xmm0, xmm1".to_string());
+                        function.add_line("\tsub rsp, 8".to_string());
+                        function.add_line("\tmovsd [rsp], xmm0".to_string());
+                    }
+                    "(BoolType)" => {
+                        function.add_line("\tpop rax".to_string());
+                        function.add_line("\txor rax, 1".to_string());
+                        function.add_line("\tpush rax".to_string());
+                    }
+                    _ => panic!("Unknown unary operator {}", operator),
+                }
+
+                (size, typ_str)
             }
             _ => panic!("Matched on unknown expression type {}", expression),
         }
