@@ -178,6 +178,28 @@ impl<'a> AssemblyGenerator<'a> {
                 function.code.push(format!("\tmov rax, [rel {}]", constant));
                 (8, "(IntType)".to_string())
             }
+            ExpressionType::Float { value } => {
+                // Format the float to ensure decimal point is always shown
+                let formatted_value = if value.fract() == 0.0 {
+                    format!("{:.1}", value) // Ensure at least one decimal place for whole numbers
+                } else {
+                    format!("{}", value) // Use default formatting for non-integer values
+                };
+                let constant = self.get_constant(AssemblyValue::Number(formatted_value));
+
+                function.code.push(format!("\tmov rax, [rel {}]", constant));
+                (8, "(FloatType)".to_string())
+            }
+            ExpressionType::True => {
+                let constant = self.get_constant(AssemblyValue::Number("1".to_string()));
+                function.code.push(format!("\tmov rax, [rel {}]", constant));
+                (8, "(BoolType)".to_string())
+            }
+            ExpressionType::False => {
+                let constant = self.get_constant(AssemblyValue::Number("0".to_string()));
+                function.code.push(format!("\tmov rax, [rel {}]", constant));
+                (8, "(BoolType)".to_string())
+            }
             _ => panic!("Matched on unknown expression type {}", expression),
         }
     }
