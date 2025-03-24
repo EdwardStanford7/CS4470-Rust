@@ -154,9 +154,7 @@ fn compile() -> Result<(), CompilerError> {
         let stdout = io::stdout();
         let mut buffer = io::BufWriter::new(stdout.lock());
 
-        for line in &assembly {
-            writeln!(buffer, "{}", line)?;
-        }
+        writeln!(buffer, "{}", assembly)?;
 
         writeln!(
             buffer,
