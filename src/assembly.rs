@@ -4,37 +4,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
 
-struct AssemblyFunction<'a> {
-    name: &'a str,
-    code: Vec<String>,
-}
-
-impl Display for AssemblyFunction<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut result = format!("{}:\n", self.name);
-        result.push_str(&format!("_{}:\n", self.name)); // Double print function name for macos reasons
-
-        for line in &self.code {
-            result.push_str(&format!("{}\n", line));
-        }
-
-        write!(f, "{}", result)
-    }
-}
-
-impl<'a> AssemblyFunction<'a> {
-    fn new(name: &'a str) -> Self {
-        Self {
-            name,
-            code: Vec::new(),
-        }
-    }
-
-    fn add_line(&mut self, line: String) {
-        self.code.push(line);
-    }
-}
-
 /// Very much not sure about this
 #[derive(Eq, Hash, PartialEq, Clone)]
 enum AssemblyValue {
@@ -51,21 +20,21 @@ impl Display for AssemblyValue {
     }
 }
 
-struct AssemblyGenerator<'a> {
+struct AssemblyGenerator {
     data_section: Vec<AssemblyValue>,
-    functions: Vec<AssemblyFunction<'a>>,
+    functions: Vec<String>,
     constants: HashMap<AssemblyValue, String>,
     jump_counter: usize,
 }
 
-impl Display for AssemblyGenerator<'_> {
+impl Display for AssemblyGenerator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut result = "section .data\n".to_string();
+        let mut result = "\n\n\nsection .data".to_string();
         for (const_counter, value) in self.data_section.iter().enumerate() {
-            result.push_str(&format!("const{}: {}\n", const_counter, value));
+            result.push_str(&format!("\nconst{}: {}", const_counter, value));
         }
 
-        result.push_str("\nsection .text\n");
+        result.push_str("\n\n\nsection .text");
         for function in &self.functions {
             result.push_str(&format!("{}\n\n", function));
         }
@@ -74,7 +43,7 @@ impl Display for AssemblyGenerator<'_> {
     }
 }
 
-impl<'a> AssemblyGenerator<'a> {
+impl<'a> AssemblyGenerator {
     pub fn new() -> Self {
         Self {
             data_section: Vec::new(),
@@ -89,29 +58,19 @@ impl<'a> AssemblyGenerator<'a> {
         commands: Vec<Command<'a>>,
         environment: TypeEnvironment<'a>,
     ) -> String {
-        let mut main_function = AssemblyFunction::new("jpl_main");
-
+        let mut main_function = String::new();
         // jpl_main prelude
-        main_function.add_line("\t; jpl_main prelude".to_string());
-        main_function.add_line("\tpush rbp".to_string());
-        main_function.add_line("\tmov rbp, rsp".to_string());
-        main_function.add_line("\tpush r12".to_string());
-        main_function.add_line("\tmov r12, rbp\n".to_string());
+        main_function.push_str("\n\njpl_main:\n_jpl_main:\n\t; jpl_main prelude\n\tpush rbp\n\tmov rbp, rsp\n\tpush r12\n\tmov r12, rbp");
 
         for command in commands {
             self.generate_command(&mut main_function, &command, &environment);
         }
 
         // jpl_main postlude
-        main_function
-            .code
-            .push("\n\t; jpl_main postlude".to_string());
-        main_function.add_line("\tpop r12".to_string());
-        main_function.add_line("\tpop rbp".to_string());
-        main_function.add_line("\tret".to_string());
+        main_function.push_str("\n\n\t; jpl_main postlude\n\tpop r12\n\tpop rbp\n\tret");
 
         format!(
-            "global jpl_main\nglobal _jpl_main\nextern _fail_assertion\nextern _jpl_alloc\nextern _get_time\nextern _show\nextern _print\nextern _print_time\nextern _read_image\nextern _write_image\nextern _fmod\nextern _sqrt\nextern _exp\nextern _sin\nextern _cos\nextern _tan\nextern _asin\nextern _acos\nextern _atan\nextern _log\nextern _pow\nextern _atan2\nextern _to_int\nextern _to_float\n\n{}{}",
+            "global jpl_main\nglobal _jpl_main\nextern _fail_assertion\nextern _jpl_alloc\nextern _get_time\nextern _show\nextern _print\nextern _print_time\nextern _read_image\nextern _write_image\nextern _fmod\nextern _sqrt\nextern _exp\nextern _sin\nextern _cos\nextern _tan\nextern _asin\nextern _acos\nextern _atan\nextern _log\nextern _pow\nextern _atan2\nextern _to_int\nextern _to_float{}{}",
             self,
             main_function
         )
@@ -119,45 +78,50 @@ impl<'a> AssemblyGenerator<'a> {
 
     fn generate_command(
         &mut self,
-        function: &mut AssemblyFunction<'a>,
+        function: &mut String,
         command: &Command<'a>,
         environment: &TypeEnvironment<'a>,
     ) {
         match command.node.as_ref() {
             CommandType::Show { expression } => {
-                let (size, typ_str) = self.generate_expression(function, expression, environment);
+                function.push_str("\n\n\t; Show command");
+
+                let expr_result = self.generate_expression(function, expression, environment);
+                let size = expr_result.0;
+                let typ_str = expr_result.1.to_string();
                 let const_name = self.get_constant(AssemblyValue::String(typ_str));
 
-                function.add_line(format!("\tlea rdi, [rel {}]", const_name));
-                function.add_line("\tlea rsi, [rsp]".to_string());
-                function.add_line("\tcall _show".to_string());
-                function.add_line(format!("\tadd rsp, {}", size));
+                function.push_str(&format!("\n\tlea rdi, [rel {}]", const_name));
+                function.push_str("\n\tlea rsi, [rsp]");
+                function.push_str("\n\tcall _show");
+                function.push_str(&format!("\n\tadd rsp, {}", size));
             }
-            CommandType::Function {
-                name,
-                parameters,
-                return_type,
-                statements,
-                has_return,
-            } => {
-                let mut function = AssemblyFunction::new(name);
+            // CommandType::Function {
+            //     name,
+            //     parameters,
+            //     return_type,
+            //     statements,
+            //     has_return,
+            // } => {
+            //     let mut function = String::new();
+            //     function.push_str(&format!("\n{}:\n_{}:", name, name));
 
-                // Function prelude
-                function.add_line(format!("\t; {} prelude", name));
-                function.add_line("\tpush rbp".to_string());
-                function.add_line("\tmov rbp, rsp".to_string());
+            //     // Function prelude
+            //     function.push_str(&format!("\n\t; {} prelude", name));
+            //     function.push_str("\n\tpush rbp");
+            //     function.push_str("\n\tmov rbp, rsp");
 
-                for statement in statements {
-                    // self.generate_statement(statement, environment);
-                }
+            //     for statement in statements {
+            //         // self.generate_statement(statement, environment);
+            //     }
 
-                // Function postlude
-                function.add_line(format!("\n\t; {} postlude", name));
-                function.add_line("\tpop rbp".to_string());
-                function.add_line("\tret".to_string());
+            //     // Function postlude
+            //     function.push_str(&format!("\n\t; {} postlude", name));
+            //     function.push_str("\n\tpop rbp");
+            //     function.push_str("\n\tret");
 
-                self.functions.push(function);
-            }
+            //     self.functions.push(function);
+            // }
             _ => {}
         }
     }
@@ -167,16 +131,16 @@ impl<'a> AssemblyGenerator<'a> {
     /// Returns size of expression in bytes
     fn generate_expression(
         &mut self,
-        function: &mut AssemblyFunction<'a>,
+        function: &mut String,
         expression: &Expression<'a>,
         environment: &TypeEnvironment<'a>,
-    ) -> (usize, String) {
+    ) -> (usize, Type) {
         match expression.node.as_ref() {
             ExpressionType::Int { value } => {
                 let constant = self.get_constant(AssemblyValue::Number(value.to_string()));
-                function.add_line(format!("\tmov rax, [rel {}]", constant));
-                function.add_line("\tpush rax".to_string());
-                (8, "(IntType)".to_string())
+                function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
+                function.push_str("\n\tpush rax");
+                (8, Type::Int)
             }
             ExpressionType::Float { value } => {
                 // Format the float to ensure decimal point is always shown
@@ -187,64 +151,130 @@ impl<'a> AssemblyGenerator<'a> {
                 };
                 let constant = self.get_constant(AssemblyValue::Number(formatted_value));
 
-                function.add_line(format!("\tmov rax, [rel {}]", constant));
-                function.add_line("\tpush rax".to_string());
-                (8, "(FloatType)".to_string())
+                function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
+                function.push_str("\n\tpush rax");
+                (8, Type::Float)
             }
             ExpressionType::True => {
                 let constant = self.get_constant(AssemblyValue::Number("1".to_string()));
-                function.add_line(format!("\tmov rax, [rel {}]", constant));
-                function.add_line("\tpush rax".to_string());
-                (8, "(BoolType)".to_string())
+                function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
+                function.push_str("\n\tpush rax");
+                (8, Type::Bool)
             }
             ExpressionType::False => {
                 let constant = self.get_constant(AssemblyValue::Number("0".to_string()));
-                function.add_line(format!("\tmov rax, [rel {}]", constant));
-                function.add_line("\tpush rax".to_string());
-                (8, "(BoolType)".to_string())
+                function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
+                function.push_str("\n\tpush rax");
+                (8, Type::Bool)
             }
             ExpressionType::Unop {
-                operator,
+                operator: _,
                 expression,
             } => {
-                let (size, typ_str) = self.generate_expression(function, expression, environment);
+                let (size, typ) = self.generate_expression(function, expression, environment);
 
-                match typ_str.as_str() {
-                    "(IntType)" => {
-                        function.add_line("\tpop rax".to_string());
-                        function.add_line("\tneg rax".to_string());
-                        function.add_line("\tpush rax".to_string());
+                match typ {
+                    Type::Int => {
+                        function.push_str("\n\tpop rax");
+                        function.push_str("\n\tneg rax");
+                        function.push_str("\n\tpush rax");
                     }
-                    "(FloatType)" => {
-                        function.add_line("\tmovsd xmm1, [rsp]".to_string());
-                        function.add_line("\tadd rsp, 8".to_string());
-                        function.add_line("\tpxor xmm0, xmm0".to_string());
-                        function.add_line("\tsubsd xmm0, xmm1".to_string());
-                        function.add_line("\tsub rsp, 8".to_string());
-                        function.add_line("\tmovsd [rsp], xmm0".to_string());
+                    Type::Float => {
+                        function.push_str("\n\tmovsd xmm1, [rsp]");
+                        function.push_str("\n\tadd rsp, 8");
+                        function.push_str("\n\tpxor xmm0, xmm0");
+                        function.push_str("\n\tsubsd xmm0, xmm1");
+                        function.push_str("\n\tsub rsp, 8");
+                        function.push_str("\n\tmovsd [rsp], xmm0");
                     }
-                    "(BoolType)" => {
-                        function.add_line("\tpop rax".to_string());
-                        function.add_line("\txor rax, 1".to_string());
-                        function.add_line("\tpush rax".to_string());
+                    Type::Bool => {
+                        function.push_str("\n\tpop rax");
+                        function.push_str("\n\txor rax, 1");
+                        function.push_str("\n\tpush rax");
                     }
-                    _ => panic!("Unknown unary operator {}", operator),
+                    _ => unreachable!(),
                 }
 
-                (size, typ_str)
+                (size, typ)
             }
-            _ => panic!("Matched on unknown expression type {}", expression),
+            ExpressionType::Binop {
+                operator,
+                left,
+                right,
+            } => {
+                let _ = self.generate_expression(function, right, environment);
+                let (_, left_typ) = self.generate_expression(function, left, environment);
+
+                match left_typ {
+                    Type::Int => Self::generate_int_op(function, operator),
+                    Type::Float => Self::generate_float_op(function, operator),
+                    Type::Bool => Self::generate_bool_op(function, operator),
+                    _ => unreachable!(),
+                }
+            }
+            ExpressionType::ArrayLiteral { elements } => {
+                unimplemented!();
+            }
+            _ => unimplemented!(),
         }
     }
 
-    // TODO entry api
-    fn get_constant(&mut self, value: AssemblyValue) -> String {
-        if !self.constants.contains_key(&value) {
-            self.constants
-                .insert(value.clone(), format!("const{}", self.data_section.len()));
-            self.data_section.push(value.clone());
+    fn generate_int_op(function: &mut String, operator: &str) -> (usize, Type<'a>) {
+        match operator {
+            "+" => function.push_str("\n\tpop rax\n\tpop r10\n\tadd rax, r10\n\tpush rax"),
+            "-" => function.push_str("\n\tpop rax\n\tpop r10\n\tsub rax, r10\n\tpush rax"),
+            "*" => function.push_str("\n\tpop rax\n\tpop r10\n\timul rax, r10\n\tpush rax"),
+            "/" | "%" => {
+                // TODO: Add division by zero handling
+            }
+            _ => unreachable!(),
         }
-        self.constants[&value].clone()
+        (8, Type::Int)
+    }
+
+    fn generate_float_op(function: &mut String, operator: &str) -> (usize, Type<'a>) {
+        match operator {
+            "+" | "-" | "*" | "/" => {
+                let op_instruction = match operator {
+                    "+" => "addsd",
+                    "-" => "subsd",
+                    "*" => "mulsd",
+                    "/" => "divsd",
+                    _ => unreachable!(),
+                };
+
+                function.push_str(&format!(
+                    "\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8\
+                    \n\t{} xmm0, xmm1\
+                    \n\tsub rsp, 8\
+                    \n\tmovsd [rsp], xmm0",
+                    op_instruction
+                ));
+            }
+            "%" => {
+                // TODO:  call _fmod
+            }
+            _ => unreachable!(),
+        }
+        (8, Type::Float)
+    }
+
+    fn generate_bool_op(function: &mut String, operator: &str) -> (usize, Type<'a>) {
+        match operator {
+            "&&" => function.push_str("\n\tpop rax\n\tpop r10\n\tand rax, r10\n\tpush rax"),
+            "||" => function.push_str("\n\tpop rax\n\tpop r10\n\tor rax, r10\n\tpush rax"),
+            _ => unreachable!(),
+        }
+        (8, Type::Bool)
+    }
+
+    fn get_constant(&mut self, value: AssemblyValue) -> &str {
+        let data_section_len = self.data_section.len();
+        let entry = self.constants.entry(value.clone()).or_insert_with(|| {
+            self.data_section.push(value.clone());
+            format!("const{}", data_section_len)
+        });
+        entry
     }
 }
 
