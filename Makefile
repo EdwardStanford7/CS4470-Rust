@@ -20,6 +20,10 @@ run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw7 PART=all COMPILE_MODE=" -m typecheck"
 	$(MAKE) -C ./grader test-hw10 PART=all COMPILE_MODE=" -m assembly"
 
+run-10:
+	$(MAKE) -C ./grader test-hw10 PART=all COMPILE_MODE=" -m assembly"
+
+
 time-all:
 	time $(MAKE) run-all
 
