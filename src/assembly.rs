@@ -1,29 +1,195 @@
 use crate::ast::*;
 use crate::utils::*;
+use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Display;
 
-struct AssemblyGenerator<'a> {
-    commands: Vec<Command<'a>>,
-    environment: TypeEnvironment<'a>,
+struct AssemblyFunction<'a> {
+    name: &'a str,
+    code: Vec<String>,
 }
 
-impl<'a> AssemblyGenerator<'a> {
-    pub fn new(commands: Vec<Command<'a>>, environment: TypeEnvironment<'a>) -> Self {
+impl Display for AssemblyFunction<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut result = format!("{}:\n", self.name);
+        result.push_str(&format!("_{}:\n", self.name)); // Double print function name for macos reasons
+
+        for line in &self.code {
+            result.push_str(&format!("{}\n", line));
+        }
+
+        write!(f, "{}", result)
+    }
+}
+
+impl<'a> AssemblyFunction<'a> {
+    fn new(name: &'a str) -> Self {
         Self {
-            commands,
-            environment,
+            name,
+            code: Vec::new(),
         }
     }
 
-    pub fn generate_assembly(&self) -> String {
-        let mut assembly = String::new();
+    fn add_line(&mut self, line: String) {
+        self.code.push(line);
+    }
+}
 
-        for command in &self.commands {
-            match command {
-                _ => {}
-            }
+/// Very much not sure about this
+#[derive(Eq, Hash, PartialEq, Clone)]
+enum AssemblyValue {
+    Number(String),
+    String(String),
+}
+
+impl Display for AssemblyValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AssemblyValue::Number(value) => write!(f, "dq {}", value),
+            AssemblyValue::String(value) => write!(f, "db `{}`, 0", value),
+        }
+    }
+}
+
+struct AssemblyGenerator<'a> {
+    data_section: Vec<AssemblyValue>,
+    functions: Vec<AssemblyFunction<'a>>,
+    constants: HashMap<AssemblyValue, String>,
+    jump_counter: usize,
+}
+
+impl Display for AssemblyGenerator<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut result = "section .data\n".to_string();
+        for (const_counter, value) in self.data_section.iter().enumerate() {
+            result.push_str(&format!("const{}: {}\n", const_counter, value));
         }
 
-        assembly
+        result.push_str("\nsection .text\n");
+        for function in &self.functions {
+            result.push_str(&format!("{}\n\n", function));
+        }
+
+        write!(f, "{}", result)
+    }
+}
+
+impl<'a> AssemblyGenerator<'a> {
+    pub fn new() -> Self {
+        Self {
+            data_section: Vec::new(),
+            functions: Vec::new(),
+            constants: HashMap::new(),
+            jump_counter: 0,
+        }
+    }
+
+    pub fn generate_assembly(
+        &mut self,
+        commands: Vec<Command<'a>>,
+        environment: TypeEnvironment<'a>,
+    ) -> String {
+        let mut main_function = AssemblyFunction::new("jpl_main");
+
+        // jpl_main prelude
+        main_function.code.push("\t; jpl_main prelude".to_string());
+        main_function.add_line("\tpush rbp".to_string());
+        main_function.add_line("\tmov rbp, rsp".to_string());
+        main_function.add_line("\tpush r12".to_string());
+        main_function.add_line("\tmov r12, rbp\n".to_string());
+
+        for command in commands {
+            self.generate_command(&mut main_function, &command, &environment);
+        }
+
+        // jpl_main postlude
+        main_function
+            .code
+            .push("\n\t; jpl_main postlude".to_string());
+        main_function.add_line("\tpop r12".to_string());
+        main_function.add_line("\tpop rbp".to_string());
+        main_function.add_line("\tret".to_string());
+
+        format!(
+            "global jpl_main\nglobal _jpl_main\nextern _fail_assertion\nextern _jpl_alloc\nextern _get_time\nextern _show\nextern _print\nextern _print_time\nextern _read_image\nextern _write_image\nextern _fmod\nextern _sqrt\nextern _exp\nextern _sin\nextern _cos\nextern _tan\nextern _asin\nextern _acos\nextern _atan\nextern _log\nextern _pow\nextern _atan2\nextern _to_int\nextern _to_float\n\n{}{}",
+            self,
+            main_function
+        )
+    }
+
+    fn generate_command(
+        &mut self,
+        function: &mut AssemblyFunction<'a>,
+        command: &Command<'a>,
+        environment: &TypeEnvironment<'a>,
+    ) {
+        match command.node.as_ref() {
+            CommandType::Show { expression } => {
+                let (size, typ_str) = self.generate_expression(function, expression, environment);
+                let const_name = self.get_constant(AssemblyValue::String(typ_str));
+
+                function.add_line("\tpush rax".to_string());
+                function.add_line(format!("\tlea rdi, [rel {}]", const_name));
+                function.add_line("\tlea rsi, [rsp]".to_string());
+                function.add_line("\tcall _show".to_string());
+                function.add_line(format!("\tadd rsp, {}", size));
+            }
+            CommandType::Function {
+                name,
+                parameters,
+                return_type,
+                statements,
+                has_return,
+            } => {
+                let mut function = AssemblyFunction::new(name);
+
+                // Function prelude
+                function.add_line(format!("\t; {} prelude", name));
+                function.add_line("\tpush rbp".to_string());
+                function.add_line("\tmov rbp, rsp".to_string());
+
+                for statement in statements {
+                    // self.generate_statement(statement, environment);
+                }
+
+                // Function postlude
+                function.add_line(format!("\n\t; {} postlude", name));
+                function.add_line("\tpop rbp".to_string());
+                function.add_line("\tret".to_string());
+
+                self.functions.push(function);
+            }
+            _ => {}
+        }
+    }
+
+    /// Generate assembly code for an expression
+    /// Location of generated expression is always rax
+    /// Returns size of expression in bytes
+    fn generate_expression(
+        &mut self,
+        function: &mut AssemblyFunction<'a>,
+        expression: &Expression<'a>,
+        environment: &TypeEnvironment<'a>,
+    ) -> (usize, String) {
+        match expression.node.as_ref() {
+            ExpressionType::Int { value } => {
+                let constant = self.get_constant(AssemblyValue::Number(value.to_string()));
+                function.code.push(format!("\tmov rax, [rel {}]", constant));
+                (8, "(IntType)".to_string())
+            }
+            _ => panic!("Matched on unknown expression type {}", expression),
+        }
+    }
+
+    // TODO entry api
+    fn get_constant(&mut self, value: AssemblyValue) -> String {
+        if !self.constants.contains_key(&value) {
+            self.constants
+                .insert(value.clone(), format!("const{}", self.data_section.len()));
+            self.data_section.push(value.clone());
+        }
+        self.constants[&value].clone()
     }
 }
 
@@ -31,6 +197,6 @@ pub fn generate_assembly<'a>(
     commands: Vec<Command<'a>>,
     environment: TypeEnvironment<'a>,
 ) -> Result<String, ()> {
-    let generator = AssemblyGenerator::new(commands, environment);
-    Ok(generator.generate_assembly())
+    let mut generator = AssemblyGenerator::new();
+    Ok(generator.generate_assembly(commands, environment))
 }

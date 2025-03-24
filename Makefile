@@ -1,5 +1,5 @@
 TEST = ./t.jpl
-COMPILE_MODE = -m typecheck
+COMPILE_MODE = -m assembly
 BINARY = target/release/myjplc
 
 $(BINARY):	src/*.rs
