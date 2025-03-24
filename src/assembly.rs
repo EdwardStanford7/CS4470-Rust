@@ -22,6 +22,23 @@ impl<'a> AssemblyGenerator<'a> {
         }
     }
 
+    pub fn get_type_name(&self, expr: &Expression, global_counter: u64) -> (String,u64,String,u64) {
+        let mut globals = String::new();
+        //TODO: check if type exists
+        match expr.resolved_type {
+            Type::Int => {
+                let strval = "`(IntType)`";
+                globals.push_str(&format!("const{}: db {}, 0\n", global_counter,strval));
+                (strval.to_string(),global_counter,globals,global_counter + 1)
+            }
+            _ => {
+                let strval = "`(UNKNOWN)`";
+                globals.push_str(&format!("const{}: db {}, 0\n", global_counter,strval));
+                (strval.to_string(),global_counter,globals,global_counter + 1)
+            }
+        }
+    }
+
     /// Generate assembly for a single expression.
     pub fn generate_expression(&self, expr: &Expression, global_counter: u64) -> (String, String, u64) {
         let mut globals = String::new();
@@ -85,13 +102,13 @@ impl<'a> AssemblyGenerator<'a> {
                 func.push_str(&format!("// Access field {}\n", field));
             }
             ExpressionType::False => {
-                func.push_str("    mov rax, 0\n");
-                func.push_str("    push rax\n");
+                func.push_str("\tmov rax, 0\n");
+                func.push_str("\tpush rax\n");
             }
             ExpressionType::Float { value } => {
                 globals.push_str(&format!("const{}: dq {}\n", new_global_counter, value));
-                func.push_str(&format!("    mov rax, [rel const{}]\n", new_global_counter));
-                func.push_str("    push rax\n");
+                func.push_str(&format!("\tmov rax, [rel const{}]\n", new_global_counter));
+                func.push_str("\tpush rax\n");
                 new_global_counter += 1;
             }
             ExpressionType::If { condition, then_branch, else_branch } => {
@@ -115,8 +132,8 @@ impl<'a> AssemblyGenerator<'a> {
             }
             ExpressionType::Int { value } => {
                 globals.push_str(&format!("const{}: dq {}\n", new_global_counter, value));
-                func.push_str(&format!("    mov rax, [rel const{}] ; {}\n", new_global_counter, value));
-                func.push_str("    push rax\n");
+                func.push_str(&format!("\tmov rax, [rel const{}] ; {}\n", new_global_counter, value));
+                func.push_str("\tpush rax\n");
                 new_global_counter += 1;
             }
             ExpressionType::StructLiteral { name, fields } => {
@@ -227,21 +244,20 @@ impl<'a> AssemblyGenerator<'a> {
         let mut globals = String::new();
         let mut func = String::new();
         let mut new_global_counter = global_counter;
-
         match command.node.as_ref() {
             CommandType::Assert { message, condition } => {
                 let (cond_globals, cond_func, cond_counter) = self.generate_expression(condition, new_global_counter);
                 globals.push_str(&cond_globals);
                 func.push_str(&cond_func);
-                func.push_str("    pop rax\n");
-                func.push_str("    cmp rax, 0\n");
-                func.push_str(&format!("    je _fail_assertion ; {}\n", message));
+                func.push_str("\tpop rax\n");
+                func.push_str("\tcmp rax, 0\n");
+                func.push_str(&format!("\tje _fail_assertion ; {}\n", message));
                 new_global_counter = cond_counter;
             }
             CommandType::Function { name, parameters, return_type, statements, has_return: _ } => {
                 func.push_str(&format!("\n{}:\n", name));
-                func.push_str("    push rbp\n");
-                func.push_str("    mov rbp, rsp\n");
+                func.push_str("\tpush rbp\n");
+                func.push_str("\tmov rbp, rsp\n");
                 
                 for (param, param_type) in parameters {
                     // Parameter handling would go here
@@ -254,8 +270,8 @@ impl<'a> AssemblyGenerator<'a> {
                     new_global_counter = stmt_counter;
                 }
                 
-                func.push_str("    pop rbp\n");
-                func.push_str("    ret\n");
+                func.push_str("\tpop rbp\n");
+                func.push_str("\tret\n");
             }
             CommandType::Let { variable, rvalue } => {
                 let (rvalue_globals, rvalue_func, rvalue_counter) = self.generate_expression(rvalue, new_global_counter);
@@ -263,7 +279,7 @@ impl<'a> AssemblyGenerator<'a> {
                 func.push_str(&rvalue_func);
                 
                 // Store variable in local storage or memory
-                func.push_str(&format!("    ; Store variable {}\n", variable.name));
+                func.push_str(&format!("\t; Store variable {}\n", variable.name));
                 
                 new_global_counter = rvalue_counter;
             }
@@ -272,50 +288,48 @@ impl<'a> AssemblyGenerator<'a> {
                 globals.push_str(&format!("msg{}: db `{}`, 0\n", new_global_counter, message));
                 
                 // Print the message
-                func.push_str(&format!("    lea rdi, [rel msg{}]\n", new_global_counter));
-                func.push_str("    call _print\n");
+                func.push_str(&format!("\tlea rdi, [rel msg{}]\n", new_global_counter));
+                func.push_str("\tcall _print\n");
                 
                 new_global_counter += 1;
             }
             CommandType::Read { source, destination } => {
                 // Add the source filename to globals
                 globals.push_str(&format!("source{}: db `{}`, 0\n", new_global_counter, source));
-                
                 // Generate code to call _read_image
-                func.push_str(&format!("    lea rdi, [rel source{}]\n", new_global_counter));
-                func.push_str("    ; Set up destination buffer\n");
-                func.push_str("    call _read_image\n");
-                
+                func.push_str(&format!("\tlea rdi, [rel source{}]\n", new_global_counter));
+                func.push_str("\t; Set up destination buffer\n");
+                func.push_str("\tcall _read_image\n");
                 new_global_counter += 1;
             }
             CommandType::Show { expression } => {
                 let (expr_globals, expr_func, expr_counter) = self.generate_expression(expression, new_global_counter);
+                new_global_counter = expr_counter;
                 globals.push_str(&expr_globals);
                 func.push_str(&expr_func);
+                let (comment, count, type_globals, type_counter) = self.get_type_name(expression,new_global_counter);
+                globals.push_str(&type_globals);
+                new_global_counter = type_counter;
                 if let ExpressionType::Int { .. } = expression.node.as_ref() {
-                    func.push_str("    lea rdi, [rel const1] ; '(IntType)'\n");
-                    func.push_str("    lea rsi, [rsp]\n");
-                    func.push_str("    call _show\n");
-                    func.push_str("    add rsp, 8\n");
+                    func.push_str(&format!("\tlea rdi, [rel const{}] ; '(IntType)'\n",count));
+                    func.push_str("\tlea rsi, [rsp]\n");
+                    func.push_str("\tcall _show\n");
+                    func.push_str("\tadd rsp, 8\n");
                 } else {
-                    func.push_str("TODO: implement type printing");
+                    func.push_str(&format!("\tTODO: implement type printing for {}\n",expression));
                 }
-                new_global_counter = expr_counter;
-
-                globals.push_str(&format!("const{}: db `(IntType)`, 0\n", new_global_counter));
-                new_global_counter += 1;
             }
             CommandType::Struct { name, elements } => {
                 // Just a type definition, no runtime code needed
                 for (field, typ) in elements {
                     // Add struct information to assembly comments
-                    func.push_str(&format!("    ; Struct {} field {} type {}\n", name, field, typ));
+                    func.push_str(&format!("\t; Struct {} field {} type {}\n", name, field, typ));
                 }
             }
             CommandType::Time { command: inner_command } => {
                 // Call _get_time before the command
-                func.push_str("    call _get_time\n");
-                func.push_str("    push rax\n");
+                func.push_str("\tcall _get_time\n");
+                func.push_str("\tpush rax\n");
                 
                 // Generate code for the inner command
                 let (inner_globals, inner_func, inner_counter) = self.generate_command(inner_command, new_global_counter);
@@ -323,8 +337,8 @@ impl<'a> AssemblyGenerator<'a> {
                 func.push_str(&inner_func);
                 
                 // Call _print_time after the command
-                func.push_str("    pop rdi\n");
-                func.push_str("    call _print_time\n");
+                func.push_str("\tpop rdi\n");
+                func.push_str("\tcall _print_time\n");
                 
                 new_global_counter = inner_counter;
             }
@@ -336,9 +350,9 @@ impl<'a> AssemblyGenerator<'a> {
                 // Add the destination filename to globals
                 globals.push_str(&format!("dest{}: db `{}`, 0\n", new_global_counter, destination));
                 // Generate code to call _write_image
-                func.push_str("    ; Set up source buffer from stack\n");
-                func.push_str(&format!("    lea rdi, [rel dest{}]\n", new_global_counter));
-                func.push_str("    call _write_image\n");
+                func.push_str("\t; Set up source buffer from stack\n");
+                func.push_str(&format!("\tlea rdi, [rel dest{}]\n", new_global_counter));
+                func.push_str("\tcall _write_image\n");
                 new_global_counter = source_counter + 1;
             }
         }
@@ -347,17 +361,17 @@ impl<'a> AssemblyGenerator<'a> {
 
     pub fn generate_assembly(&self) -> String {
         let mut imports = String::new();
-        imports.push_str("global jpl_main\nglobal _jpl_main\nextern _fail_assertion\nextern _jpl_alloc\nextern _get_time\nextern _show\nextern _print\nextern _print_time\nextern _read_image\nextern _write_image\nextern _fmod\nextern _sqrt\nextern _exp\nextern _sin\nextern _cos\nextern _tan\nextern _asin\nextern _acos\nextern _atan\nextern _log\nextern _pow\nextern _atan2\nextern _to_int\nextern _to_float\n\n");
+        imports.push_str("\tglobal jpl_main\n\tglobal _jpl_main\n\textern _fail_assertion\n\textern _jpl_alloc\n\textern _get_time\n\textern _show\n\textern _print\n\textern _print_time\n\textern _read_image\n\textern _write_image\n\textern _fmod\n\textern _sqrt\n\textern _exp\n\textern _sin\n\textern _cos\n\textern _tan\n\textern _asin\n\textern _acos\n\textern _atan\n\textern _log\n\textern _pow\n\textern _atan2\n\textern _to_int\n\textern _to_float\n\n");
         let mut all_globals = String::new();
         all_globals.push_str("section .data\n");
         let mut main = String::new();
         main.push_str("\nsection .text\n");
         main.push_str("jpl_main:\n");
         main.push_str("_jpl_main:\n");
-        main.push_str("    push rbp\n");
-        main.push_str("    mov rbp, rsp\n");
-        main.push_str("    push r12\n");
-        main.push_str("    mov r12, rbp\n");
+        main.push_str("\tpush rbp\n");
+        main.push_str("\tmov rbp, rsp\n");
+        main.push_str("\tpush r12\n");
+        main.push_str("\tmov r12, rbp\n");
         let mut global_counter = 0;
         for command in &self.commands {
             let (globals, func, new_counter) = self.generate_command(command, global_counter);
@@ -365,9 +379,9 @@ impl<'a> AssemblyGenerator<'a> {
             main.push_str(&func);
             global_counter = new_counter;
         }
-        main.push_str("    pop r12\n");
-        main.push_str("    pop rbp\n");
-        main.push_str("    ret\n");
+        main.push_str("\tpop r12\n");
+        main.push_str("\tpop rbp\n");
+        main.push_str("\tret\n");
 
         let mut assembly = String::new();
         assembly.push_str(&imports);
