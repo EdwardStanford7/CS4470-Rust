@@ -151,18 +151,10 @@ fn compile() -> Result<(), CompilerError> {
 
     // Print assembly code if in assembly mode
     if args.mode == CompilationMode::Assembly {
-        let stdout = io::stdout();
-        let mut buffer = io::BufWriter::new(stdout.lock());
-
-        for line in &assembly {
-            writeln!(buffer, "{}", line)?;
-        }
-
-        writeln!(
-            buffer,
-            "Compilation succeeded, assembly generation complete."
-        )?;
-        buffer.flush()?;
+        println!(
+            "{}\nCompilation succeeded, assembly generation complete.",
+            assembly
+        );
         return Ok(());
     }
 

@@ -400,7 +400,7 @@ impl Display for Type<'_> {
             Type::Void => write!(f, "(VoidType)"),
             Type::Struct { name, elements: _ } => write!(f, "(StructType {})", name),
             Type::Array { element_type, rank } => {
-                write!(f, "(ArrayType{} {})", element_type, rank)
+                write!(f, "(ArrayType {} {})", element_type, rank)
             }
             Type::Function {
                 param_types: _,
