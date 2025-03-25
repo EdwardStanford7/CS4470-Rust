@@ -2706,471 +2706,364 @@ pub fn generate_assembly<'a>(
     environment: TypeEnvironment<'a>,
 ) -> String {
     let mut generator = AssemblyGenerator::new();
-    return generator.generate_assembly(commands,environment);
+    generator.generate_assembly(commands, environment)
 }
 
 struct AssemblyGenerator<'a> {
-    defined_types: HashMap<Type<'a>,(u64,String)>,
-    defined_consts: HashMap<String,u64>
+    defined_types: HashMap<Type<'a>, (u64, String)>,
+    defined_consts: HashMap<String, u64>,
+    global_counter: u64,
+    globals: String,
+    code: String,
 }
 
 impl<'a> AssemblyGenerator<'a> {
     pub fn new() -> Self {
         Self {
             defined_types: HashMap::new(),
-            defined_consts: HashMap::new()
+            defined_consts: HashMap::new(),
+            global_counter: 0,
+            globals: String::new(),
+            code: String::new(),
         }
     }
 
-    pub fn get_type_name(&mut self, expr: &Expression<'a>, global_counter: u64) -> (String,u64,String,u64) {
-        let mut globals = String::new();
-        if let Some((num,name)) = self.defined_types.get(&expr.resolved_type) {
-            (name.to_string(),num.clone(),globals,global_counter)
+    pub fn get_type_name(&mut self, expr: &Expression<'a>) -> (String, u64) {
+        if let Some((num, name)) = self.defined_types.get(&expr.resolved_type) {
+            return (name.clone(), *num);
         } else {
-            let strval = format!("`{}`",expr.resolved_type.to_string().trim());
-            globals.push_str(&format!("const{}: db {}, 0\n", global_counter,strval));
-            self.defined_types.insert(expr.resolved_type.clone(), (global_counter,strval.to_string()));
-            (strval.to_string(),global_counter,globals,global_counter + 1)
+            let strval = format!("`{}`", expr.resolved_type.to_string().trim());
+            self.globals.push_str(&format!("const{}: db {}, 0\n", self.global_counter, strval));
+            
+            let counter = self.global_counter;
+            self.defined_types.insert(expr.resolved_type.clone(), (counter, strval.clone()));
+            self.global_counter += 1;
+            
+            (strval, counter)
         }
     }
 
-    pub fn get_const_name(&mut self, expr: &Expression, global_counter: u64) -> (u64,String,u64) {
-        let mut globals = String::new();
+    pub fn get_const_name(&mut self, expr: &Expression) -> u64 {
         let mut genvar = String::new();
         match expr.node.as_ref() {
-            ExpressionType::Float {value} => {
+            ExpressionType::Float { value } => {
                 if value.fract() == 0.0 {
                     genvar.push_str(&format!("dq {}.0\n", value));
                     if let Some(num) = self.defined_consts.get(&expr.to_string()) {
-                        return (num.clone(),globals,global_counter)
+                        return *num;
                     }
                 } else {
                     genvar.push_str(&format!("dq {}\n", value));
                     if let Some(num) = self.defined_consts.get(&expr.to_string()) {
-                        return (num.clone(),globals,global_counter)
+                        return *num;
                     }
                 }
             }
-            ExpressionType::Int {value} => {
-                    genvar.push_str(&format!("dq {}\n", value));
-                    if let Some(num) = self.defined_consts.get(&expr.to_string()) {
-                        return (num.clone(),globals,global_counter)
-                    }
+            ExpressionType::Int { value } => {
+                genvar.push_str(&format!("dq {}\n", value));
+                if let Some(num) = self.defined_consts.get(&expr.to_string()) {
+                    return *num;
+                }
             }
             ExpressionType::True {} => {
                 genvar.push_str(&format!("dq {}\n", 1));
                 if let Some(num) = self.defined_consts.get(&expr.to_string()) {
-                    return (num.clone(),globals,global_counter)
+                    return *num;
                 }
             }
             ExpressionType::False {} => {
                 genvar.push_str(&format!("dq {}\n", 0));
                 if let Some(num) = self.defined_consts.get(&expr.to_string()) {
-                    return (num.clone(),globals,global_counter)
+                    return *num;
                 }
             }
             _ => {}
         }
-        self.defined_consts.insert(genvar.clone(), global_counter);
-        globals.push_str(&format!("const{}: ", global_counter));
-        globals.push_str(&genvar);
-        (global_counter,globals,global_counter + 1)
+        
+        let counter = self.global_counter;
+        self.defined_consts.insert(genvar.clone(), counter);
+        self.globals.push_str(&format!("const{}: ", counter));
+        self.globals.push_str(&genvar);
+        self.global_counter += 1;
+        
+        counter
     }
 
     /// Generate assembly for a single expression.
-    pub fn generate_expression(&mut self, expr: &Expression, global_counter: u64) -> (String, String, u64) {
-        let mut globals = String::new();
-        let mut func = String::new();
-        let mut new_global_counter = global_counter;
-
+    pub fn generate_expression(&mut self, expr: &Expression) {
         match expr.node.as_ref() {
             ExpressionType::ArrayIndex { array, indices } => {
-                func.push_str("// TODO: Generate assembly for array index expression\n");
-                let (array_globals, array_func, array_counter) = self.generate_expression(array, new_global_counter);
-                globals.push_str(&array_globals);
-                func.push_str(&array_func);
-                new_global_counter = array_counter;
+                self.code.push_str("// TODO: Generate assembly for array index expression\n");
+                self.generate_expression(array);
 
                 for index in indices {
-                    let (idx_globals, idx_func, idx_counter) = self.generate_expression(index, new_global_counter);
-                    globals.push_str(&idx_globals);
-                    func.push_str(&idx_func);
-                    new_global_counter = idx_counter;
+                    self.generate_expression(index);
                 }
             }
             ExpressionType::ArrayLiteral { elements } => {
-                func.push_str("// TODO: Generate assembly for array literal expression\n");
+                self.code.push_str("// TODO: Generate assembly for array literal expression\n");
                 for element in elements {
-                    let (elem_globals, elem_func, elem_counter) = self.generate_expression(element, new_global_counter);
-                    globals.push_str(&elem_globals);
-                    func.push_str(&elem_func);
-                    new_global_counter = elem_counter;
+                    self.generate_expression(element);
                 }
             }
             ExpressionType::Binop { operator, left, right } => {
-                let (left_globals, left_func, left_counter) = self.generate_expression(left, new_global_counter);
-                globals.push_str(&left_globals);
-                func.push_str(&left_func);
-                new_global_counter = left_counter;
-
-                let (right_globals, right_func, right_counter) = self.generate_expression(right, new_global_counter);
-                globals.push_str(&right_globals);
-                func.push_str(&right_func);
-                new_global_counter = right_counter;
+                self.generate_expression(left);
+                self.generate_expression(right);
+                
                 match left.resolved_type {
                     Type::Int => {
-                        func.push_str("\tpop rax\n");
-                        func.push_str("\tpop r10\n");
+                        self.code.push_str("\tpop rax\n");
+                        self.code.push_str("\tpop r10\n");
                         match *operator {
-                            "+" => {func.push_str("\tadd rax, r10\n");}
-                            "-" => {func.push_str("\tsub rax, r10\n");}
-                            "*" => {func.push_str("\tmul rax, r10\n");}
-                            "/" => {func.push_str("\tdiv rax, r10\n");}
-                            "%" => {func.push_str("\tmod rax, r10\n");}
+                            "+" => { self.code.push_str("\tadd rax, r10\n"); }
+                            "-" => { self.code.push_str("\tsub rax, r10\n"); }
+                            "*" => { self.code.push_str("\tmul rax, r10\n"); }
+                            "/" => { self.code.push_str("\tdiv rax, r10\n"); }
+                            "%" => { self.code.push_str("\tmod rax, r10\n"); }
                             _ => {}
                         }
                     }
                     _ => {}
                 }
-
             }
             ExpressionType::Call { function, arguments } => {
-                func.push_str("// TODO: Generate assembly for function call\n");
+                self.code.push_str("// TODO: Generate assembly for function call\n");
                 for arg in arguments {
-                    let (arg_globals, arg_func, arg_counter) = self.generate_expression(arg, new_global_counter);
-                    globals.push_str(&arg_globals);
-                    func.push_str(&arg_func);
-                    new_global_counter = arg_counter;
+                    self.generate_expression(arg);
                 }
-                func.push_str(&format!("// Call function {}\n", function));
+                self.code.push_str(&format!("// Call function {}\n", function));
             }
             ExpressionType::Dot { struct_variable, field } => {
-                func.push_str("// TODO: Generate assembly for struct field access (dot expression)\n");
-                let (var_globals, var_func, var_counter) = self.generate_expression(struct_variable, new_global_counter);
-                globals.push_str(&var_globals);
-                func.push_str(&var_func);
-                new_global_counter = var_counter;
-                func.push_str(&format!("// Access field {}\n", field));
+                self.code.push_str("// TODO: Generate assembly for struct field access (dot expression)\n");
+                self.generate_expression(struct_variable);
+                self.code.push_str(&format!("// Access field {}\n", field));
             }
-            ExpressionType::False => {
-                let (num,globals_const, global_counter_const) = self.get_const_name(expr,new_global_counter);
-                globals.push_str(&globals_const);
-                new_global_counter = global_counter_const;
-                func.push_str(&format!("\tmov rax, [rel const{}]\n", num));
-                func.push_str("\tpush rax\n");
-            }
-            ExpressionType::Float { value: _ } => {
-                let (num,globals_const, global_counter_const) = self.get_const_name(expr,new_global_counter);
-                globals.push_str(&globals_const);
-                new_global_counter = global_counter_const;
-                func.push_str(&format!("\tmov rax, [rel const{}]\n", num));
-                func.push_str("\tpush rax\n");
+            ExpressionType::False | ExpressionType::Float { .. } | ExpressionType::Int { .. } | ExpressionType::True => {
+                let num = self.get_const_name(expr);
+                self.code.push_str(&format!("\tmov rax, [rel const{}]\n", num));
+                self.code.push_str("\tpush rax\n");
             }
             ExpressionType::If { condition, then_branch, else_branch } => {
-                func.push_str("// TODO: Generate assembly for if expression with branching\n");
-                let (cond_globals, cond_func, cond_counter) = self.generate_expression(condition, new_global_counter);
-                globals.push_str(&cond_globals);
-                func.push_str(&cond_func);
-                new_global_counter = cond_counter;
-
-                func.push_str("// Then branch:\n");
-                let (then_globals, then_func, then_counter) = self.generate_expression(then_branch, new_global_counter);
-                globals.push_str(&then_globals);
-                func.push_str(&then_func);
-                new_global_counter = then_counter;
-
-                func.push_str("// Else branch:\n");
-                let (else_globals, else_func, else_counter) = self.generate_expression(else_branch, new_global_counter);
-                globals.push_str(&else_globals);
-                func.push_str(&else_func);
-                new_global_counter = else_counter;
-            }
-            ExpressionType::Int { value: _ } => {
-                let (num,globals_const, global_counter_const) = self.get_const_name(expr,new_global_counter);
-                globals.push_str(&globals_const);
-                new_global_counter = global_counter_const;
-                func.push_str(&format!("\tmov rax, [rel const{}]\n", num));
-                func.push_str("\tpush rax\n");
+                self.code.push_str("// TODO: Generate assembly for if expression with branching\n");
+                self.generate_expression(condition);
+                
+                self.code.push_str("// Then branch:\n");
+                self.generate_expression(then_branch);
+                
+                self.code.push_str("// Else branch:\n");
+                self.generate_expression(else_branch);
             }
             ExpressionType::StructLiteral { name, fields } => {
-                func.push_str("// TODO: Generate assembly for struct literal\n");
-                func.push_str(&format!("// Begin struct literal: {}\n", name));
+                self.code.push_str("// TODO: Generate assembly for struct literal\n");
+                self.code.push_str(&format!("// Begin struct literal: {}\n", name));
                 for field in fields {
-                    let (field_globals, field_func, field_counter) = self.generate_expression(field, new_global_counter);
-                    globals.push_str(&field_globals);
-                    func.push_str(&field_func);
-                    new_global_counter = field_counter;
+                    self.generate_expression(field);
                 }
-                func.push_str("// End struct literal\n");
+                self.code.push_str("// End struct literal\n");
             }
             ExpressionType::SumLoop { range, body } => {
-                func.push_str("// TODO: Generate assembly for sum loop\n");
+                self.code.push_str("// TODO: Generate assembly for sum loop\n");
                 // For each range variable, generate code for the bound expression
                 for (_, bound) in range {
-                    let (bound_globals, bound_func, bound_counter) = self.generate_expression(bound, new_global_counter);
-                    globals.push_str(&bound_globals);
-                    func.push_str(&bound_func);
-                    new_global_counter = bound_counter;
+                    self.generate_expression(bound);
                 }
                 
                 // Generate code for the body
-                let (body_globals, body_func, body_counter) = self.generate_expression(body, new_global_counter);
-                globals.push_str(&body_globals);
-                func.push_str(&body_func);
-                new_global_counter = body_counter;
+                self.generate_expression(body);
             }
             ExpressionType::ArrayLoop { range, body } => {
-                func.push_str("// TODO: Generate assembly for array loop\n");
+                self.code.push_str("// TODO: Generate assembly for array loop\n");
                 // For each range variable, generate code for the bound expression
                 for (_, bound) in range {
-                    let (bound_globals, bound_func, bound_counter) = self.generate_expression(bound, new_global_counter);
-                    globals.push_str(&bound_globals);
-                    func.push_str(&bound_func);
-                    new_global_counter = bound_counter;
+                    self.generate_expression(bound);
                 }
+                
                 // Generate code for the body
-                let (body_globals, body_func, body_counter) = self.generate_expression(body, new_global_counter);
-                globals.push_str(&body_globals);
-                func.push_str(&body_func);
-                new_global_counter = body_counter;
-            }
-            ExpressionType::True => {
-                let (num,globals_const, global_counter_const) = self.get_const_name(expr,new_global_counter);
-                globals.push_str(&globals_const);
-                new_global_counter = global_counter_const;
-                func.push_str(&format!("\tmov rax, [rel const{}]\n", num));
-                func.push_str("\tpush rax\n");
+                self.generate_expression(body);
             }
             ExpressionType::Unop { operator: _, expression } => {
                 match expression.resolved_type {
-                    Type::Bool =>{
-                        let (expr_globals, expr_func, expr_counter) = self.generate_expression(expression, new_global_counter);
-                        globals.push_str(&expr_globals);
-                        func.push_str(&expr_func);
-                        new_global_counter = expr_counter;
-                        func.push_str("\tpop rax\n");
-                        func.push_str("\txor rax, 1\n");
-                        func.push_str("\tpush rax\n");
+                    Type::Bool => {
+                        self.generate_expression(expression);
+                        self.code.push_str("\tpop rax\n");
+                        self.code.push_str("\txor rax, 1\n");
+                        self.code.push_str("\tpush rax\n");
                     }
-                    Type::Float =>{
-                        let (expr_globals, expr_func, expr_counter) = self.generate_expression(expression, new_global_counter);
-                        globals.push_str(&expr_globals);
-                        func.push_str(&expr_func);
-                        new_global_counter = expr_counter;
-                        func.push_str("\tmovsd xmm1, [rsp]\n\n");
-                        func.push_str("\tadd rsp, 8\n");
-                        func.push_str("\tpxor xmm0, xmm0\n");
-                        func.push_str("\tsubsd xmm0, xmm1\n");
-                        func.push_str("\tsub rsp, 8\n");
-                        func.push_str("\tmovsd [rsp], xmm0\n");
+                    Type::Float => {
+                        self.generate_expression(expression);
+                        self.code.push_str("\tmovsd xmm1, [rsp]\n\n");
+                        self.code.push_str("\tadd rsp, 8\n");
+                        self.code.push_str("\tpxor xmm0, xmm0\n");
+                        self.code.push_str("\tsubsd xmm0, xmm1\n");
+                        self.code.push_str("\tsub rsp, 8\n");
+                        self.code.push_str("\tmovsd [rsp], xmm0\n");
                     }
-                    Type::Int =>{
-                        let (expr_globals, expr_func, expr_counter) = self.generate_expression(expression, new_global_counter);
-                        globals.push_str(&expr_globals);
-                        func.push_str(&expr_func);
-                        new_global_counter = expr_counter;
-                        func.push_str("\tpop rax\n");
-                        func.push_str("\tneg rax\n");
-                        func.push_str("\tpush rax\n");
+                    Type::Int => {
+                        self.generate_expression(expression);
+                        self.code.push_str("\tpop rax\n");
+                        self.code.push_str("\tneg rax\n");
+                        self.code.push_str("\tpush rax\n");
                     }
-                    _ => {unreachable!()}
+                    _ => { unreachable!() }
                 }
             }
             ExpressionType::Variable { name } => {
-                func.push_str("// Generate assembly for variable access\n");
-                func.push_str(&format!("LOAD_VAR {}\n", name));
+                self.code.push_str("// Generate assembly for variable access\n");
+                self.code.push_str(&format!("LOAD_VAR {}\n", name));
             }
             ExpressionType::Void => {
-                func.push_str("// Generate assembly for void literal (no operation)\n");
+                self.code.push_str("// Generate assembly for void literal (no operation)\n");
             }
         }
-
-        (globals, func, new_global_counter)
     }
 
     /// Generate assembly code for a statement.
-    fn generate_statement(&mut self, stmt: &Statement, global_counter: u64) -> (String, String, u64) {
-        let mut globals = String::new();
-        let mut func = String::new();
-        let mut new_global_counter = global_counter;
-
+    fn generate_statement(&mut self, stmt: &Statement) {
         match &stmt.node {
             StatementType::Let { variable, rvalue } => {
-                func.push_str("// Generate assembly for let statement\n");
-                let (rvalue_globals, rvalue_func, rvalue_counter) = self.generate_expression(rvalue, new_global_counter);
-                globals.push_str(&rvalue_globals);
-                func.push_str(&rvalue_func);
-                new_global_counter = rvalue_counter;
-                func.push_str(&format!("// Assign result to variable {}\n", variable.name));
+                self.code.push_str("// Generate assembly for let statement\n");
+                self.generate_expression(rvalue);
+                self.code.push_str(&format!("// Assign result to variable {}\n", variable.name));
             }
             StatementType::Assert { condition, message } => {
-                func.push_str("// Generate assembly for assert statement\n");
-                let (cond_globals, cond_func, cond_counter) = self.generate_expression(condition, new_global_counter);
-                globals.push_str(&cond_globals);
-                func.push_str(&cond_func);
-                new_global_counter = cond_counter;
-                func.push_str(&format!("// Assert with message: {}\n", message));
+                self.code.push_str("// Generate assembly for assert statement\n");
+                self.generate_expression(condition);
+                self.code.push_str(&format!("// Assert with message: {}\n", message));
             }
             StatementType::Return { value } => {
-                func.push_str("// Generate assembly for return statement\n");
-                let (value_globals, value_func, value_counter) = self.generate_expression(value, new_global_counter);
-                globals.push_str(&value_globals);
-                func.push_str(&value_func);
-                new_global_counter = value_counter;
-                func.push_str("// Return the value\n");
+                self.code.push_str("// Generate assembly for return statement\n");
+                self.generate_expression(value);
+                self.code.push_str("// Return the value\n");
             }
         }
-        
-        (globals, func, new_global_counter)
     }
 
     /// Generate assembly for a single command.
-    fn generate_command(&mut self, command: &Command<'a>, global_counter: u64) -> (String, String, u64) {
-        let mut globals = String::new();
-        let mut func = String::new();
-        let mut new_global_counter = global_counter;
+    fn generate_command(&mut self, command: &Command<'a>) {
         match command.node.as_ref() {
             CommandType::Assert { message, condition } => {
-                let (cond_globals, cond_func, cond_counter) = self.generate_expression(condition, new_global_counter);
-                globals.push_str(&cond_globals);
-                func.push_str(&cond_func);
-                func.push_str("\tpop rax\n");
-                func.push_str("\tcmp rax, 0\n");
-                func.push_str(&format!("\tje _fail_assertion ; {}\n", message));
-                new_global_counter = cond_counter;
+                self.generate_expression(condition);
+                self.code.push_str("\tpop rax\n");
+                self.code.push_str("\tcmp rax, 0\n");
+                self.code.push_str(&format!("\tje _fail_assertion ; {}\n", message));
             }
-            CommandType::Function { name, parameters:_, return_type: _, statements, has_return: _ } => {
-                func.push_str(&format!("\n{}:\n", name));
-                func.push_str("\tpush rbp\n");
-                func.push_str("\tmov rbp, rsp\n");
-                
-                // for (param, param_type) in parameters {
-                //     // Parameter handling would go here
-                // }
+            CommandType::Function { name, parameters: _, return_type: _, statements, has_return: _ } => {
+                self.code.push_str(&format!("\n{}:\n", name));
+                self.code.push_str("\tpush rbp\n");
+                self.code.push_str("\tmov rbp, rsp\n");
                 
                 for stmt in statements {
-                    let (stmt_globals, stmt_func, stmt_counter) = self.generate_statement(stmt, new_global_counter);
-                    globals.push_str(&stmt_globals);
-                    func.push_str(&stmt_func);
-                    new_global_counter = stmt_counter;
+                    self.generate_statement(stmt);
                 }
                 
-                func.push_str("\tpop rbp\n");
-                func.push_str("\tret\n");
+                self.code.push_str("\tpop rbp\n");
+                self.code.push_str("\tret\n");
             }
             CommandType::Let { variable, rvalue } => {
-                let (rvalue_globals, rvalue_func, rvalue_counter) = self.generate_expression(rvalue, new_global_counter);
-                globals.push_str(&rvalue_globals);
-                func.push_str(&rvalue_func);
+                self.generate_expression(rvalue);
                 
                 // Store variable in local storage or memory
-                func.push_str(&format!("\t; Store variable {}\n", variable.name));
-                
-                new_global_counter = rvalue_counter;
+                self.code.push_str(&format!("\t; Store variable {}\n", variable.name));
             }
             CommandType::Print { message } => {
                 // Add the message string to globals
-                globals.push_str(&format!("msg{}: db `{}`, 0\n", new_global_counter, message));
+                self.globals.push_str(&format!("msg{}: db `{}`, 0\n", self.global_counter, message));
                 
                 // Print the message
-                func.push_str(&format!("\tlea rdi, [rel msg{}]\n", new_global_counter));
-                func.push_str("\tcall _print\n");
+                self.code.push_str(&format!("\tlea rdi, [rel msg{}]\n", self.global_counter));
+                self.code.push_str("\tcall _print\n");
                 
-                new_global_counter += 1;
+                self.global_counter += 1;
             }
             CommandType::Read { source, destination: _ } => {
                 // Add the source filename to globals
-                globals.push_str(&format!("source{}: db `{}`, 0\n", new_global_counter, source));
+                self.globals.push_str(&format!("source{}: db `{}`, 0\n", self.global_counter, source));
+                
                 // Generate code to call _read_image
-                func.push_str(&format!("\tlea rdi, [rel source{}]\n", new_global_counter));
-                func.push_str("\t; Set up destination buffer\n");
-                func.push_str("\tcall _read_image\n");
-                new_global_counter += 1;
+                self.code.push_str(&format!("\tlea rdi, [rel source{}]\n", self.global_counter));
+                self.code.push_str("\t; Set up destination buffer\n");
+                self.code.push_str("\tcall _read_image\n");
+                
+                self.global_counter += 1;
             }
             CommandType::Show { expression } => {
-                let (expr_globals, expr_func, expr_counter) = self.generate_expression(expression, new_global_counter);
-                new_global_counter = expr_counter;
-                globals.push_str(&expr_globals);
-                func.push_str(&expr_func);
-                let (comment, count, type_globals, type_counter) = self.get_type_name(expression,new_global_counter);
-                globals.push_str(&type_globals);
-                new_global_counter = type_counter;
-                func.push_str(&format!("\tlea rdi, [rel const{}] ; {}\n",count,comment));
-                func.push_str("\tlea rsi, [rsp]\n");
-                func.push_str("\tcall _show\n");
-                func.push_str("\tadd rsp, 8\n");
+                self.generate_expression(expression);
+                let (comment, count) = self.get_type_name(expression);
+                
+                self.code.push_str(&format!("\tlea rdi, [rel const{}] ; {}\n", count, comment));
+                self.code.push_str("\tlea rsi, [rsp]\n");
+                self.code.push_str("\tcall _show\n");
+                self.code.push_str("\tadd rsp, 8\n");
             }
             CommandType::Struct { name, elements } => {
                 // Just a type definition, no runtime code needed
                 for (field, typ) in elements {
                     // Add struct information to assembly comments
-                    func.push_str(&format!("\t; Struct {} field {} type {}\n", name, field, typ));
+                    self.code.push_str(&format!("\t; Struct {} field {} type {}\n", name, field, typ));
                 }
             }
             CommandType::Time { command: inner_command } => {
                 // Call _get_time before the command
-                func.push_str("\tcall _get_time\n");
-                func.push_str("\tpush rax\n");
+                self.code.push_str("\tcall _get_time\n");
+                self.code.push_str("\tpush rax\n");
                 
                 // Generate code for the inner command
-                let (inner_globals, inner_func, inner_counter) = self.generate_command(inner_command, new_global_counter);
-                globals.push_str(&inner_globals);
-                func.push_str(&inner_func);
+                self.generate_command(inner_command);
                 
                 // Call _print_time after the command
-                func.push_str("\tpop rdi\n");
-                func.push_str("\tcall _print_time\n");
-                
-                new_global_counter = inner_counter;
+                self.code.push_str("\tpop rdi\n");
+                self.code.push_str("\tcall _print_time\n");
             }
             CommandType::Write { source, destination } => {
                 // Generate code for the source expression
-                let (source_globals, source_func, source_counter) = self.generate_expression(source, new_global_counter);
-                globals.push_str(&source_globals);
-                func.push_str(&source_func);
+                self.generate_expression(source);
+                
                 // Add the destination filename to globals
-                globals.push_str(&format!("dest{}: db `{}`, 0\n", new_global_counter, destination));
+                self.globals.push_str(&format!("dest{}: db `{}`, 0\n", self.global_counter, destination));
+                
                 // Generate code to call _write_image
-                func.push_str("\t; Set up source buffer from stack\n");
-                func.push_str(&format!("\tlea rdi, [rel dest{}]\n", new_global_counter));
-                func.push_str("\tcall _write_image\n");
-                new_global_counter = source_counter + 1;
+                self.code.push_str("\t; Set up source buffer from stack\n");
+                self.code.push_str(&format!("\tlea rdi, [rel dest{}]\n", self.global_counter));
+                self.code.push_str("\tcall _write_image\n");
+                
+                self.global_counter += 1;
             }
         }
-        (globals, func, new_global_counter)
     }
 
-    pub fn generate_assembly(
-        &mut self,
-        commands: Vec<Command<'a>>,
-        environment: TypeEnvironment<'a>) -> String {
+    pub fn generate_assembly(&mut self, commands: Vec<Command<'a>>, _environment: TypeEnvironment<'a>) -> String {
+        // Generate imports section
         let mut imports = String::new();
         imports.push_str("\tglobal jpl_main\n\tglobal _jpl_main\n\textern _fail_assertion\n\textern _jpl_alloc\n\textern _get_time\n\textern _show\n\textern _print\n\textern _print_time\n\textern _read_image\n\textern _write_image\n\textern _fmod\n\textern _sqrt\n\textern _exp\n\textern _sin\n\textern _cos\n\textern _tan\n\textern _asin\n\textern _acos\n\textern _atan\n\textern _log\n\textern _pow\n\textern _atan2\n\textern _to_int\n\textern _to_float\n\n");
-        let mut all_globals = String::new();
-        all_globals.push_str("section .data\n");
-        let mut main = String::new();
-        main.push_str("\nsection .text\n");
-        main.push_str("jpl_main:\n");
-        main.push_str("_jpl_main:\n");
-        main.push_str("\tpush rbp\n");
-        main.push_str("\tmov rbp, rsp\n");
-        main.push_str("\tpush r12\n");
-        main.push_str("\tmov r12, rbp\n");
-        let mut global_counter = 0;
+        
+        // Initialize globals section
+        self.globals = String::from("section .data\n");
+        
+        // Initialize main function
+        self.code = String::from("\nsection .text\n");
+        self.code.push_str("jpl_main:\n");
+        self.code.push_str("_jpl_main:\n");
+        self.code.push_str("\tpush rbp\n");
+        self.code.push_str("\tmov rbp, rsp\n");
+        self.code.push_str("\tpush r12\n");
+        self.code.push_str("\tmov r12, rbp\n");
+        
+        // Process all commands
         for command in commands {
-            let (globals, func, new_counter) = self.generate_command(&command, global_counter);
-            all_globals.push_str(&globals);
-            main.push_str(&func);
-            global_counter = new_counter;
+            self.generate_command(&command);
         }
-        main.push_str("\tpop r12\n");
-        main.push_str("\tpop rbp\n");
-        main.push_str("\tret\n");
+        
+        // Finalize main function
+        self.code.push_str("\tpop r12\n");
+        self.code.push_str("\tpop rbp\n");
+        self.code.push_str("\tret\n");
 
+        // Combine all sections
         let mut assembly = String::new();
         assembly.push_str(&imports);
-        assembly.push_str(&all_globals);
-        assembly.push_str(&main);
+        assembly.push_str(&self.globals);
+        assembly.push_str(&self.code);
+        
         assembly
     }
 }
