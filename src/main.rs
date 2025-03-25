@@ -4,6 +4,7 @@ mod lexer;
 mod parser;
 mod typechecker;
 mod utils;
+mod asm_consts;
 use clap::Parser;
 use clap::ValueEnum;
 use std::io::{self, Write};

@@ -5,6 +5,7 @@ mod lexer;
 mod parser;
 mod typechecker;
 mod utils;
+mod asm_consts;
 use clap::Parser;
 use clap::ValueEnum;
 use std::io::{self, Write};
@@ -1014,6 +1015,123 @@ fn typecheck_expression<'a>(
     }
 }
 
+===== ./src/asm_consts.rs =====
+/// Constants used in the assembly generator
+pub mod asm_consts {
+    // Section labels
+    pub const DATA_SECTION: &str = "section .data\n";
+    pub const TEXT_SECTION: &str = "\nsection .text\n";
+    
+    // Register names
+    pub const RAX: &str = "rax";
+    pub const RBP: &str = "rbp";
+    pub const RSP: &str = "rsp";
+    pub const RDI: &str = "rdi";
+    pub const RSI: &str = "rsi";
+    pub const RDX: &str = "rdx";
+    pub const RCX: &str = "rcx";
+    pub const R8: &str = "r8";
+    pub const R9: &str = "r9";
+    pub const R10: &str = "r10";
+    pub const R12: &str = "r12";
+    pub const R13: &str = "r13";
+    pub const R14: &str = "r14";
+    pub const R15: &str = "r15";
+    pub const XMM0: &str = "xmm0";
+    pub const XMM1: &str = "xmm1";
+    
+    // Argument registers in order (x86-64 calling convention)
+    pub const ARG_REGISTERS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+
+    // Floating point instructions
+    pub const XMM_MOVSD_FROM_STACK: &str = "\tmovsd xmm{}, [rsp]\n";
+    pub const XMM_MOVSD_TO_STACK: &str = "\tmovsd [rsp], xmm{}\n";
+    pub const XMM_ADD: &str = "\taddsd xmm0, xmm1\n";
+    pub const XMM_SUB: &str = "\tsubsd xmm0, xmm1\n";
+    pub const XMM_MUL: &str = "\tmulsd xmm0, xmm1\n";
+    pub const XMM_DIV: &str = "\tdivsd xmm0, xmm1\n";
+    pub const XMM_PXOR: &str = "\tpxor xmm0, xmm0\n";
+    
+    // Integer operations
+    pub const INT_ADD: &str = "\tadd rax, r10\n";
+    pub const INT_SUB: &str = "\tsub rax, r10\n";
+    pub const INT_MUL: &str = "\timul rax, r10\n";
+    pub const INT_DIV_PREP: &str = "\tcqo\n";
+    pub const INT_DIV: &str = "\tidiv r10\n";
+    pub const INT_MOV_REMAINDER: &str = "\tmov rax, rdx\n";
+    pub const INT_NEG: &str = "\tneg rax\n";
+    pub const INT_XOR_BOOL: &str = "\txor rax, 1\n";
+    pub const INT_AND: &str = "\tand rax, r10\n";
+    pub const INT_OR: &str = "\tor rax, r10\n";
+    pub const INT_CMP: &str = "\tcmp rax, r10\n";
+    pub const INT_TEST: &str = "\ttest rax, rax\n";
+    pub const INT_SETE: &str = "\tsete al\n";
+    pub const INT_SETNE: &str = "\tsetne al\n";
+    pub const INT_SETL: &str = "\tsetl al\n";
+    pub const INT_SETLE: &str = "\tsetle al\n";
+    pub const INT_SETG: &str = "\tsetg al\n";
+    pub const INT_SETGE: &str = "\tsetge al\n";
+    pub const INT_AND_ONE: &str = "\tand rax, 1\n";
+    
+    // Function prologue and epilogue
+    pub const FUNCTION_PROLOGUE_1: &str = "\tpush rbp\n";
+    pub const FUNCTION_PROLOGUE_2: &str = "\tmov rbp, rsp\n";
+    pub const FUNCTION_EPILOGUE_1: &str = "\tmov rsp, rbp\n";
+    pub const FUNCTION_EPILOGUE_2: &str = "\tpop rbp\n";
+    pub const FUNCTION_EPILOGUE_3: &str = "\tret\n";
+    pub const FUNCTION_SAVE_REGS: &str = "\tpush r12\n\tpush r13\n\tpush r14\n\tpush r15\n";
+    pub const FUNCTION_RESTORE_REGS: &str = "\tpop r15\n\tpop r14\n\tpop r13\n\tpop r12\n";
+    
+    // Error messages
+    pub const DBZ: &str = "divide by zero";
+    pub const MBZ: &str = "mod by zero";
+    
+    // Label prefixes
+    pub const LABEL_ELSE: &str = "else";
+    pub const LABEL_ENDIF: &str = "endif";
+    pub const LABEL_ASSERT_PASS: &str = "assert_pass";
+    pub const JUMP: &str = "jump";
+    
+    // Stack alignment
+    pub const STACK_ALIGN_COMMENT: &str = "\tsub rsp, 8 ; Align stack\n";
+    pub const STACK_UNALIGN_COMMENT: &str = "\tadd rsp, 8 ; Remove alignment\n";
+
+    // Main function labels
+    pub const MAIN_LABEL_1: &str = "jpl_main:\n";
+    pub const MAIN_LABEL_2: &str = "_jpl_main:\n";
+    
+    // Import declarations
+    pub const IMPORTS: &str = "\tglobal jpl_main\n\
+\tglobal _jpl_main\n\
+\textern _fail_assertion\n\
+\textern _jpl_alloc\n\
+\textern _get_time\n\
+\textern _show\n\
+\textern _print\n\
+\textern _print_time\n\
+\textern _read_image\n\
+\textern _write_image\n\
+\textern _fmod\n\
+\textern _sqrt\n\
+\textern _exp\n\
+\textern _sin\n\
+\textern _cos\n\
+\textern _tan\n\
+\textern _asin\n\
+\textern _acos\n\
+\textern _atan\n\
+\textern _log\n\
+\textern _pow\n\
+\textern _atan2\n\
+\textern _to_int\n\
+\textern _to_float\n\
+\n";
+
+    // TODO comments
+    pub const TODO_ARRAY_INDEX: &str = "// TODO: Implement array indexing\n";
+    pub const TODO_ARRAY_LITERALS: &str = "// TODO: Implement array literals\n";
+
+}
 ===== ./src/ast.rs =====
 use crate::utils::Position;
 use std::{cell::Cell, fmt::Display};
@@ -2701,6 +2819,7 @@ use std::fmt::Write as _;
 
 use crate::ast::*;
 use crate::utils::*;
+use crate::asm_consts::asm_consts::*;
 
 pub fn generate_assembly<'a>(
     commands: Vec<Command<'a>>,
@@ -2752,16 +2871,16 @@ impl<'a> AssemblyGenerator<'a> {
             variable_map: HashMap::new(),
             global_counter: 0,
             label_counter: 0,
-            data_section: String::from("section .data\n"),
-            text_section: String::from("\nsection .text\n"),
+            data_section: String::from(DATA_SECTION),
+            text_section: String::from(TEXT_SECTION),
             stack_offset: 0,
         }
     }
 
     /// Generate a unique label for jumps and branches
     fn next_label(&mut self, prefix: &str) -> String {
-        let label = format!("{}_{}", prefix, self.label_counter);
         self.label_counter += 1;
+        let label = format!(".{}{}", prefix, self.label_counter);
         label
     }
 
@@ -2821,7 +2940,7 @@ impl<'a> AssemblyGenerator<'a> {
     /// Add a string to the data section
     fn add_string(&mut self, s: &str) -> u64 {
         let counter = self.global_counter;
-        self.data_section.push_str(&format!("str{}: db `{}`, 0\n", counter, s));
+        self.data_section.push_str(&format!("const{}: db `{}`, 0\n", counter, s));
         self.global_counter += 1;
         counter
     }
@@ -2846,8 +2965,8 @@ impl<'a> AssemblyGenerator<'a> {
 
     /// Generate assembly for a literal expression (int, float, bool)
     fn generate_literal(&mut self, expr: &Expression) {
-        self.load_constant(expr, "rax");
-        self.push_value("rax");
+        self.load_constant(expr, RAX);
+        self.push_value(RAX);
     }
 
     /// Generate assembly for unary operations
@@ -2857,9 +2976,9 @@ impl<'a> AssemblyGenerator<'a> {
         
         match expr.resolved_type {
             Type::Bool => {
-                self.pop_value("rax");
+                self.pop_value(RAX);
                 self.text_section.push_str("\txor rax, 1\n"); // Boolean NOT
-                self.push_value("rax");
+                self.push_value(RAX);
             }
             Type::Float => {
                 self.text_section.push_str("\tmovsd xmm1, [rsp]\n");
@@ -2872,71 +2991,118 @@ impl<'a> AssemblyGenerator<'a> {
                 self.text_section.push_str("\tmovsd [rsp], xmm0\n");
             }
             Type::Int => {
-                self.pop_value("rax");
+                self.pop_value(RAX);
                 self.text_section.push_str("\tneg rax\n"); // Integer negation
-                self.push_value("rax");
+                self.push_value(RAX);
             }
             _ => panic!("Unsupported type for unary operation: {}", expr.resolved_type),
         }
     }
 
-    /// Generate assembly for binary operations
     fn generate_binop(&mut self, operator: &str, left: &Expression, right: &Expression) {
         // Generate code for the right operand first (stack order)
-        self.generate_expression(right);
-        self.generate_expression(left);
+        self.generate_expression(right);  // Divisor
+        self.generate_expression(left);   // Dividend
         
         match left.resolved_type {
             Type::Int => {
-                self.pop_value("rax"); // Right operand
-                self.pop_value("r10"); // Left operand
+                self.pop_value(RAX);  // Dividend in rax
+                self.pop_value(R10);  // Divisor in r10
+                
                 match operator {
-                    "+" => self.text_section.push_str("\tadd rax, r10\n"),
-                    "-" => self.text_section.push_str("\tsub rax, r10\n"),
-                    "*" => self.text_section.push_str("\timul rax, r10\n"),
+                    "+" => {
+                        self.text_section.push_str("\tadd rax, r10\n");
+                        self.push_value(RAX);
+                    },
+                    "-" => {
+                        self.text_section.push_str("\tsub rax, r10\n");
+                        self.push_value(RAX);
+                    },
+                    "*" => {
+                        self.text_section.push_str("\timul rax, r10\n");
+                        self.push_value(RAX);
+                    },
                     "/" => {
-                        self.text_section.push_str("\tmov rdx, 0\n");
-                        self.text_section.push_str("\tidiv r10\n");
-                        self.text_section.push_str("\tmov r10, rax\n");
+                        // Add division by zero check
+                        let ok_label = self.next_label(JUMP);
+                        
+                        // Check if divisor is zero
+                        self.text_section.push_str("\tcmp r10, 0\n");
+                        self.text_section.push_str(&format!("\tjne {}\n", ok_label));
+                        
+                        // Handle division by zero error
+                        let err_msg = self.add_string(DBZ);
+                        self.text_section.push_str("\tsub rsp, 8 ; Align stack\n");
+                        self.text_section.push_str(&format!("\tlea rdi, [rel const{}] ; '{}'\n", err_msg,DBZ));
+                        self.text_section.push_str("\tcall _fail_assertion\n");
+                        self.text_section.push_str("\tadd rsp, 8 ; Remove alignment\n");
+                        
+                        // Continue with division if divisor is not zero
+                        self.text_section.push_str(&format!("{}:\n", ok_label));
+                        self.text_section.push_str(INT_DIV_PREP);
+                        self.text_section.push_str(INT_DIV);
+                        self.push_value(RAX);
                     },
                     "%" => {
-                        self.text_section.push_str("\tmov rdx, 0\n");
+                        // Add division by zero check
+                        let ok_label = self.next_label(JUMP);
+                        
+                        // Check if divisor is zero
+                        self.text_section.push_str("\tcmp r10, 0\n");
+                        self.text_section.push_str(&format!("\tjne {}\n", ok_label));
+                        
+                        // Handle division by zero error
+                        let err_msg = self.add_string("mod by zero");
+                        self.text_section.push_str("\tsub rsp, 8 ; Align stack\n");
+                        self.text_section.push_str(&format!("\tlea rdi, [rel const{}] ; 'mod by zero'\n", err_msg));
+                        self.text_section.push_str("\tcall _fail_assertion\n");
+                        self.text_section.push_str("\tadd rsp, 8 ; Remove alignment\n");
+                        
+                        // Continue with modulo if divisor is not zero
+                        self.text_section.push_str(&format!("{}:\n", ok_label));
+                        self.text_section.push_str("\tcqo\n");
                         self.text_section.push_str("\tidiv r10\n");
-                        self.text_section.push_str("\tmov r10, rdx\n");
+                        self.text_section.push_str("\tmov rax, rdx\n");
+                        self.push_value(RAX);
                     },
                     "==" => {
-                        self.text_section.push_str("\tcmp r10, rax\n");
-                        self.text_section.push_str("\tsete r10b\n");
-                        self.text_section.push_str("\tmovzx r10, r10b\n");
+                        self.text_section.push_str(INT_CMP);
+                        self.text_section.push_str(INT_SETE);
+                        self.text_section.push_str(INT_AND_ONE);
+                        self.push_value(RAX);
                     },
                     "!=" => {
-                        self.text_section.push_str("\tcmp r10, rax\n");
-                        self.text_section.push_str("\tsetne r10b\n");
-                        self.text_section.push_str("\tmovzx r10, r10b\n");
+                        self.text_section.push_str(INT_CMP);
+                        self.text_section.push_str(INT_SETNE);
+                        self.text_section.push_str(INT_AND_ONE);
+                        self.push_value(RAX);
                     },
                     "<" => {
-                        self.text_section.push_str("\tcmp r10, rax\n");
-                        self.text_section.push_str("\tsetl r10b\n");
-                        self.text_section.push_str("\tmovzx r10, r10b\n");
+                        self.text_section.push_str(INT_CMP);
+                        self.text_section.push_str(INT_SETL);
+                        self.text_section.push_str(INT_AND_ONE);
+                        self.push_value(RAX);
                     },
                     "<=" => {
-                        self.text_section.push_str("\tcmp r10, rax\n");
-                        self.text_section.push_str("\tsetle r10b\n");
-                        self.text_section.push_str("\tmovzx r10, r10b\n");
+                        self.text_section.push_str(INT_CMP);
+                        self.text_section.push_str(INT_SETLE);
+                        self.text_section.push_str(INT_AND_ONE);
+                        self.push_value(RAX);
                     },
                     ">" => {
-                        self.text_section.push_str("\tcmp r10, rax\n");
-                        self.text_section.push_str("\tsetg r10b\n");
-                        self.text_section.push_str("\tmovzx r10, r10b\n");
+                        self.text_section.push_str(INT_CMP);
+                        self.text_section.push_str(INT_SETG);
+                        self.text_section.push_str(INT_AND_ONE);
+                        self.push_value(RAX);
                     },
                     ">=" => {
-                        self.text_section.push_str("\tcmp r10, rax\n");
-                        self.text_section.push_str("\tsetge r10b\n");
-                        self.text_section.push_str("\tmovzx r10, r10b\n");
+                        self.text_section.push_str(INT_CMP);
+                        self.text_section.push_str(INT_SETGE);
+                        self.text_section.push_str(INT_AND_ONE);
+                        self.push_value(RAX);
                     },
                     _ => panic!("Unsupported binary operator for integers: {}", operator),
                 }
-                self.push_value("rax");
             },
             Type::Float => {
                 // Implement floating-point operations
@@ -2951,7 +3117,11 @@ impl<'a> AssemblyGenerator<'a> {
                     "+" => self.text_section.push_str("\taddsd xmm0, xmm1\n"),
                     "-" => self.text_section.push_str("\tsubsd xmm0, xmm1\n"),
                     "*" => self.text_section.push_str("\tmulsd xmm0, xmm1\n"),
-                    "/" => self.text_section.push_str("\tdivsd xmm0, xmm1\n"),
+                    "/" => {
+                        // We could add a check for division by zero here too, but
+                        // floating point division by zero typically results in Infinity, not an error
+                        self.text_section.push_str("\tdivsd xmm0, xmm1\n");
+                    },
                     _ => panic!("Unsupported binary operator for floats: {}", operator),
                 }
                 
@@ -2960,30 +3130,32 @@ impl<'a> AssemblyGenerator<'a> {
                 self.text_section.push_str("\tmovsd [rsp], xmm0\n");
             },
             Type::Bool => {
-                self.pop_value("r10"); // Left operand
-                self.pop_value("rax"); // Right operand
+                self.pop_value(RAX); // Left operand
+                self.pop_value(R10); // Right operand
                 
                 match operator {
                     "&&" => {
-                        self.text_section.push_str("\tand r10, rax\n");
+                        self.text_section.push_str("\tand rax, r10\n");
+                        self.push_value(RAX);
                     },
                     "||" => {
-                        self.text_section.push_str("\tor r10, rax\n");
+                        self.text_section.push_str("\tor rax, r10\n");
+                        self.push_value(RAX);
                     },
                     "==" => {
-                        self.text_section.push_str("\tcmp r10, rax\n");
-                        self.text_section.push_str("\tsete r10b\n");
-                        self.text_section.push_str("\tmovzx r10, r10b\n");
+                        self.text_section.push_str(INT_CMP);
+                        self.text_section.push_str(INT_SETE);
+                        self.text_section.push_str(INT_AND_ONE);
+                        self.push_value(RAX);
                     },
                     "!=" => {
-                        self.text_section.push_str("\tcmp r10, rax\n");
-                        self.text_section.push_str("\tsetne r10b\n");
-                        self.text_section.push_str("\tmovzx r10, r10b\n");
+                        self.text_section.push_str(INT_CMP);
+                        self.text_section.push_str(INT_SETNE);
+                        self.text_section.push_str(INT_AND_ONE);
+                        self.push_value(RAX);
                     },
                     _ => panic!("Unsupported binary operator for booleans: {}", operator),
                 }
-                
-                self.push_value("r10");
             },
             _ => panic!("Unsupported type for binary operation: {}", left.resolved_type),
         }
@@ -2996,7 +3168,7 @@ impl<'a> AssemblyGenerator<'a> {
         
         // Generate condition code
         self.generate_expression(condition);
-        self.pop_value("rax");
+        self.pop_value(RAX);
         self.text_section.push_str("\ttest rax, rax\n");
         self.text_section.push_str(&format!("\tjz {}\n", else_label));
         
@@ -3018,22 +3190,22 @@ impl<'a> AssemblyGenerator<'a> {
             match location {
                 VariableLocation::Stack(offset) => {
                     self.text_section.push_str(&format!("\tmov rax, [rbp{}]\n", if *offset >= 0 { format!("+{}", offset) } else { format!("{}", offset) }));
-                    self.push_value("rax");
+                    self.push_value(RAX);
                 },
                 VariableLocation::Register(reg) => {
                     self.text_section.push_str(&format!("\tmov rax, {}\n", reg));
-                    self.push_value("rax");
+                    self.push_value(RAX);
                 },
                 VariableLocation::Global(label) => {
                     self.text_section.push_str(&format!("\tmov rax, [rel {}]\n", label));
-                    self.push_value("rax");
+                    self.push_value(RAX);
                 },
             }
         } else {
             // Default fallback behavior for undefined variables (should be caught by typechecker)
             self.text_section.push_str(&format!("\t; LOAD_VAR {} (unresolved)\n", name));
             self.text_section.push_str("\tmov rax, 0\n");
-            self.push_value("rax");
+            self.push_value(RAX);
         }
     }
 
@@ -3066,7 +3238,7 @@ impl<'a> AssemblyGenerator<'a> {
         }
         
         // Return value is in rax, push it onto stack
-        self.push_value("rax");
+        self.push_value(RAX);
     }
 
     /// Generate assembly for array access
@@ -3078,7 +3250,7 @@ impl<'a> AssemblyGenerator<'a> {
         for index in indices {
             self.generate_expression(index);
             self.pop_value("rcx"); // Index
-            self.pop_value("rax"); // Array pointer
+            self.pop_value(RAX); // Array pointer
             
             // Calculate element address based on type size
             // This is a simplified implementation - real code would need to handle
@@ -3086,7 +3258,7 @@ impl<'a> AssemblyGenerator<'a> {
             self.text_section.push_str("\timul rcx, 8\n"); // Assuming 8-byte elements
             self.text_section.push_str("\tadd rax, rcx\n");
             self.text_section.push_str("\tmov rax, [rax]\n"); // Load the element
-            self.push_value("rax");
+            self.push_value(RAX);
         }
     }
 
@@ -3175,7 +3347,7 @@ impl<'a> AssemblyGenerator<'a> {
                 
                 // Generate code for the condition
                 self.generate_expression(condition);
-                self.pop_value("rax");
+                self.pop_value(RAX);
                 
                 // Check the condition
                 let skip_label = self.next_label("assert_pass");
@@ -3184,7 +3356,7 @@ impl<'a> AssemblyGenerator<'a> {
                 
                 // Call the assertion failure function
                 let msg_id = self.add_string(message);
-                self.text_section.push_str(&format!("\tlea rdi, [rel str{}]\n", msg_id));
+                self.text_section.push_str(&format!("\tlea rdi, [rel const{}]\n", msg_id));
                 self.text_section.push_str("\tcall _fail_assertion\n");
                 
                 // Skip label
@@ -3195,7 +3367,7 @@ impl<'a> AssemblyGenerator<'a> {
                 
                 // Generate code for the return value
                 self.generate_expression(value);
-                self.pop_value("rax"); // Return value goes in rax
+                self.pop_value(RAX); // Return value goes in rax
                 
                 // Clean up and return
                 self.text_section.push_str("\tmov rsp, rbp\n");
@@ -3214,7 +3386,7 @@ impl<'a> AssemblyGenerator<'a> {
                 
                 // Generate code for the condition
                 self.generate_expression(condition);
-                self.pop_value("rax");
+                self.pop_value(RAX);
                 
                 // Check the condition
                 let skip_label = self.next_label("assert_pass");
@@ -3223,7 +3395,7 @@ impl<'a> AssemblyGenerator<'a> {
                 
                 // Call the assertion failure function
                 let msg_id = self.add_string(message);
-                self.text_section.push_str(&format!("\tlea rdi, [rel str{}]\n", msg_id));
+                self.text_section.push_str(&format!("\tlea rdi, [rel const{}]\n", msg_id));
                 self.text_section.push_str("\tcall _fail_assertion\n");
                 
                 // Skip label
@@ -3295,7 +3467,7 @@ impl<'a> AssemblyGenerator<'a> {
                 let msg_id = self.add_string(message);
                 
                 // Print the message
-                self.text_section.push_str(&format!("\tlea rdi, [rel str{}]\n", msg_id));
+                self.text_section.push_str(&format!("\tlea rdi, [rel const{}]\n", msg_id));
                 self.text_section.push_str("\tcall _print\n");
             }
             CommandType::Read { source, destination } => {
@@ -3303,7 +3475,7 @@ impl<'a> AssemblyGenerator<'a> {
                 let source_id = self.add_string(source);
                 
                 // Call _read_image with the filename
-                self.text_section.push_str(&format!("\tlea rdi, [rel str{}]\n", source_id));
+                self.text_section.push_str(&format!("\tlea rdi, [rel const{}]\n", source_id));
                 
                 // TODO: Setup destination array
                 self.text_section.push_str("\t; TODO: Setup destination array\n");
@@ -3360,7 +3532,7 @@ impl<'a> AssemblyGenerator<'a> {
                 let dest_id = self.add_string(destination);
                 
                 // Call _write_image with the destination filename and source data
-                self.text_section.push_str(&format!("\tlea rdi, [rel str{}]\n", dest_id));
+                self.text_section.push_str(&format!("\tlea rdi, [rel const{}]\n", dest_id));
                 self.text_section.push_str("\tmov rsi, rsp\n"); // Source data is on the stack
                 self.text_section.push_str("\tcall _write_image\n");
                 
