@@ -322,7 +322,7 @@ impl Display for Statement<'_> {
 
 // -------------------------------------------------------------------------------------------- Type Nodes -----------------------------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,Hash,Eq, PartialEq)]
 pub enum Type<'a> {
     Unresolved,
     Int,

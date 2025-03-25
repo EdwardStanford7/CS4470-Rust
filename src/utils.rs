@@ -6,7 +6,7 @@ use std::{
 
 // --------------------------------------------------------------------------------------- Universal utils ---------------------------------------------------------------------------------------------
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub struct Position {
     line: usize,
     column: usize,

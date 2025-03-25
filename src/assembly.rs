@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::ast::*;
 use crate::utils::*;
 
@@ -5,42 +7,80 @@ pub fn generate_assembly<'a>(
     commands: Vec<Command<'a>>,
     environment: TypeEnvironment<'a>,
 ) -> String {
-    let generator = AssemblyGenerator::new(commands, environment);
-    generator.generate_assembly()
+    let mut generator = AssemblyGenerator::new();
+    return generator.generate_assembly(commands,environment);
 }
 
 struct AssemblyGenerator<'a> {
-    commands: Vec<Command<'a>>,
-    environment: TypeEnvironment<'a>,
+    defined_types: HashMap<Type<'a>,(u64,String)>,
+    defined_consts: HashMap<String,u64>
 }
 
 impl<'a> AssemblyGenerator<'a> {
-    pub fn new(commands: Vec<Command<'a>>, environment: TypeEnvironment<'a>) -> Self {
+    pub fn new() -> Self {
         Self {
-            commands,
-            environment,
+            defined_types: HashMap::new(),
+            defined_consts: HashMap::new()
         }
     }
 
-    pub fn get_type_name(&self, expr: &Expression, global_counter: u64) -> (String,u64,String,u64) {
+    pub fn get_type_name(&mut self, expr: &Expression<'a>, global_counter: u64) -> (String,u64,String,u64) {
         let mut globals = String::new();
-        //TODO: check if type exists
-        match expr.resolved_type {
-            Type::Int => {
-                let strval = "`(IntType)`";
-                globals.push_str(&format!("const{}: db {}, 0\n", global_counter,strval));
-                (strval.to_string(),global_counter,globals,global_counter + 1)
-            }
-            _ => {
-                let strval = "`(UNKNOWN)`";
-                globals.push_str(&format!("const{}: db {}, 0\n", global_counter,strval));
-                (strval.to_string(),global_counter,globals,global_counter + 1)
-            }
+        if let Some((num,name)) = self.defined_types.get(&expr.resolved_type) {
+            (name.to_string(),num.clone(),globals,global_counter)
+        } else {
+            let strval = format!("`{}`",expr.resolved_type.to_string().trim());
+            globals.push_str(&format!("const{}: db {}, 0\n", global_counter,strval));
+            self.defined_types.insert(expr.resolved_type.clone(), (global_counter,strval.to_string()));
+            (strval.to_string(),global_counter,globals,global_counter + 1)
         }
+    }
+
+    pub fn get_const_name(&mut self, expr: &Expression, global_counter: u64) -> (u64,String,u64) {
+        let mut globals = String::new();
+        let mut genvar = String::new();
+        match expr.node.as_ref() {
+            ExpressionType::Float {value} => {
+                if value.fract() == 0.0 {
+                    genvar.push_str(&format!("dq {}.0\n", value));
+                    if let Some(num) = self.defined_consts.get(&expr.to_string()) {
+                        return (num.clone(),globals,global_counter)
+                    }
+                } else {
+                    genvar.push_str(&format!("dq {}\n", value));
+                    if let Some(num) = self.defined_consts.get(&expr.to_string()) {
+                        return (num.clone(),globals,global_counter)
+                    }
+                }
+            }
+            ExpressionType::Int {value} => {
+                    genvar.push_str(&format!("dq {}\n", value));
+                    if let Some(num) = self.defined_consts.get(&expr.to_string()) {
+                        return (num.clone(),globals,global_counter)
+                    }
+            }
+            ExpressionType::True {} => {
+                genvar.push_str(&format!("dq {}\n", 1));
+                if let Some(num) = self.defined_consts.get(&expr.to_string()) {
+                    return (num.clone(),globals,global_counter)
+                }
+            }
+            ExpressionType::False {} => {
+                genvar.push_str(&format!("dq {}\n", 0));
+                if let Some(num) = self.defined_consts.get(&expr.to_string()) {
+                    return (num.clone(),globals,global_counter)
+                }
+            }
+            _ => {}
+        }
+        self.defined_consts.insert(genvar.clone(), global_counter);
+        globals.push_str(&format!("const{}: ", global_counter));
+        globals.push_str(&genvar);
+        (global_counter,globals,global_counter + 1)
     }
 
     /// Generate assembly for a single expression.
-    pub fn generate_expression(&self, expr: &Expression, global_counter: u64) -> (String, String, u64) {
+    pub fn generate_expression(&mut self, expr: &Expression, global_counter: u64) -> (String, String, u64) {
         let mut globals = String::new();
         let mut func = String::new();
         let mut new_global_counter = global_counter;
@@ -70,7 +110,6 @@ impl<'a> AssemblyGenerator<'a> {
                 }
             }
             ExpressionType::Binop { operator, left, right } => {
-                func.push_str("// Generate assembly for binary operation\n");
                 let (left_globals, left_func, left_counter) = self.generate_expression(left, new_global_counter);
                 globals.push_str(&left_globals);
                 func.push_str(&left_func);
@@ -80,8 +119,22 @@ impl<'a> AssemblyGenerator<'a> {
                 globals.push_str(&right_globals);
                 func.push_str(&right_func);
                 new_global_counter = right_counter;
+                match left.resolved_type {
+                    Type::Int => {
+                        func.push_str("\tpop rax\n");
+                        func.push_str("\tpop r10\n");
+                        match *operator {
+                            "+" => {func.push_str("\tadd rax, r10\n");}
+                            "-" => {func.push_str("\tsub rax, r10\n");}
+                            "*" => {func.push_str("\tmul rax, r10\n");}
+                            "/" => {func.push_str("\tdiv rax, r10\n");}
+                            "%" => {func.push_str("\tmod rax, r10\n");}
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
 
-                func.push_str(&format!("// Apply binary operator {}\n", operator));
             }
             ExpressionType::Call { function, arguments } => {
                 func.push_str("// TODO: Generate assembly for function call\n");
@@ -102,14 +155,18 @@ impl<'a> AssemblyGenerator<'a> {
                 func.push_str(&format!("// Access field {}\n", field));
             }
             ExpressionType::False => {
-                func.push_str("\tmov rax, 0\n");
+                let (num,globals_const, global_counter_const) = self.get_const_name(expr,new_global_counter);
+                globals.push_str(&globals_const);
+                new_global_counter = global_counter_const;
+                func.push_str(&format!("\tmov rax, [rel const{}]\n", num));
                 func.push_str("\tpush rax\n");
             }
-            ExpressionType::Float { value } => {
-                globals.push_str(&format!("const{}: dq {}\n", new_global_counter, value));
-                func.push_str(&format!("\tmov rax, [rel const{}]\n", new_global_counter));
+            ExpressionType::Float { value: _ } => {
+                let (num,globals_const, global_counter_const) = self.get_const_name(expr,new_global_counter);
+                globals.push_str(&globals_const);
+                new_global_counter = global_counter_const;
+                func.push_str(&format!("\tmov rax, [rel const{}]\n", num));
                 func.push_str("\tpush rax\n");
-                new_global_counter += 1;
             }
             ExpressionType::If { condition, then_branch, else_branch } => {
                 func.push_str("// TODO: Generate assembly for if expression with branching\n");
@@ -130,11 +187,12 @@ impl<'a> AssemblyGenerator<'a> {
                 func.push_str(&else_func);
                 new_global_counter = else_counter;
             }
-            ExpressionType::Int { value } => {
-                globals.push_str(&format!("const{}: dq {}\n", new_global_counter, value));
-                func.push_str(&format!("\tmov rax, [rel const{}] ; {}\n", new_global_counter, value));
+            ExpressionType::Int { value: _ } => {
+                let (num,globals_const, global_counter_const) = self.get_const_name(expr,new_global_counter);
+                globals.push_str(&globals_const);
+                new_global_counter = global_counter_const;
+                func.push_str(&format!("\tmov rax, [rel const{}]\n", num));
                 func.push_str("\tpush rax\n");
-                new_global_counter += 1;
             }
             ExpressionType::StructLiteral { name, fields } => {
                 func.push_str("// TODO: Generate assembly for struct literal\n");
@@ -172,7 +230,6 @@ impl<'a> AssemblyGenerator<'a> {
                     func.push_str(&bound_func);
                     new_global_counter = bound_counter;
                 }
-                
                 // Generate code for the body
                 let (body_globals, body_func, body_counter) = self.generate_expression(body, new_global_counter);
                 globals.push_str(&body_globals);
@@ -180,16 +237,46 @@ impl<'a> AssemblyGenerator<'a> {
                 new_global_counter = body_counter;
             }
             ExpressionType::True => {
-                func.push_str("// Generate assembly for boolean true\n");
-                func.push_str("LOAD_BOOL 1\n");
+                let (num,globals_const, global_counter_const) = self.get_const_name(expr,new_global_counter);
+                globals.push_str(&globals_const);
+                new_global_counter = global_counter_const;
+                func.push_str(&format!("\tmov rax, [rel const{}]\n", num));
+                func.push_str("\tpush rax\n");
             }
-            ExpressionType::Unop { operator, expression } => {
-                func.push_str("// Generate assembly for unary operation\n");
-                let (expr_globals, expr_func, expr_counter) = self.generate_expression(expression, new_global_counter);
-                globals.push_str(&expr_globals);
-                func.push_str(&expr_func);
-                new_global_counter = expr_counter;
-                func.push_str(&format!("// Apply unary operator {}\n", operator));
+            ExpressionType::Unop { operator: _, expression } => {
+                match expression.resolved_type {
+                    Type::Bool =>{
+                        let (expr_globals, expr_func, expr_counter) = self.generate_expression(expression, new_global_counter);
+                        globals.push_str(&expr_globals);
+                        func.push_str(&expr_func);
+                        new_global_counter = expr_counter;
+                        func.push_str("\tpop rax\n");
+                        func.push_str("\txor rax, 1\n");
+                        func.push_str("\tpush rax\n");
+                    }
+                    Type::Float =>{
+                        let (expr_globals, expr_func, expr_counter) = self.generate_expression(expression, new_global_counter);
+                        globals.push_str(&expr_globals);
+                        func.push_str(&expr_func);
+                        new_global_counter = expr_counter;
+                        func.push_str("\tmovsd xmm1, [rsp]\n\n");
+                        func.push_str("\tadd rsp, 8\n");
+                        func.push_str("\tpxor xmm0, xmm0\n");
+                        func.push_str("\tsubsd xmm0, xmm1\n");
+                        func.push_str("\tsub rsp, 8\n");
+                        func.push_str("\tmovsd [rsp], xmm0\n");
+                    }
+                    Type::Int =>{
+                        let (expr_globals, expr_func, expr_counter) = self.generate_expression(expression, new_global_counter);
+                        globals.push_str(&expr_globals);
+                        func.push_str(&expr_func);
+                        new_global_counter = expr_counter;
+                        func.push_str("\tpop rax\n");
+                        func.push_str("\tneg rax\n");
+                        func.push_str("\tpush rax\n");
+                    }
+                    _ => {unreachable!()}
+                }
             }
             ExpressionType::Variable { name } => {
                 func.push_str("// Generate assembly for variable access\n");
@@ -204,7 +291,7 @@ impl<'a> AssemblyGenerator<'a> {
     }
 
     /// Generate assembly code for a statement.
-    fn generate_statement(&self, stmt: &Statement, global_counter: u64) -> (String, String, u64) {
+    fn generate_statement(&mut self, stmt: &Statement, global_counter: u64) -> (String, String, u64) {
         let mut globals = String::new();
         let mut func = String::new();
         let mut new_global_counter = global_counter;
@@ -240,7 +327,7 @@ impl<'a> AssemblyGenerator<'a> {
     }
 
     /// Generate assembly for a single command.
-    fn generate_command(&self, command: &Command, global_counter: u64) -> (String, String, u64) {
+    fn generate_command(&mut self, command: &Command<'a>, global_counter: u64) -> (String, String, u64) {
         let mut globals = String::new();
         let mut func = String::new();
         let mut new_global_counter = global_counter;
@@ -254,14 +341,14 @@ impl<'a> AssemblyGenerator<'a> {
                 func.push_str(&format!("\tje _fail_assertion ; {}\n", message));
                 new_global_counter = cond_counter;
             }
-            CommandType::Function { name, parameters, return_type, statements, has_return: _ } => {
+            CommandType::Function { name, parameters:_, return_type: _, statements, has_return: _ } => {
                 func.push_str(&format!("\n{}:\n", name));
                 func.push_str("\tpush rbp\n");
                 func.push_str("\tmov rbp, rsp\n");
                 
-                for (param, param_type) in parameters {
-                    // Parameter handling would go here
-                }
+                // for (param, param_type) in parameters {
+                //     // Parameter handling would go here
+                // }
                 
                 for stmt in statements {
                     let (stmt_globals, stmt_func, stmt_counter) = self.generate_statement(stmt, new_global_counter);
@@ -293,7 +380,7 @@ impl<'a> AssemblyGenerator<'a> {
                 
                 new_global_counter += 1;
             }
-            CommandType::Read { source, destination } => {
+            CommandType::Read { source, destination: _ } => {
                 // Add the source filename to globals
                 globals.push_str(&format!("source{}: db `{}`, 0\n", new_global_counter, source));
                 // Generate code to call _read_image
@@ -310,14 +397,10 @@ impl<'a> AssemblyGenerator<'a> {
                 let (comment, count, type_globals, type_counter) = self.get_type_name(expression,new_global_counter);
                 globals.push_str(&type_globals);
                 new_global_counter = type_counter;
-                if let ExpressionType::Int { .. } = expression.node.as_ref() {
-                    func.push_str(&format!("\tlea rdi, [rel const{}] ; '(IntType)'\n",count));
-                    func.push_str("\tlea rsi, [rsp]\n");
-                    func.push_str("\tcall _show\n");
-                    func.push_str("\tadd rsp, 8\n");
-                } else {
-                    func.push_str(&format!("\tTODO: implement type printing for {}\n",expression));
-                }
+                func.push_str(&format!("\tlea rdi, [rel const{}] ; {}\n",count,comment));
+                func.push_str("\tlea rsi, [rsp]\n");
+                func.push_str("\tcall _show\n");
+                func.push_str("\tadd rsp, 8\n");
             }
             CommandType::Struct { name, elements } => {
                 // Just a type definition, no runtime code needed
@@ -359,7 +442,10 @@ impl<'a> AssemblyGenerator<'a> {
         (globals, func, new_global_counter)
     }
 
-    pub fn generate_assembly(&self) -> String {
+    pub fn generate_assembly(
+        &mut self,
+        commands: Vec<Command<'a>>,
+        environment: TypeEnvironment<'a>) -> String {
         let mut imports = String::new();
         imports.push_str("\tglobal jpl_main\n\tglobal _jpl_main\n\textern _fail_assertion\n\textern _jpl_alloc\n\textern _get_time\n\textern _show\n\textern _print\n\textern _print_time\n\textern _read_image\n\textern _write_image\n\textern _fmod\n\textern _sqrt\n\textern _exp\n\textern _sin\n\textern _cos\n\textern _tan\n\textern _asin\n\textern _acos\n\textern _atan\n\textern _log\n\textern _pow\n\textern _atan2\n\textern _to_int\n\textern _to_float\n\n");
         let mut all_globals = String::new();
@@ -373,8 +459,8 @@ impl<'a> AssemblyGenerator<'a> {
         main.push_str("\tpush r12\n");
         main.push_str("\tmov r12, rbp\n");
         let mut global_counter = 0;
-        for command in &self.commands {
-            let (globals, func, new_counter) = self.generate_command(command, global_counter);
+        for command in commands {
+            let (globals, func, new_counter) = self.generate_command(&command, global_counter);
             all_globals.push_str(&globals);
             main.push_str(&func);
             global_counter = new_counter;
@@ -387,7 +473,6 @@ impl<'a> AssemblyGenerator<'a> {
         assembly.push_str(&imports);
         assembly.push_str(&all_globals);
         assembly.push_str(&main);
-        
         assembly
     }
 }
