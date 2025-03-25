@@ -26,8 +26,8 @@ pub mod asm_consts {
     pub const ARG_REGISTERS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 
     // Floating point instructions
-    pub const XMM_MOVSD_FROM_STACK: &str = "\tmovsd xmm{}, [rsp]\n";
-    pub const XMM_MOVSD_TO_STACK: &str = "\tmovsd [rsp], xmm{}\n";
+    pub const XMM_MOVSD_FROM_STACK: &str = "\tmovsd xmm1, [rsp]\n";
+    pub const XMM_MOVSD_TO_STACK: &str = "\tmovsd [rsp], xmm0\n";
     pub const XMM_ADD: &str = "\taddsd xmm0, xmm1\n";
     pub const XMM_SUB: &str = "\tsubsd xmm0, xmm1\n";
     pub const XMM_MUL: &str = "\tmulsd xmm0, xmm1\n";
@@ -54,13 +54,14 @@ pub mod asm_consts {
     pub const INT_SETG: &str = "\tsetg al\n";
     pub const INT_SETGE: &str = "\tsetge al\n";
     pub const INT_AND_ONE: &str = "\tand rax, 1\n";
+    pub const FAIL_ASSERT: &str = "\tcall _fail_assertion\n";
+    pub const COMP_R10_0: &str = "\tcmp r10, 0\n";
+    pub const MOV_RAX_0: &str = "\tmov rax, 0\n";
+
     
     // Function prologue and epilogue
-    pub const FUNCTION_PROLOGUE_1: &str = "\tpush rbp\n";
-    pub const FUNCTION_PROLOGUE_2: &str = "\tmov rbp, rsp\n";
-    pub const FUNCTION_EPILOGUE_1: &str = "\tmov rsp, rbp\n";
-    pub const FUNCTION_EPILOGUE_2: &str = "\tpop rbp\n";
-    pub const FUNCTION_EPILOGUE_3: &str = "\tret\n";
+    pub const FUNCTION_PROLOGUE: &str = "\tpush rbp\n\tmov rbp, rsp\n";
+    pub const FUNCTION_EPILOGUE: &str = "\tmov rsp, rbp\n\tpop rbp\n\tret\n";
     pub const FUNCTION_SAVE_REGS: &str = "\tpush r12\n\tpush r13\n\tpush r14\n\tpush r15\n";
     pub const FUNCTION_RESTORE_REGS: &str = "\tpop r15\n\tpop r14\n\tpop r13\n\tpop r12\n";
     
@@ -79,8 +80,13 @@ pub mod asm_consts {
     pub const STACK_UNALIGN_COMMENT: &str = "\tadd rsp, 8 ; Remove alignment\n";
 
     // Main function labels
-    pub const MAIN_LABEL_1: &str = "jpl_main:\n";
-    pub const MAIN_LABEL_2: &str = "_jpl_main:\n";
+    pub const MAIN_START: &str = "\njpl_main:\n_jpl_main:\n\tpush rbp\n\tmov rbp, rsp\n\tpush r12\n\tmov r12, rbp\n";
+    pub const MAIN_EP: &str = "\n\t; Main function epilogue\n\tpop r12\n\tpop rbp\n\tret\n";
+
+    pub const WRITE_IMAGE: &str = "\tmov rsi, rsp\n\tcall _write_image\n\tadd rsp, 8\n";
+
+    pub const RETURN_COMMENT: &str = "\t; Return statement\n";
+    pub const VOID_EXPR: &str = "\t; void expression (no operation)\n";
     
     // Import declarations
     pub const IMPORTS: &str = "\tglobal jpl_main\n\
@@ -112,5 +118,14 @@ pub mod asm_consts {
     // TODO comments
     pub const TODO_ARRAY_INDEX: &str = "// TODO: Implement array indexing\n";
     pub const TODO_ARRAY_LITERALS: &str = "// TODO: Implement array literals\n";
-
+    
+    // New constants for additional assembly string literals:
+    pub const MOVSD_XMM1_FROM_STACK: &str = "\tmovsd xmm1, [rsp]\n";
+    pub const MOVSD_XMM0_FROM_STACK: &str = "\tmovsd xmm0, [rsp]\n";
+    pub const ADD_RSP_8: &str = "\tadd rsp, 8\n";
+    pub const SUB_RSP_8: &str = "\tsub rsp, 8\n";
+    pub const MOVSD_TO_STACK_XMM0: &str = "\tmovsd [rsp], xmm0\n";
+    pub const FUNC_SAVE_REGS_COMMENT: &str = "\t; Save registers for function call\n";
+    pub const FUNC_EPILOGUE_COMMENT: &str = "\n\t; Function epilogue\n";
+    pub const TODO_SETUP_DEST_ARRAY_COMMENT: &str = "\t; TODO: Setup destination array\n";
 }
