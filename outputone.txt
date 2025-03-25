@@ -35,13 +35,11 @@ _jpl_main:
 	mov rbp, rsp
 	push r12
 	mov r12, rbp
-	sub rsp, 8
 	mov rax, [rel const0]
 	push rax
 	mov rdi, 8
 	sub rsp, 8
 	call _jpl_alloc
-	add rsp, 8
 	mov r10, [rsp + 0]
 	mov [rax + 0], r10
 	add rsp, 8

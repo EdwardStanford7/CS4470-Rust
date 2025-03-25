@@ -1,9 +1,24 @@
 TEST = ./t.jpl
 COMPILE_MODE = -m typecheck
 BINARY = target/release/myjplc
+WHW = 10
+WFD = ok
+WNM = 048
+WMO = assembly
+
+instruct:
+	@clear
+	echo "input\n" && \
+	cat grader/hw$(WHW)/$(WFD)/$(WNM).jpl && \
+	echo "expected\n" && \
+	cat grader/hw$(WHW)/$(WFD)/$(WNM).jpl.expected
+	echo "actual\n" && \
+	cargo run RUSTFLAGS=-Awarnings -- grader/hw$(WHW)/$(WFD)/$(WNM).jpl --mode $(WMO)
+
+
 
 $(BINARY):	src/*.rs
-	cargo build --release
+	cargo build -q --release
 
 run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
@@ -28,6 +43,6 @@ time-all:
 	time $(MAKE) run-all
 
 clean:
-	cargo clean
+	cargo -q clean
 
 .PHONY: run test build clean time-all run-all

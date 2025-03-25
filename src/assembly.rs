@@ -4,6 +4,7 @@ use crate::ast::*;
 use crate::utils::*;
 use crate::asm_consts::asm_consts::*;
 
+/// Entry point for assembly generation.
 pub fn generate_assembly<'a>(
     commands: Vec<Command<'a>>,
     environment: TypeEnvironment<'a>,
@@ -39,8 +40,19 @@ impl<'a> AssemblyGenerator<'a> {
 
     fn next_label(&mut self, prefix: &str) -> String {
         self.label_counter += 1;
-        let label = format!(".{}{}", prefix, self.label_counter);
-        label
+        format!(".{}{}", prefix, self.label_counter)
+    }
+
+    /// Allocate an 8-byte temporary stack slot.
+    fn allocate_stack_var(&mut self) {
+        self.text_section.push_str("\tsub rsp, 8\n");
+        self.stack_offset += 8;
+    }
+
+    /// Free an 8-byte temporary stack slot.
+    fn free_stack_var(&mut self) {
+        self.text_section.push_str("\tadd rsp, 8\n");
+        self.stack_offset -= 8;
     }
 
     fn get_type_name(&mut self, typ: &Type<'a>) -> (String, u64) {
@@ -69,9 +81,15 @@ impl<'a> AssemblyGenerator<'a> {
                     format!("dq {}\n", value)
                 }));
             }
-            ExpressionType::Int { value } => { value_str.push_str(&format!("dq {}\n", value));}
-            ExpressionType::True => { value_str.push_str("dq 1\n");}
-            ExpressionType::False => {value_str.push_str("dq 0\n");}
+            ExpressionType::Int { value } => {
+                value_str.push_str(&format!("dq {}\n", value));
+            }
+            ExpressionType::True => {
+                value_str.push_str("dq 1\n");
+            }
+            ExpressionType::False => {
+                value_str.push_str("dq 0\n");
+            }
             _ => panic!("Cannot create constant for expression type"),
         }
         let counter = self.global_counter;
@@ -117,13 +135,18 @@ impl<'a> AssemblyGenerator<'a> {
                 self.push_value(RAX);
             }
             Type::Float => {
+                // Expected order:
+                //   movsd xmm1, [rsp]
+                //   add rsp, 8      ; free temp slot
+                //   pxor xmm0, xmm0
+                //   subsd xmm0, xmm1
+                //   sub rsp, 8      ; reallocate temp slot
+                //   movsd [rsp], xmm0
                 self.text_section.push_str(XMM_MOVSD_FROM_STACK);
-                self.text_section.push_str(ADD_RSP_8);
-                self.stack_offset -= 8;
+                self.free_stack_var(); // add rsp, 8
                 self.text_section.push_str(XMM_PXOR);
                 self.text_section.push_str(XMM_SUB);
-                self.text_section.push_str(SUB_RSP_8);
-                self.stack_offset += 8;
+                self.allocate_stack_var(); // sub rsp, 8
                 self.text_section.push_str(XMM_MOVSD_TO_STACK);
             }
             Type::Int => {
@@ -231,9 +254,18 @@ impl<'a> AssemblyGenerator<'a> {
                 self.text_section.push_str(ADD_RSP_8);
                 self.stack_offset -= 8;
                 self.text_section.push_str(match operator {
-                    "+" => XMM_ADD,"-" => XMM_SUB,"*" => XMM_MUL,"/" => XMM_DIV,"%" => XMM_MOD,
-                    "==" => XMM_EQ, "!=" => XMM_NEQ, "<" => XMM_LT, "<=" => XMM_LE, ">" => XMM_GT, 
-                    ">=" => XMM_GE, _ => unreachable!()
+                    "+" => XMM_ADD,
+                    "-" => XMM_SUB,
+                    "*" => XMM_MUL,
+                    "/" => XMM_DIV,
+                    "%" => XMM_MOD,
+                    "==" => XMM_EQ,
+                    "!=" => XMM_NEQ,
+                    "<" => XMM_LT,
+                    "<=" => XMM_LE,
+                    ">" => XMM_GT,
+                    ">=" => XMM_GE,
+                    _ => unreachable!()
                 });
                 match operator {
                     "+" | "-" | "*" | "/" | "%" => {
@@ -252,12 +284,12 @@ impl<'a> AssemblyGenerator<'a> {
                 self.pop_value(R10);
                 match operator {
                     "&&" | "||" => {
-                        self.text_section.push_str(if operator == "&&" {INT_AND} else {INT_OR});
+                        self.text_section.push_str(if operator == "&&" { INT_AND } else { INT_OR });
                         self.push_value(RAX);
                     },
                     "==" | "!=" => {
                         self.text_section.push_str(INT_CMP);
-                        self.text_section.push_str(if operator == "==" {INT_SETE} else {INT_SETNE});
+                        self.text_section.push_str(if operator == "==" { INT_SETE } else { INT_SETNE });
                         self.text_section.push_str(INT_AND_ONE);
                         self.push_value(RAX);
                     },
@@ -284,7 +316,10 @@ impl<'a> AssemblyGenerator<'a> {
 
     fn generate_variable(&mut self, name: &str) {
         if let Some(location) = self.variable_map.get(name) {
-            self.text_section.push_str(&format!("\tmov rax, [rbp{}]\n", if *location >= 0 { format!("+{}", location) } else { format!("{}", location) }));
+            self.text_section.push_str(&format!(
+                "\tmov rax, [rbp{}]\n",
+                if *location >= 0 { format!("+{}", location) } else { format!("{}", location) }
+            ));
             self.push_value(RAX);
         } else {
             self.text_section.push_str(&format!("\t; LOAD_VAR {} (unresolved)\n", name));
@@ -332,8 +367,10 @@ impl<'a> AssemblyGenerator<'a> {
 
     pub fn generate_expression(&mut self, expr: &Expression) {
         match expr.node.as_ref() {
-            ExpressionType::Int { .. } | ExpressionType::Float { .. } | 
-            ExpressionType::True | ExpressionType::False => {
+            ExpressionType::Int { .. }
+            | ExpressionType::Float { .. }
+            | ExpressionType::True
+            | ExpressionType::False => {
                 self.generate_literal(expr);
             }
             ExpressionType::Variable { name } => {
@@ -364,7 +401,7 @@ impl<'a> AssemblyGenerator<'a> {
                 self.text_section.push_str(VOID_EXPR);
             }
             ExpressionType::ArrayLiteral { elements } => {
-                self.text_section.push_str(SUB_RSP_8);
+                // Generate code for each element (in reverse order)
                 for element in elements.into_iter().rev() {
                     self.generate_expression(element);
                 }
@@ -376,7 +413,6 @@ impl<'a> AssemblyGenerator<'a> {
                 self.text_section.push_str(&format!("\tmov rdi, {}\n", total_size));
                 self.text_section.push_str(SUB_RSP_8);
                 self.text_section.push_str("\tcall _jpl_alloc\n");
-                self.text_section.push_str(ADD_RSP_8);
                 for i in 0..n {
                     let offset = (n - 1 - i) * 8;
                     self.text_section.push_str(&format!("\tmov r10, [rsp + {}]\n", offset));
@@ -388,7 +424,7 @@ impl<'a> AssemblyGenerator<'a> {
             ExpressionType::Dot { struct_variable, field } => {
                 self.text_section.push_str(&format!("// TODO: Implement struct field access: {}\n", field));
                 self.generate_expression(struct_variable);
-            }
+            },
             ExpressionType::StructLiteral { name, fields } => {
                 self.text_section.push_str(&format!("// TODO: Implement struct literal: {}\n", name));
                 for field in fields {
@@ -440,7 +476,6 @@ impl<'a> AssemblyGenerator<'a> {
                 self.text_section.push_str(&format!("{}:\n", skip_label));
             }
             CommandType::Function { name: _, parameters, return_type: _, statements, has_return: _ } => {
-                //TODO: use func name
                 self.text_section.push_str("jpl_main:\n_jpl_main:\n\t");
                 self.text_section.push_str(FUNCTION_PROLOGUE);
                 self.stack_offset = 0;
@@ -457,6 +492,10 @@ impl<'a> AssemblyGenerator<'a> {
                         self.variable_map.insert(param.name, offset as i32);
                     }
                 }
+                // (If your original compiler allocated extra space for locals, add a fixed
+                //  allocation here; for example:)
+                // self.text_section.push_str("\tsub rsp, 8\n");
+                // self.stack_offset += 8;
                 for stmt in statements {
                     self.generate_statement(stmt);
                 }
