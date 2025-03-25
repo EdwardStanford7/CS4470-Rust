@@ -25,6 +25,7 @@ struct AssemblyGenerator {
     functions: Vec<String>,
     constants: HashMap<AssemblyValue, String>,
     jump_counter: usize,
+    aligned: bool,
 }
 
 impl Display for AssemblyGenerator {
@@ -50,7 +51,7 @@ impl<'a> AssemblyGenerator {
             functions: Vec::new(),
             constants: HashMap::new(),
             jump_counter: 1,
-            // aligned: true,
+            aligned: true,
         }
     }
 
@@ -61,14 +62,14 @@ impl<'a> AssemblyGenerator {
     ) -> String {
         let mut main_function = String::new();
         // jpl_main prelude
-        main_function.push_str("\n\njpl_main:\n_jpl_main:\n\t; jpl_main prelude\n\tpush rbp\n\tmov rbp, rsp\n\tpush r12\n\tmov r12, rbp");
+        main_function.push_str("\n\njpl_main:\n_jpl_main:\n\tpush rbp\n\tmov rbp, rsp\n\tpush r12\n\tmov r12, rbp ; end of jpl_main prelude");
 
         for command in commands {
             self.generate_command(&mut main_function, &command, &environment);
         }
 
         // jpl_main postlude
-        main_function.push_str("\n\n\t; jpl_main postlude\n\tpop r12\n\tpop rbp\n\tret");
+        main_function.push_str("\n\n\tpop r12 ; begin jpl_main postlude\n\tpop rbp\n\tret");
 
         format!(
             "global jpl_main\nglobal _jpl_main\nextern _fail_assertion\nextern _jpl_alloc\nextern _get_time\nextern _show\nextern _print\nextern _print_time\nextern _read_image\nextern _write_image\nextern _fmod\nextern _sqrt\nextern _exp\nextern _sin\nextern _cos\nextern _tan\nextern _asin\nextern _acos\nextern _atan\nextern _log\nextern _pow\nextern _atan2\nextern _to_int\nextern _to_float{}{}",
@@ -87,23 +88,25 @@ impl<'a> AssemblyGenerator {
             CommandType::Show { expression } => {
                 function.push_str("\n\n\t; Show command");
 
-                let mut aligned = true;
+                let mut added_padding = false;
                 match &expression.resolved_type {
                     Type::Array {
                         element_type: _,
                         rank,
                     } => {
-                        if rank % 2 == 1 {
+                        if rank % 2 == 1 && self.aligned {
                             // Align stack to 8 bytes
-                            function.push_str("\n\tsub rsp, 8; Add padding to align stack");
-                            aligned = false;
+                            function.push_str("\n\tsub rsp, 8 ; Add alignment");
+                            self.aligned = false;
+                            added_padding = true;
                         }
                     }
                     Type::Struct { name: _, elements } => {
-                        if elements.len() % 2 == 1 {
+                        if elements.len() % 2 == 1 && self.aligned {
                             // Align stack to 8 bytes
-                            function.push_str("\n\tsub rsp, 8; Add padding to align stack");
-                            aligned = false;
+                            function.push_str("\n\tsub rsp, 8 ; Add alignment");
+                            self.aligned = false;
+                            added_padding = true;
                         }
                     }
                     _ => {}
@@ -117,10 +120,15 @@ impl<'a> AssemblyGenerator {
                 function.push_str(&format!("\n\tlea rdi, [rel {}]", const_name));
                 function.push_str("\n\tlea rsi, [rsp]");
                 function.push_str("\n\tcall _show");
-                function.push_str(&format!("\n\tadd rsp, {}", size));
 
-                if !aligned {
-                    function.push_str("\n\tadd rsp, 8; Remove padding to align stack");
+                // Remove argument from stack after function call
+                function.push_str(&format!("\n\tadd rsp, {}", size));
+                self.aligned = !self.aligned;
+
+                // Handle padding
+                if added_padding {
+                    function.push_str("\n\tadd rsp, 8 ; Remove alignment");
+                    self.aligned = !self.aligned;
                 }
             }
             // CommandType::Function {
@@ -167,6 +175,7 @@ impl<'a> AssemblyGenerator {
                 let constant = self.get_constant(AssemblyValue::Number(value.to_string()));
                 function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
                 function.push_str("\n\tpush rax");
+                self.aligned = !self.aligned;
                 (8, Type::Int)
             }
             ExpressionType::Float { value } => {
@@ -180,18 +189,21 @@ impl<'a> AssemblyGenerator {
 
                 function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
                 function.push_str("\n\tpush rax");
+                self.aligned = !self.aligned;
                 (8, Type::Float)
             }
             ExpressionType::True => {
                 let constant = self.get_constant(AssemblyValue::Number("1".to_string()));
                 function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
                 function.push_str("\n\tpush rax");
+                self.aligned = !self.aligned;
                 (8, Type::Bool)
             }
             ExpressionType::False => {
                 let constant = self.get_constant(AssemblyValue::Number("0".to_string()));
                 function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
                 function.push_str("\n\tpush rax");
+                self.aligned = !self.aligned;
                 (8, Type::Bool)
             }
             ExpressionType::Unop {
@@ -229,9 +241,12 @@ impl<'a> AssemblyGenerator {
                 left,
                 right,
             } => {
+                let mut added_padding = false;
                 // Reference compiler is stupid so I have to decentralize logic. hw10/ok/028.jpl
-                if *operator == "%" && matches!(left.resolved_type, Type::Float) {
-                    function.push_str("\n\tsub rsp, 8; Add padding to align stack");
+                if *operator == "%" && matches!(left.resolved_type, Type::Float) && self.aligned {
+                    function.push_str("\n\tsub rsp, 8 ; Add alignment");
+                    added_padding = true;
+                    self.aligned = false;
                 }
 
                 self.generate_expression(function, right, environment);
@@ -239,7 +254,7 @@ impl<'a> AssemblyGenerator {
 
                 match expression.resolved_type {
                     Type::Int => self.generate_int_op(function, operator),
-                    Type::Float => self.generate_float_op(function, operator),
+                    Type::Float => self.generate_float_op(function, operator, added_padding),
                     Type::Bool => match left_type {
                         Type::Int => self.generate_bool_op(function, operator, Type::Int),
                         Type::Float => self.generate_bool_op(function, operator, Type::Float),
@@ -259,27 +274,32 @@ impl<'a> AssemblyGenerator {
 
                 function.push_str(&format!("\n\tmov rdi, {}", elements.len() * element_size));
 
-                let aligned = (elements.len() * element_size) % 16 == 8;
                 // Align stack to 8 bytes for function call
-                if aligned {
-                    function.push_str("\n\tsub rsp, 8; Add padding to align stack");
+                if self.aligned {
+                    function.push_str("\n\tsub rsp, 8 ; Add alignment");
                 }
                 function.push_str("\n\tcall _jpl_alloc");
                 // Realign stack after function call.
-                if aligned {
-                    function.push_str("\n\tadd rsp, 8; Remove padding to align stack");
+                if self.aligned {
+                    function.push_str("\n\tadd rsp, 8 ; Remove alignment");
                 }
 
-                function.push_str("\n\t; Copy elements to array");
+                function.push_str(&format!(
+                    "\n\t; Moving {} bytes from rsp to rax ",
+                    elements.len() * element_size
+                ));
                 for i in (0..elements.len() * element_size / 8).rev() {
                     function.push_str(&format!(
-                        "\n\tmov r10, [rsp + {}]\n\tmov [rax + {}], r10",
+                        "\n\t\tmov r10, [rsp + {}]\n\t\tmov [rax + {}], r10",
                         i * 8,
                         i * 8
                     ));
                 }
 
                 function.push_str(&format!("\n\tadd rsp, {}", elements.len() * element_size));
+                if (elements.len() * element_size) % 16 == 8 {
+                    self.aligned = !self.aligned;
+                }
 
                 // Put array data pointer and dimensions on stack
                 function.push_str("\n\tpush rax");
@@ -309,7 +329,11 @@ impl<'a> AssemblyGenerator {
                 self.jump_counter += 1;
                 function.push_str(&format!("\n\tjne {}", jump_label));
 
-                function.push_str("\n\tsub rsp, 8; Add padding to align stack");
+                let mut added_padding = false;
+                if self.aligned {
+                    function.push_str("\n\tsub rsp, 8 ; Add alignment");
+                    added_padding = true;
+                }
 
                 function.push_str(&format!(
                     "\n\tlea rdi, [rel {}]",
@@ -324,7 +348,9 @@ impl<'a> AssemblyGenerator {
                 ));
                 function.push_str("\n\tcall _fail_assertion");
 
-                function.push_str("\n\tadd rsp, 8; Remove padding to align stack");
+                if added_padding {
+                    function.push_str("\n\tadd rsp, 8 ; Remove alignment");
+                }
 
                 function.push_str(&format!("\n{}:", jump_label));
                 function.push_str("\n\tcqo\n\tidiv r10");
@@ -338,10 +364,16 @@ impl<'a> AssemblyGenerator {
                 unreachable!();
             }
         }
+        self.aligned = !self.aligned;
         (8, Type::Int)
     }
 
-    fn generate_float_op(&mut self, function: &mut String, operator: &str) -> (usize, Type<'a>) {
+    fn generate_float_op(
+        &mut self,
+        function: &mut String,
+        operator: &str,
+        added_alignment: bool,
+    ) -> (usize, Type<'a>) {
         match operator {
             "+" | "-" | "*" | "/" => {
                 let op_instruction = match operator {
@@ -360,12 +392,16 @@ impl<'a> AssemblyGenerator {
             "%" => {
                 function.push_str("\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8\n\tcall _fmod");
 
-                function.push_str("\n\tadd rsp, 8; Remove padding to align stack");
+                if added_alignment {
+                    function.push_str("\n\tadd rsp, 8 ; Remove alignment");
+                    self.aligned = !self.aligned;
+                }
 
                 function.push_str("\n\tsub rsp, 8\n\tmovsd [rsp], xmm0");
             }
             _ => unreachable!(),
         }
+        self.aligned = !self.aligned;
         (8, Type::Float)
     }
 
@@ -381,6 +417,7 @@ impl<'a> AssemblyGenerator {
             Type::Bool => self.generate_bool_comparison(function, operator),
             _ => unreachable!(),
         }
+        self.aligned = !self.aligned;
         (8, Type::Bool)
     }
 
