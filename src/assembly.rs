@@ -223,25 +223,30 @@ impl<'a> AssemblyGenerator<'a> {
                     _ => panic!("Unsupported binary operator for integers: {}", operator),
                 }
             },
-         Type::Float => {
-             self.text_section.push_str(MOVSD_XMM0_FROM_STACK);
-             self.text_section.push_str(ADD_RSP_8);
-             self.stack_offset -= 8;
-             self.text_section.push_str(XMM_MOVSD_FROM_STACK);
-             self.text_section.push_str(ADD_RSP_8);
-             self.stack_offset -= 8;
-            match operator {
-                "+" => self.text_section.push_str(XMM_ADD),
-                "-" => self.text_section.push_str(XMM_SUB),
-                "*" => self.text_section.push_str(XMM_MUL),
-                "/" => self.text_section.push_str(XMM_DIV),
-                "%" => self.text_section.push_str("\tcall _fmod\n"),
-                op  => panic!("Unsupported float binary operator: {}", op),
-            }
-             self.text_section.push_str("\tsub rsp, 8\n");
-             self.stack_offset += 8;
-             self.text_section.push_str(XMM_MOVSD_TO_STACK);
-         },
+            Type::Float => {
+                self.text_section.push_str(MOVSD_XMM0_FROM_STACK);
+                self.text_section.push_str(ADD_RSP_8);
+                self.stack_offset -= 8;
+                self.text_section.push_str(XMM_MOVSD_FROM_STACK);
+                self.text_section.push_str(ADD_RSP_8);
+                self.stack_offset -= 8;
+                self.text_section.push_str(match operator {
+                    "+" => XMM_ADD,"-" => XMM_SUB,"*" => XMM_MUL,"/" => XMM_DIV,"%" => XMM_MOD,
+                    "==" => XMM_EQ, "!=" => XMM_NEQ, "<" => XMM_LT, "<=" => XMM_LE, ">" => XMM_GT, 
+                    ">=" => XMM_GE, _ => unreachable!()
+                });
+                match operator {
+                    "+" | "-" | "*" | "/" | "%" => {
+                        self.text_section.push_str("\tsub rsp, 8\n");
+                        self.stack_offset += 8;
+                        self.text_section.push_str(XMM_MOVSD_TO_STACK);
+                    }
+                    "==" | "!=" | "<" | "<=" | ">" | ">=" => { 
+                        self.push_value(RAX);
+                    }
+                    _ => {}
+                }
+            },
             Type::Bool => {
                 self.pop_value(RAX);
                 self.pop_value(R10);

@@ -32,7 +32,15 @@ pub mod asm_consts {
     pub const XMM_SUB: &str = "\tsubsd xmm0, xmm1\n";
     pub const XMM_MUL: &str = "\tmulsd xmm0, xmm1\n";
     pub const XMM_DIV: &str = "\tdivsd xmm0, xmm1\n";
+    pub const XMM_MOD: &str = "\tcall _fmod\n";
     pub const XMM_PXOR: &str = "\tpxor xmm0, xmm0\n";
+    pub const XMM_EQ: &str = "\tcmpeqsd xmm0, xmm1\n\tmovq rax, xmm0\n\tand rax, 1\n";
+    pub const XMM_NEQ: &str = "\tcmpneqsd xmm0, xmm1\n\tmovq rax, xmm0\n\tand rax, 1\n";
+    pub const XMM_LT: &str = "\tcmpltsd xmm0, xmm1\n\tmovq rax, xmm0\n\tand rax, 1\n";
+    pub const XMM_LE: &str = "\tcmplesd xmm0, xmm1\n\tmovq rax, xmm0\n\tand rax, 1\n";
+    pub const XMM_GT: &str = "\tcmpltsd xmm1, xmm0\n\tmovq rax, xmm1\n\tand rax, 1\n";
+    pub const XMM_GE: &str = "\tcmplesd xmm1, xmm0\n\tmovq rax, xmm1\n\tand rax, 1\n";
+
     
     // Integer operations
     pub const INT_ADD: &str = "\tadd rax, r10\n";
