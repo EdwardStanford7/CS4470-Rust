@@ -365,7 +365,7 @@ impl<'a> AssemblyGenerator<'a> {
             }
             ExpressionType::ArrayLiteral { elements } => {
                 self.text_section.push_str(SUB_RSP_8);
-                for element in elements {
+                for element in elements.into_iter().rev() {
                     self.generate_expression(element);
                 }
                 let n = elements.len();
