@@ -1052,6 +1052,13 @@ pub mod asm_consts {
     pub const XMM_DIV: &str = "\tdivsd xmm0, xmm1\n";
     pub const XMM_MOD: &str = "\tcall _fmod\n";
     pub const XMM_PXOR: &str = "\tpxor xmm0, xmm0\n";
+    pub const XMM_EQ: &str = "\tcmpeqsd xmm0, xmm1\n\tmovq rax, xmm0\n\tand rax, 1\n";
+    pub const XMM_NEQ: &str = "\tcmpneqsd xmm0, xmm1\n\tmovq rax, xmm0\n\tand rax, 1\n";
+    pub const XMM_LT: &str = "\tcmpltsd xmm0, xmm1\n\tmovq rax, xmm0\n\tand rax, 1\n";
+    pub const XMM_LE: &str = "\tcmplesd xmm0, xmm1\n\tmovq rax, xmm0\n\tand rax, 1\n";
+    pub const XMM_GT: &str = "\tcmpltsd xmm1, xmm0\n\tmovq rax, xmm1\n\tand rax, 1\n";
+    pub const XMM_GE: &str = "\tcmplesd xmm1, xmm0\n\tmovq rax, xmm1\n\tand rax, 1\n";
+
     
     // Integer operations
     pub const INT_ADD: &str = "\tadd rax, r10\n";
@@ -3055,25 +3062,30 @@ impl<'a> AssemblyGenerator<'a> {
                     _ => panic!("Unsupported binary operator for integers: {}", operator),
                 }
             },
-         Type::Float => {
-             self.text_section.push_str(MOVSD_XMM0_FROM_STACK);
-             self.text_section.push_str(ADD_RSP_8);
-             self.stack_offset -= 8;
-             self.text_section.push_str(XMM_MOVSD_FROM_STACK);
-             self.text_section.push_str(ADD_RSP_8);
-             self.stack_offset -= 8;
-            self.text_section.push_str(match operator {
-                "+" => XMM_ADD,
-                "-" => XMM_SUB,
-                "*" => XMM_MUL,
-                "/" => XMM_DIV,
-                "%" => XMM_MOD,
-                op  => panic!("Unsupported float binary operator: {}", op),
-            });
-             self.text_section.push_str("\tsub rsp, 8\n");
-             self.stack_offset += 8;
-             self.text_section.push_str(XMM_MOVSD_TO_STACK);
-         },
+            Type::Float => {
+                self.text_section.push_str(MOVSD_XMM0_FROM_STACK);
+                self.text_section.push_str(ADD_RSP_8);
+                self.stack_offset -= 8;
+                self.text_section.push_str(XMM_MOVSD_FROM_STACK);
+                self.text_section.push_str(ADD_RSP_8);
+                self.stack_offset -= 8;
+                self.text_section.push_str(match operator {
+                    "+" => XMM_ADD,"-" => XMM_SUB,"*" => XMM_MUL,"/" => XMM_DIV,"%" => XMM_MOD,
+                    "==" => XMM_EQ, "!=" => XMM_NEQ, "<" => XMM_LT, "<=" => XMM_LE, ">" => XMM_GT, 
+                    ">=" => XMM_GE, _ => unreachable!()
+                });
+                match operator {
+                    "+" | "-" | "*" | "/" | "%" => {
+                        self.text_section.push_str("\tsub rsp, 8\n");
+                        self.stack_offset += 8;
+                        self.text_section.push_str(XMM_MOVSD_TO_STACK);
+                    }
+                    "==" | "!=" | "<" | "<=" | ">" | ">=" => { 
+                        self.push_value(RAX);
+                    }
+                    _ => {}
+                }
+            },
             Type::Bool => {
                 self.pop_value(RAX);
                 self.pop_value(R10);

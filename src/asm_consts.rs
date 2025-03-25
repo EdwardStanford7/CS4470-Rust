@@ -89,7 +89,7 @@ pub mod asm_consts {
 
     // Main function labels
     pub const MAIN_START: &str = "\njpl_main:\n_jpl_main:\n\tpush rbp\n\tmov rbp, rsp\n\tpush r12\n\tmov r12, rbp\n";
-    pub const MAIN_EP: &str = "\n\t; Main function epilogue\n\tpop r12\n\tpop rbp\n\tret\n";
+    pub const MAIN_EP: &str = "\n\tpop r12\n\tpop rbp\n\tret\n";
 
     pub const WRITE_IMAGE: &str = "\tmov rsi, rsp\n\tcall _write_image\n\tadd rsp, 8\n";
 

@@ -331,7 +331,6 @@ impl<'a> AssemblyGenerator<'a> {
     }
 
     pub fn generate_expression(&mut self, expr: &Expression) {
-        self.text_section.push_str(&format!("\t; Expression: {}\n", expr));
         match expr.node.as_ref() {
             ExpressionType::Int { .. } | ExpressionType::Float { .. } | 
             ExpressionType::True | ExpressionType::False => {
@@ -365,11 +364,27 @@ impl<'a> AssemblyGenerator<'a> {
                 self.text_section.push_str(VOID_EXPR);
             }
             ExpressionType::ArrayLiteral { elements } => {
-                self.text_section.push_str(TODO_ARRAY_LITERALS);
+                self.text_section.push_str(SUB_RSP_8);
                 for element in elements {
                     self.generate_expression(element);
                 }
-            }
+                let n = elements.len();
+                if n == 0 {
+                    panic!("Array literal cannot be empty");
+                }
+                let total_size = n * 8;
+                self.text_section.push_str(&format!("\tmov rdi, {}\n", total_size));
+                self.text_section.push_str(SUB_RSP_8);
+                self.text_section.push_str("\tcall _jpl_alloc\n");
+                self.text_section.push_str(ADD_RSP_8);
+                for i in 0..n {
+                    let offset = (n - 1 - i) * 8;
+                    self.text_section.push_str(&format!("\tmov r10, [rsp + {}]\n", offset));
+                    self.text_section.push_str(&format!("\tmov [rax + {}], r10\n", offset));
+                }
+                self.text_section.push_str(&format!("\tadd rsp, {}\n", total_size));
+                self.push_value(RAX);
+            },
             ExpressionType::Dot { struct_variable, field } => {
                 self.text_section.push_str(&format!("// TODO: Implement struct field access: {}\n", field));
                 self.generate_expression(struct_variable);
