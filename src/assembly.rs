@@ -90,28 +90,9 @@ impl<'a> AssemblyGenerator {
             CommandType::Show { expression } => {
                 function.push_str("\n\n\t; Show command");
 
-                let mut added_padding = false;
-                match &expression.resolved_type {
-                    Type::Array {
-                        element_type: _,
-                        rank,
-                    } => {
-                        if rank % 2 == 1 && self.stack_size % 16 == 0 {
-                            function.push_str("\n\tsub rsp, 8 ; Add alignment");
-                            self.stack_size += 8;
-
-                            added_padding = true;
-                        }
-                    }
-                    Type::Struct { name: _, elements } => {
-                        if elements.len() % 2 == 1 && self.stack_size % 16 == 0 {
-                            function.push_str("\n\tsub rsp, 8 ; Add alignment");
-                            self.stack_size += 8;
-
-                            added_padding = true;
-                        }
-                    }
-                    _ => {}
+                if Self::get_type_stack_size(&expression.resolved_type) % 16 == 0 {
+                    function.push_str("\n\tsub rsp, 8 ; Add alignment");
+                    self.stack_size += 8;
                 }
 
                 let expr_result = self.generate_expression(function, expression, environment);
@@ -128,7 +109,7 @@ impl<'a> AssemblyGenerator {
                 self.stack_size -= size;
 
                 // Handle padding
-                if added_padding {
+                if self.stack_size % 16 == 8 {
                     function.push_str("\n\tadd rsp, 8 ; Remove alignment");
                     self.stack_size -= 8;
                 }
@@ -178,7 +159,6 @@ impl<'a> AssemblyGenerator {
                 function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
                 function.push_str("\n\tpush rax");
                 self.stack_size += 8;
-
                 (8, Type::Int)
             }
             ExpressionType::Float { value } => {
@@ -493,6 +473,24 @@ impl<'a> AssemblyGenerator {
             format!("const{}", data_section_len)
         });
         entry
+    }
+
+    fn get_type_stack_size(typ: &Type<'a>) -> usize {
+        match typ {
+            Type::Int | Type::Float | Type::Bool | Type::Void => 8,
+            Type::Array {
+                element_type: _,
+                rank,
+            } => 8 + 8 * rank,
+            Type::Struct { name: _, elements } => {
+                let mut size = 0;
+                for (_, typ) in elements {
+                    size += Self::get_type_stack_size(typ);
+                }
+                size
+            }
+            _ => unreachable!(),
+        }
     }
 
     fn print_stack_size(&self, function: &mut String) {
