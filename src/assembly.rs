@@ -26,6 +26,7 @@ struct AssemblyGenerator {
     constants: HashMap<AssemblyValue, String>,
     jump_counter: usize,
     stack_size: usize,
+    padding: Vec<usize>,
 }
 
 impl Display for AssemblyGenerator {
@@ -52,6 +53,7 @@ impl<'a> AssemblyGenerator {
             constants: HashMap::new(),
             jump_counter: 1,
             stack_size: 0,
+            padding: Vec::new(),
         }
     }
 
@@ -64,7 +66,6 @@ impl<'a> AssemblyGenerator {
         // jpl_main prelude
         main_function.push_str("\n\njpl_main:\n_jpl_main:\n\tpush rbp\n\tmov rbp, rsp\n\tpush r12\n\tmov r12, rbp ; end of jpl_main prelude");
         self.stack_size += 16;
-        self.print_stack_size(&mut main_function);
 
         for command in commands {
             self.generate_command(&mut main_function, &command, &environment);
@@ -91,8 +92,7 @@ impl<'a> AssemblyGenerator {
                 function.push_str("\n\n\t; Show command");
 
                 if Self::get_type_stack_size(&expression.resolved_type) % 16 == 0 {
-                    function.push_str("\n\tsub rsp, 8 ; Add alignment");
-                    self.stack_size += 8;
+                    self.check_add_alignment(function);
                 }
 
                 let expr_result = self.generate_expression(function, expression, environment);
@@ -108,11 +108,7 @@ impl<'a> AssemblyGenerator {
                 function.push_str(&format!("\n\tadd rsp, {}", size));
                 self.stack_size -= size;
 
-                // Handle padding
-                if self.stack_size % 16 == 8 {
-                    function.push_str("\n\tadd rsp, 8 ; Remove alignment");
-                    self.stack_size -= 8;
-                }
+                self.check_remove_alignment(function);
             }
             // CommandType::Function {
             //     name,
@@ -220,15 +216,8 @@ impl<'a> AssemblyGenerator {
                 left,
                 right,
             } => {
-                let mut added_padding = false;
-                if *operator == "%"
-                    && matches!(left.resolved_type, Type::Float)
-                    && self.stack_size % 16 == 0
-                {
-                    function.push_str("\n\tsub rsp, 8 ; Add alignment");
-                    added_padding = true;
-
-                    self.stack_size += 8;
+                if *operator == "%" && matches!(left.resolved_type, Type::Float) {
+                    self.check_add_alignment(function);
                 }
 
                 self.generate_expression(function, right, environment);
@@ -236,7 +225,7 @@ impl<'a> AssemblyGenerator {
 
                 match expression.resolved_type {
                     Type::Int => self.generate_int_op(function, operator),
-                    Type::Float => self.generate_float_op(function, operator, added_padding),
+                    Type::Float => self.generate_float_op(function, operator),
                     Type::Bool => match left_type {
                         Type::Int => self.generate_bool_op(function, operator, Type::Int),
                         Type::Float => self.generate_bool_op(function, operator, Type::Float),
@@ -256,14 +245,9 @@ impl<'a> AssemblyGenerator {
 
                 function.push_str(&format!("\n\tmov rdi, {}", elements.len() * element_size));
 
-                // Align stack to 8 bytes for function call
-                if self.stack_size % 16 == 0 {
-                    function.push_str("\n\tsub rsp, 8 ; Add alignment");
-                    function.push_str("\n\tcall _jpl_alloc");
-                    function.push_str("\n\tadd rsp, 8 ; Remove alignment");
-                } else {
-                    function.push_str("\n\tcall _jpl_alloc");
-                }
+                self.check_add_alignment(function);
+                function.push_str("\n\tcall _jpl_alloc");
+                self.check_remove_alignment(function);
 
                 function.push_str(&format!(
                     "\n\t; Moving {} bytes from rsp to rax ",
@@ -309,12 +293,7 @@ impl<'a> AssemblyGenerator {
                 self.jump_counter += 1;
                 function.push_str(&format!("\n\tjne {}", jump_label));
 
-                let mut added_padding = false;
-                if self.stack_size % 16 == 0 {
-                    function.push_str("\n\tsub rsp, 8 ; Add alignment");
-                    self.stack_size += 8;
-                    added_padding = true;
-                }
+                self.check_add_alignment(function);
 
                 function.push_str(&format!(
                     "\n\tlea rdi, [rel {}]",
@@ -329,10 +308,7 @@ impl<'a> AssemblyGenerator {
                 ));
                 function.push_str("\n\tcall _fail_assertion");
 
-                if added_padding {
-                    function.push_str("\n\tadd rsp, 8 ; Remove alignment");
-                    self.stack_size -= 8;
-                }
+                self.check_remove_alignment(function);
 
                 function.push_str(&format!("\n{}:", jump_label));
                 function.push_str("\n\tcqo\n\tidiv r10");
@@ -351,12 +327,7 @@ impl<'a> AssemblyGenerator {
         (8, Type::Int)
     }
 
-    fn generate_float_op(
-        &mut self,
-        function: &mut String,
-        operator: &str,
-        added_alignment: bool,
-    ) -> (usize, Type<'a>) {
+    fn generate_float_op(&mut self, function: &mut String, operator: &str) -> (usize, Type<'a>) {
         match operator {
             "+" | "-" | "*" | "/" => {
                 let op_instruction = match operator {
@@ -375,10 +346,7 @@ impl<'a> AssemblyGenerator {
             "%" => {
                 function.push_str("\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8\n\tcall _fmod");
 
-                if added_alignment {
-                    function.push_str("\n\tadd rsp, 8 ; Remove alignment");
-                    self.stack_size -= 8;
-                }
+                self.check_remove_alignment(function);
 
                 function.push_str("\n\tsub rsp, 8\n\tmovsd [rsp], xmm0");
             }
@@ -493,8 +461,23 @@ impl<'a> AssemblyGenerator {
         }
     }
 
-    fn print_stack_size(&self, function: &mut String) {
-        function.push_str(&format!("\n\t; stack size {}", self.stack_size));
+    fn check_add_alignment(&mut self, function: &mut String) {
+        if self.stack_size % 16 == 0 {
+            function.push_str("\n\tsub rsp, 8 ; Add alignment");
+            self.stack_size += 8;
+            self.padding.push(8);
+        } else {
+            self.padding.push(0);
+        }
+    }
+
+    fn check_remove_alignment(&mut self, function: &mut String) {
+        if let Some(padding) = self.padding.pop() {
+            if padding > 0 {
+                function.push_str("\n\tadd rsp, 8 ; Remove alignment");
+            }
+            self.stack_size -= padding;
+        }
     }
 }
 
