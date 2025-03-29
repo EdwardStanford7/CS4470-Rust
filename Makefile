@@ -5,9 +5,10 @@ BINARY = target/release/myjplc
 $(BINARY):	src/*.rs
 	cargo build --release
 
+
+# curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 compile:
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-	. $$HOME/.cargo/env && cargo build
+	cargo build
 
 run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
