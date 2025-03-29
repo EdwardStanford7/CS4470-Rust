@@ -2,3 +2,9 @@
 grader
 rt
 *.expected
+**/*.swift
+outsrcswift.txt
+printsrcswift.sh
+outsrc.txt
+output.txt
+my.txt

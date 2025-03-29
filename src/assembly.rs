@@ -139,12 +139,28 @@ impl<'a> AssemblyGenerator<'a> {
                 assert!(s_height == self.shadow_stack.len());
             }
             CommandType::Let { variable, rvalue} => {
-                let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;LET start\t\t\t\t--- C");
-                let res = self.generate_expression(function, rvalue, environment);
-                self.offsets.insert(variable.name.to_string(), (res,self.stack_size()));
-                function.push_str("\n\t;LET end\t\t\t\t--- C");
-                assert!(s_height + 1 == self.shadow_stack.len());
+                match &variable.node {
+                    LValueType::Variable => {
+                        let s_height = self.shadow_stack.len();
+                        function.push_str("\n\t;LET start\t\t\t\t--- C");
+                        let res = self.generate_expression(function, rvalue, environment);
+                        self.offsets.insert(variable.name.to_string(), (res,self.stack_size()));
+                        function.push_str("\n\t;LET end\t\t\t\t--- C");
+                        assert!(s_height + 1 == self.shadow_stack.len());
+                    }
+                    LValueType::Array { indices } => {
+                        let s_height = self.shadow_stack.len();
+                        function.push_str("\n\t;LET start\t\t\t\t--- C");
+                        let res = self.generate_expression(function, rvalue, environment);
+                        self.offsets.insert(variable.name.to_string(), (res.clone(),self.stack_size()));
+                        for (i,b_name) in indices.iter().enumerate() {
+                            let stack_location = i * 8 + self.stack_size() - res.0 + 16;
+                            self.offsets.insert(b_name.to_string(), ((8, Type::Int),stack_location));
+                        }
+                        function.push_str("\n\t;LET end\t\t\t\t--- C");
+                        assert!(s_height + 1 == self.shadow_stack.len());
+                    }
+                }
             }
             // CommandType::Function {
             //     name,
@@ -172,7 +188,7 @@ impl<'a> AssemblyGenerator<'a> {
 
             //     self.functions.push(function);
             // }
-            _ => {}
+            _ => unimplemented!()
         }
     }
 
@@ -379,7 +395,7 @@ impl<'a> AssemblyGenerator<'a> {
                 self.print_stack_size(function);
                 let (res,offset) = self.offsets.get(name).unwrap();
                 function.push_str(&format!("\n\tsub rsp, {} ;allocate for variable", res.0));
-                function.push_str(&format!("\n\tmov r10, [rbp - {} + 0] ;get from offset",offset - res.0));//get
+                function.push_str(&format!("\n\tmov r10, [rbp - {} + 0] ;get from offset",offset - 8));//get
                 function.push_str("\n\tmov [rsp + 0], r10 ;push into allocated location");//push
                 self.shadow_stack.push_back((res.0,false,Some(expression.resolved_type.clone())));
                 self.print_stack_size(function);
@@ -389,14 +405,24 @@ impl<'a> AssemblyGenerator<'a> {
             }
             Type::Array { element_type: _, rank } => {
                 let s_height = self.shadow_stack.len();
+                let (res,offset) = self.offsets.get(name).unwrap();
                 function.push_str("\n\t;array var start\t\t\t--- E");
                 self.print_stack_size(function);
-                let (res,offset) = self.offsets.get(name).unwrap();
-                for i in 0..rank {
-                    function.push_str(&format!("\n\tmov r10, [rbp - {} + {}]", offset - res.0, i * 8));
-                    function.push_str("\n\tpush r10");
-                } 
                 self.shadow_stack.push_back((res.0,false,Some(expression.resolved_type.clone())));
+                function.push_str(&format!("\n\tsub rsp, {}", res.0));
+                self.print_stack_size(function);
+                for i in (0..rank+1).rev() {
+                    function.push_str(&format!("\n\tmov r10, [rbp - {} + {}]", offset - 8, i * 8));
+                    function.push_str(&format!("\n\tmov [rsp + {}], r10",i * 8));
+                    /*
+		mov r10, [rbp - 24 + 8]
+		mov [rsp + 8], r10
+		mov r10, [rbp - 24 + 0]
+		mov [rsp + 0], r10
+
+
+                    */
+                }
                 function.push_str("\n\t;array var end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 res.clone()
