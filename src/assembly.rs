@@ -118,6 +118,9 @@ impl<'a> AssemblyGenerator<'a> {
                 self.print_stack_size(function);
                 function.push_str("\n\t;RETURN end\t\t\t\t--- C");
             }
+            StatementType::Let { variable, rvalue } => {
+                self.handle_let(function, environment, variable, rvalue);
+            }
             _ => {
                 println!("\n\nfailure because of statement {}", statement.to_string());
                 unimplemented!()
@@ -160,28 +163,7 @@ impl<'a> AssemblyGenerator<'a> {
                 assert!(s_height == self.shadow_stack.len());
             }
             CommandType::Let { variable, rvalue} => {
-                match &variable.node {
-                    LValueType::Variable => {
-                        let s_height = self.shadow_stack.len();
-                        function.push_str("\n\t;LET start\t\t\t\t--- C");
-                        let res = self.generate_expression(function, rvalue, environment);
-                        self.offsets.insert(variable.name.to_string(), (res,self.stack_size()));
-                        function.push_str("\n\t;LET end\t\t\t\t--- C");
-                        assert!(s_height + 1 == self.shadow_stack.len());
-                    }
-                    LValueType::Array { indices } => {
-                        let s_height = self.shadow_stack.len();
-                        function.push_str("\n\t;LET start\t\t\t\t--- C");
-                        let res = self.generate_expression(function, rvalue, environment);
-                        self.offsets.insert(variable.name.to_string(), (res.clone(),self.stack_size()));
-                        for (i,b_name) in indices.iter().enumerate() {
-                            let stack_location = i * 8 + self.stack_size() - res.0 + 16; //this is a little suspicious
-                            self.offsets.insert(b_name.to_string(), ((8, Type::Int),stack_location));
-                        }
-                        function.push_str("\n\t;LET end\t\t\t\t--- C");
-                        assert!(s_height + 1 == self.shadow_stack.len());
-                    }
-                }
+                self.handle_let(function, environment, variable, rvalue);
             }
             CommandType::Function {
                 name,
@@ -232,6 +214,31 @@ impl<'a> AssemblyGenerator<'a> {
         }
     }
 
+    fn handle_let(&mut self, function: &mut String, environment: &TypeEnvironment<'a>, variable: &LValue<'_>, rvalue: &Expression<'a>) {
+        match &variable.node {
+            LValueType::Variable => {
+                let s_height = self.shadow_stack.len();
+                function.push_str("\n\t;LET start\t\t\t\t--- C");
+                let res = self.generate_expression(function, rvalue, environment);
+                self.offsets.insert(variable.name.to_string(), (res,self.stack_size()));
+                function.push_str("\n\t;LET end\t\t\t\t--- C");
+                assert!(s_height + 1 == self.shadow_stack.len());
+            }
+            LValueType::Array { indices } => {
+                let s_height = self.shadow_stack.len();
+                function.push_str("\n\t;LET start\t\t\t\t--- C");
+                let res = self.generate_expression(function, rvalue, environment);
+                self.offsets.insert(variable.name.to_string(), (res.clone(),self.stack_size()));
+                for (i,b_name) in indices.iter().enumerate() {
+                    let stack_location = i * 8 + self.stack_size() - res.0 + 16; //this is a little suspicious
+                    self.offsets.insert(b_name.to_string(), ((8, Type::Int),stack_location));
+                }
+                function.push_str("\n\t;LET end\t\t\t\t--- C");
+                assert!(s_height + 1 == self.shadow_stack.len());
+            }
+        }
+    }
+    
     /// Generate assembly code for an expression
     /// Location of generated expression is always rax
     /// Returns size of expression in bytes

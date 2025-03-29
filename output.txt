@@ -12,7 +12,7 @@ failure for function return type (ArrayType (IntType) 1)
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:218:25:
+thread 'main' panicked at src/assembly.rs:200:25:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -30,7 +30,7 @@ failure for function return type (ArrayType (BoolType) 1)
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:218:25:
+thread 'main' panicked at src/assembly.rs:200:25:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -48,7 +48,7 @@ failure for function return type (ArrayType (FloatType) 1)
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:218:25:
+thread 'main' panicked at src/assembly.rs:200:25:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -60,13 +60,13 @@ W
 ======= Standard Out: =======
 
 
-failure because of statement (LetStmt (VarLValue b) (ArrayLiteralExpr (ArrayType (IntType) 1) (IntExpr (IntType) 1)))
+failure for function return type (ArrayType (ArrayType (IntType) 1) 1)
 
 
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
+thread 'main' panicked at src/assembly.rs:200:25:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -78,13 +78,13 @@ W
 ======= Standard Out: =======
 
 
-failure because of statement (LetStmt (VarLValue a) (ArrayLiteralExpr (ArrayType (IntType) 1) (IntExpr (IntType) 3)))
+failure for function return type (ArrayType (ArrayType (ArrayType (IntType) 1) 1) 1)
 
 
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
+thread 'main' panicked at src/assembly.rs:200:25:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -102,7 +102,7 @@ failure because function has arguments
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:430:21:
+thread 'main' panicked at src/assembly.rs:437:21:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -113,7 +113,7 @@ W
 010.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -124,7 +124,7 @@ W
 011.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -135,7 +135,7 @@ W
 012.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -146,7 +146,7 @@ W
 013.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -164,7 +164,7 @@ failure because function has arguments
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:430:21:
+thread 'main' panicked at src/assembly.rs:437:21:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -175,7 +175,7 @@ W
 015.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -186,7 +186,7 @@ W
 016.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -197,7 +197,7 @@ W
 017.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -208,7 +208,7 @@ W
 018.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -219,7 +219,7 @@ W
 019.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -230,7 +230,7 @@ W
 020.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -241,7 +241,7 @@ W
 021.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -252,7 +252,7 @@ W
 022.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -263,7 +263,7 @@ W
 023.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:478:59:
+thread 'main' panicked at src/assembly.rs:485:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -274,7 +274,7 @@ W
 024.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -292,7 +292,7 @@ failure because function has arguments
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:430:21:
+thread 'main' panicked at src/assembly.rs:437:21:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -303,7 +303,7 @@ W
 026.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -314,7 +314,7 @@ W
 027.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -323,17 +323,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 028.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (ArrayLValue b w) (VarExpr (ArrayType (IntType) 1) a))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:485:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -343,7 +336,7 @@ W
 029.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -354,7 +347,7 @@ W
 030.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:478:59:
+thread 'main' panicked at src/assembly.rs:485:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -365,7 +358,7 @@ W
 031.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -377,13 +370,13 @@ W
 ======= Standard Out: =======
 
 
-failure because of statement (LetStmt (VarLValue a) (IntExpr (IntType) 1))
+failure because function has arguments
 
 
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
+thread 'main' panicked at src/assembly.rs:437:21:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -392,17 +385,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 033.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue x) (BinopExpr (IntType) (VarExpr (IntType) d) * (VarExpr (IntType) d)))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -410,17 +396,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 034.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue x) (BinopExpr (IntType) (VarExpr (IntType) d) * (VarExpr (IntType) d)))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -440,7 +419,7 @@ failure for function return type (ArrayType (IntType) 6)
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:218:25:
+thread 'main' panicked at src/assembly.rs:200:25:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -460,7 +439,7 @@ failure for function return type (ArrayType (IntType) 1)
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:218:25:
+thread 'main' panicked at src/assembly.rs:200:25:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -471,7 +450,7 @@ W
 002.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -482,7 +461,7 @@ W
 003.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -493,7 +472,7 @@ W
 004.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -504,7 +483,7 @@ W
 005.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -515,7 +494,7 @@ W
 006.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:466:59:
+thread 'main' panicked at src/assembly.rs:473:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -528,17 +507,10 @@ Homework 11 part 4 ................
 Passed 16/16 = 100.0% tests
 Homework 11 part 5 W
 001.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue v) (VarExpr (FloatType) b))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -546,17 +518,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 002.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue i) (VarExpr (BoolType) h))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -564,17 +529,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 003.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue h) (BinopExpr (BoolType) (FalseExpr (BoolType)) == (BinopExpr (BoolType) (VarExpr (FloatType) g) > (VarExpr (FloatType) f))))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -582,17 +540,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 004.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue h) (VarExpr (BoolType) d))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -600,17 +551,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 005.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue f) (VarExpr (IntType) b))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -618,17 +562,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 006.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue f) (BinopExpr (BoolType) (IntExpr (IntType) 511) >= (VarExpr (IntType) d)))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -636,17 +573,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 007.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue i) (UnopExpr (BoolType) ! (FalseExpr (BoolType))))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -654,17 +584,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 008.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue b) (BinopExpr (BoolType) (UnopExpr (BoolType) ! (BinopExpr (BoolType) (BinopExpr (IntType) (BinopExpr (IntType) (UnopExpr (IntType) - (IntExpr (IntType) 526)) / (BinopExpr (IntType) (IntExpr (IntType) 924) * (BinopExpr (IntType) (UnopExpr (IntType) - (IntExpr (IntType) 621)) - (UnopExpr (IntType) - (IntExpr (IntType) 983))))) * (UnopExpr (IntType) - (UnopExpr (IntType) - (UnopExpr (IntType) - (BinopExpr (IntType) (BinopExpr (IntType) (UnopExpr (IntType) - (UnopExpr (IntType) - (IntExpr (IntType) 51))) / (BinopExpr (IntType) (BinopExpr (IntType) (IntExpr (IntType) 745) * (IntExpr (IntType) 781)) / (UnopExpr (IntType) - (IntExpr (IntType) 359)))) - (UnopExpr (IntType) - (UnopExpr (IntType) - (UnopExpr (IntType) - (IntExpr (IntType) 232))))))))) <= (BinopExpr (IntType) (BinopExpr (IntType) (BinopExpr (IntType) (UnopExpr (IntType) - (IntExpr (IntType) 520)) + (IntExpr (IntType) 753)) % (IntExpr (IntType) 287)) % (UnopExpr (IntType) - (BinopExpr (IntType) (IntExpr (IntType) 951) - (IntExpr (IntType) 686)))))) != (BinopExpr (BoolType) (FalseExpr (BoolType)) != (TrueExpr (BoolType)))))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -672,17 +595,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 009.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue f) (BinopExpr (BoolType) (UnopExpr (FloatType) - (FloatExpr (FloatType) 12)) != (FloatExpr (FloatType) 30)))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -690,17 +606,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 010.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue b) (UnopExpr (BoolType) ! (BinopExpr (BoolType) (BinopExpr (IntType) (BinopExpr (IntType) (UnopExpr (IntType) - (BinopExpr (IntType) (UnopExpr (IntType) - (BinopExpr (IntType) (UnopExpr (IntType) - (IntExpr (IntType) 481)) - (BinopExpr (IntType) (UnopExpr (IntType) - (BinopExpr (IntType) (IntExpr (IntType) 372) * (IntExpr (IntType) 718))) * (UnopExpr (IntType) - (UnopExpr (IntType) - (IntExpr (IntType) 756)))))) + (IntExpr (IntType) 776))) * (BinopExpr (IntType) (BinopExpr (IntType) (UnopExpr (IntType) - (UnopExpr (IntType) - (IntExpr (IntType) 681))) % (BinopExpr (IntType) (BinopExpr (IntType) (BinopExpr (IntType) (UnopExpr (IntType) - (IntExpr (IntType) 350)) - (BinopExpr (IntType) (IntExpr (IntType) 264) - (IntExpr (IntType) 197))) / (IntExpr (IntType) 992)) % (BinopExpr (IntType) (UnopExpr (IntType) - (IntExpr (IntType) 961)) / (BinopExpr (IntType) (IntExpr (IntType) 826) - (IntExpr (IntType) 348))))) + (BinopExpr (IntType) (UnopExpr (IntType) - (UnopExpr (IntType) - (UnopExpr (IntType) - (UnopExpr (IntType) - (IntExpr (IntType) 538))))) + (BinopExpr (IntType) (IntExpr (IntType) 63) / (IntExpr (IntType) 774))))) / (BinopExpr (IntType) (UnopExpr (IntType) - (IntExpr (IntType) 967)) % (UnopExpr (IntType) - (BinopExpr (IntType) (BinopExpr (IntType) (BinopExpr (IntType) (BinopExpr (IntType) (UnopExpr (IntType) - (UnopExpr (IntType) - (IntExpr (IntType) 418))) / (IntExpr (IntType) 128)) / (UnopExpr (IntType) - (UnopExpr (IntType) - (BinopExpr (IntType) (IntExpr (IntType) 843) - (IntExpr (IntType) 421))))) % (IntExpr (IntType) 660)) + (UnopExpr (IntType) - (UnopExpr (IntType) - (UnopExpr (IntType) - (UnopExpr (IntType) - (BinopExpr (IntType) (IntExpr (IntType) 545) / (IntExpr (IntType) 556)))))))))) < (UnopExpr (IntType) - (IntExpr (IntType) 296)))))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:687:18:
+internal error: entered unreachable code
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -708,17 +617,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 011.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue l) (UnopExpr (IntType) - (IntExpr (IntType) 701)))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -726,17 +628,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 012.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue r) (VarExpr (IntType) f))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -744,17 +639,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 013.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue d) (UnopExpr (BoolType) ! (VarExpr (BoolType) c)))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -762,17 +650,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 014.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue n) (BinopExpr (IntType) (BinopExpr (IntType) (UnopExpr (IntType) - (UnopExpr (IntType) - (IntExpr (IntType) 109))) / (IntExpr (IntType) 27)) - (IntExpr (IntType) 37)))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -783,13 +664,13 @@ W
 ======= Standard Out: =======
 
 
-failure because of statement (LetStmt (VarLValue d) (VarExpr (BoolType) a))
+failure because function has arguments
 
 
 =======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
+thread 'main' panicked at src/assembly.rs:437:21:
 not implemented
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -798,17 +679,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 016.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because of statement (LetStmt (VarLValue d) (BinopExpr (BoolType) (UnopExpr (IntType) - (IntExpr (IntType) 259)) <= (UnopExpr (IntType) - (BinopExpr (IntType) (BinopExpr (IntType) (VarExpr (IntType) b) + (UnopExpr (IntType) - (UnopExpr (IntType) - (IntExpr (IntType) 792)))) / (UnopExpr (IntType) - (IntExpr (IntType) 598))))))
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:123:17:
-not implemented
+thread 'main' panicked at src/assembly.rs:473:59:
+called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
