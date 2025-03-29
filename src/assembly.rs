@@ -105,21 +105,21 @@ impl<'a> AssemblyGenerator<'a> {
 
     fn generate_statement(
         &mut self,
-        function: &mut String,
+        function_string: &mut String,
         statement: &Statement<'a>,
         environment: &TypeEnvironment<'a>,
     ) {
         match &statement.node {
             StatementType::Return { value } => {
                 // generate expression
-                self.generate_expression(function, value, environment);
+                self.generate_expression(function_string, value, environment);
                 self.shadow_stack.pop_back();
                 self.shadow_stack.pop_back();
-                self.print_stack_size(function);
-                function.push_str("\n\t;RETURN end\t\t\t\t--- C");
+                self.print_stack_size(function_string);
+                function_string.push_str("\n\t;RETURN end\t\t\t\t--- C");
             }
             StatementType::Let { variable, rvalue } => {
-                self.handle_let(function, environment, variable, rvalue);
+                self.handle_let(function_string, environment, variable, rvalue);
             }
             _ => {
                 println!("\n\nfailure because of statement {}", statement.to_string());
@@ -130,40 +130,40 @@ impl<'a> AssemblyGenerator<'a> {
 
     fn generate_command(
         &mut self,
-        function: &mut String,
+        function_string: &mut String,
         command: &Command<'a>,
         environment: &TypeEnvironment<'a>,
     ) {
         match command.node.as_ref() {
             CommandType::Show { expression } => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;SHOW start\t\t\t\t--- C");
-                self.print_stack_size(function);
-                self.check_add_alignment_with(function, &expression.resolved_type);
-                self.print_stack_size(function);
-                let expr_result = self.generate_expression(function, expression, environment);
-                self.print_stack_size(function);
+                function_string.push_str("\n\t;SHOW start\t\t\t\t--- C");
+                self.print_stack_size(function_string);
+                self.check_add_alignment_with(function_string, &expression.resolved_type);
+                self.print_stack_size(function_string);
+                let expr_result = self.generate_expression(function_string, expression, environment);
+                self.print_stack_size(function_string);
                 let size = expr_result.0;
                 let typ_str = expr_result.1.to_string();
                 let const_name = self.get_constant(AssemblyValue::String(typ_str));
-                function.push_str(&format!("\n\tlea rdi, [rel {}]", const_name));
+                function_string.push_str(&format!("\n\tlea rdi, [rel {}]", const_name));
                 self.shadow_stack.push_back((8,false,None));
-                function.push_str("\n\tlea rsi, [rsp]");
-                self.print_stack_size(function);
-                function.push_str("\n\tcall _show");
-                self.print_stack_size(function);
+                function_string.push_str("\n\tlea rsi, [rsp]");
+                self.print_stack_size(function_string);
+                function_string.push_str("\n\tcall _show");
+                self.print_stack_size(function_string);
                 self.shadow_stack.pop_back();
-                function.push_str(&format!("\n\tadd rsp, {}", size));
-                self.print_stack_size(function);
-                self.check_remove_alignment(function);
-                self.print_stack_size(function);
+                function_string.push_str(&format!("\n\tadd rsp, {}", size));
+                self.print_stack_size(function_string);
+                self.check_remove_alignment(function_string);
+                self.print_stack_size(function_string);
                 self.shadow_stack.pop_back();
-                self.print_stack_size(function);
-                function.push_str("\n\t;SHOW end\t\t\t\t--- C");
+                self.print_stack_size(function_string);
+                function_string.push_str("\n\t;SHOW end\t\t\t\t--- C");
                 assert!(s_height == self.shadow_stack.len());
             }
             CommandType::Let { variable, rvalue} => {
-                self.handle_let(function, environment, variable, rvalue);
+                self.handle_let(function_string, environment, variable, rvalue);
             }
             CommandType::Function {
                 name,
@@ -214,26 +214,31 @@ impl<'a> AssemblyGenerator<'a> {
         }
     }
 
-    fn handle_let(&mut self, function: &mut String, environment: &TypeEnvironment<'a>, variable: &LValue<'_>, rvalue: &Expression<'a>) {
+    fn handle_let(
+        &mut self, function_string: &mut String,
+        environment: &TypeEnvironment<'a>,
+        variable: &LValue<'_>,
+        rvalue: &Expression<'a>,
+    ) {
         match &variable.node {
             LValueType::Variable => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;LET start\t\t\t\t--- C");
-                let res = self.generate_expression(function, rvalue, environment);
+                function_string.push_str("\n\t;LET start\t\t\t\t--- C");
+                let res = self.generate_expression(function_string, rvalue, environment);
                 self.offsets.insert(variable.name.to_string(), (res,self.stack_size()));
-                function.push_str("\n\t;LET end\t\t\t\t--- C");
+                function_string.push_str("\n\t;LET end\t\t\t\t--- C");
                 assert!(s_height + 1 == self.shadow_stack.len());
             }
             LValueType::Array { indices } => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;LET start\t\t\t\t--- C");
-                let res = self.generate_expression(function, rvalue, environment);
+                function_string.push_str("\n\t;LET start\t\t\t\t--- C");
+                let res = self.generate_expression(function_string, rvalue, environment);
                 self.offsets.insert(variable.name.to_string(), (res.clone(),self.stack_size()));
                 for (i,b_name) in indices.iter().enumerate() {
                     let stack_location = i * 8 + self.stack_size() - res.0 + 16; //this is a little suspicious
                     self.offsets.insert(b_name.to_string(), ((8, Type::Int),stack_location));
                 }
-                function.push_str("\n\t;LET end\t\t\t\t--- C");
+                function_string.push_str("\n\t;LET end\t\t\t\t--- C");
                 assert!(s_height + 1 == self.shadow_stack.len());
             }
         }
@@ -463,44 +468,39 @@ impl<'a> AssemblyGenerator<'a> {
         }
     }
 
-    fn handle_variable(&mut self, function: &mut String, name: &str, expression: &Expression<'a>) -> (usize, Type<'a>) {
+    fn handle_variable(
+        &mut self, function_string: &mut String,
+        name: &str, expression: &Expression<'a>,
+    ) -> (usize, Type<'a>) {
         match expression.resolved_type {
             Type::Int | Type::Bool | Type::Float => {
                 //TODO: handle array bounds?
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;var start\t\t\t--- E");
-                self.print_stack_size(function);
+                function_string.push_str("\n\t;var start\t\t\t--- E");
+                self.print_stack_size(function_string);
                 let (res,offset) = self.offsets.get(name).unwrap();
-                function.push_str(&format!("\n\tsub rsp, {} ;allocate for variable", res.0));
-                function.push_str(&format!("\n\tmov r10, [rbp - {} + 0] ;get from offset",offset - 8));//get
-                function.push_str("\n\tmov [rsp + 0], r10 ;push into allocated location");//push
+                function_string.push_str(&format!("\n\tsub rsp, {} ;allocate for variable", res.0));
+                function_string.push_str(&format!("\n\tmov r10, [rbp - {} + 0] ;get from offset",offset - 8));//get
+                function_string.push_str("\n\tmov [rsp + 0], r10 ;push into allocated location");//push
                 self.shadow_stack.push_back((res.0,false,Some(expression.resolved_type.clone())));
-                self.print_stack_size(function);
-                function.push_str("\n\t;var end\t\t\t--- E");
+                self.print_stack_size(function_string);
+                function_string.push_str("\n\t;var end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 res.clone()
             }
             Type::Array { element_type: _, rank } => {
                 let s_height = self.shadow_stack.len();
                 let (res,offset) = self.offsets.get(name).unwrap();
-                function.push_str("\n\t;array var start\t\t\t--- E");
-                self.print_stack_size(function);
+                function_string.push_str("\n\t;array var start\t\t\t--- E");
+                self.print_stack_size(function_string);
                 self.shadow_stack.push_back((res.0,false,Some(expression.resolved_type.clone())));
-                function.push_str(&format!("\n\tsub rsp, {}", res.0));
-                self.print_stack_size(function);
+                function_string.push_str(&format!("\n\tsub rsp, {}", res.0));
+                self.print_stack_size(function_string);
                 for i in (0..rank+1).rev() {
-                    function.push_str(&format!("\n\tmov r10, [rbp - {} + {}]", offset - 8, i * 8));
-                    function.push_str(&format!("\n\tmov [rsp + {}], r10",i * 8));
-                    /*
-		mov r10, [rbp - 24 + 8]
-		mov [rsp + 8], r10
-		mov r10, [rbp - 24 + 0]
-		mov [rsp + 0], r10
-
-
-                    */
+                    function_string.push_str(&format!("\n\tmov r10, [rbp - {} + {}]", offset - 8, i * 8));
+                    function_string.push_str(&format!("\n\tmov [rsp + {}], r10",i * 8));
                 }
-                function.push_str("\n\t;array var end\t\t\t--- E");
+                function_string.push_str("\n\t;array var end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 res.clone()
             }
@@ -508,40 +508,43 @@ impl<'a> AssemblyGenerator<'a> {
         }
     }
 
-    fn generate_int_op(&mut self, function: &mut String, operator: &str) -> (usize, Type<'a>) {
-        function.push_str("\n\t;int op");
+    fn generate_int_op(
+        &mut self, function_string: &mut String,
+        operator: &str,
+    ) -> (usize, Type<'a>) {
+        function_string.push_str("\n\t;int op");
         match operator {
             "+" => {
-                self.print_stack_size(function);
+                self.print_stack_size(function_string);
                 self.shadow_stack.pop_back();
                 self.shadow_stack.pop_back();
                 self.shadow_stack.push_back((8,false,Some(Type::Int)));
-                function.push_str("\n\tpop rax\n\tpop r10\n\tadd rax, r10\n\tpush rax");
-                self.print_stack_size(function);
+                function_string.push_str("\n\tpop rax\n\tpop r10\n\tadd rax, r10\n\tpush rax");
+                self.print_stack_size(function_string);
             },
             "-" => {
                 self.shadow_stack.pop_back();
                 self.shadow_stack.pop_back();
                 self.shadow_stack.push_back((8,false,Some(Type::Int)));
-                function.push_str("\n\tpop rax\n\tpop r10\n\tsub rax, r10\n\tpush rax");
+                function_string.push_str("\n\tpop rax\n\tpop r10\n\tsub rax, r10\n\tpush rax");
             },
             "*" => {
                 self.shadow_stack.pop_back();
                 self.shadow_stack.pop_back();
                 self.shadow_stack.push_back((8,false,Some(Type::Int)));
-                function.push_str("\n\tpop rax\n\tpop r10\n\timul rax, r10\n\tpush rax");
+                function_string.push_str("\n\tpop rax\n\tpop r10\n\timul rax, r10\n\tpush rax");
             },
             "/" | "%" => {
-                self.print_stack_size(function);
+                self.print_stack_size(function_string);
                 self.shadow_stack.pop_back();
                 self.shadow_stack.pop_back();
-                function.push_str("\n\tpop rax\n\tpop r10\n\tcmp r10, 0");
-                self.print_stack_size(function);
+                function_string.push_str("\n\tpop rax\n\tpop r10\n\tcmp r10, 0");
+                self.print_stack_size(function_string);
                 let jump_label = format!(".jump{}", self.jump_counter);
                 self.jump_counter += 1;
-                function.push_str(&format!("\n\tjne {}", jump_label));
-                self.check_add_alignment(function);
-                function.push_str(&format!(
+                function_string.push_str(&format!("\n\tjne {}", jump_label));
+                self.check_add_alignment(function_string);
+                function_string.push_str(&format!(
                     "\n\tlea rdi, [rel {}]",
                     self.get_constant(AssemblyValue::String(
                         if operator == "/" {
@@ -552,29 +555,32 @@ impl<'a> AssemblyGenerator<'a> {
                         .to_string()
                     ))
                 ));
-                function.push_str("\n\tcall _fail_assertion");
-                self.check_remove_alignment(function);
+                function_string.push_str("\n\tcall _fail_assertion");
+                self.check_remove_alignment(function_string);
 
-                function.push_str(&format!("\n{}:", jump_label));
-                function.push_str("\n\tcqo\n\tidiv r10");
+                function_string.push_str(&format!("\n{}:", jump_label));
+                function_string.push_str("\n\tcqo\n\tidiv r10");
 
                 if operator == "%" {
-                    function.push_str("\n\tmov rax, rdx");
+                    function_string.push_str("\n\tmov rax, rdx");
                 }
                 self.shadow_stack.push_back((8,false,Some(Type::Int)));
-                function.push_str("\n\tpush rax");
+                function_string.push_str("\n\tpush rax");
             }
             _ => {
                 unreachable!();
             }
         }
-        self.print_stack_size(function);
-        function.push_str("\n\t;int op");
+        self.print_stack_size(function_string);
+        function_string.push_str("\n\t;int op");
         (8, Type::Int)
     }
 
-    fn generate_float_op(&mut self, function: &mut String, operator: &str) -> (usize, Type<'a>) {
-        function.push_str("\n\t;float binop start");
+    fn generate_float_op(
+        &mut self, function_string: &mut String,
+        operator: &str,
+    ) -> (usize, Type<'a>) {
+        function_string.push_str("\n\t;float binop start");
         match operator {
             "+" | "-" | "*" | "/" => {
                 let op_instruction = match operator {
@@ -585,47 +591,50 @@ impl<'a> AssemblyGenerator<'a> {
                     _ => unreachable!(),
                 };
 
-                function.push_str(&format!(
+                function_string.push_str(&format!(
                     "\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8\n\t{} xmm0, xmm1\n\tsub rsp, 8\n\tmovsd [rsp], xmm0",
                     op_instruction
                 ));
             }
             "%" => {
-                function.push_str("\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8\n\tcall _fmod");
+                function_string.push_str("\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8\n\tcall _fmod");
 
-                function.push_str("\n\t;fmod alignment remove");
-                self.check_remove_alignment(function);
+                function_string.push_str("\n\t;fmod alignment remove");
+                self.check_remove_alignment(function_string);
 
-                function.push_str("\n\tsub rsp, 8\n\tmovsd [rsp], xmm0");
+                function_string.push_str("\n\tsub rsp, 8\n\tmovsd [rsp], xmm0");
             }
             _ => unreachable!(),
         }
         self.shadow_stack.pop_back();
-        self.print_stack_size(function);
-        function.push_str("\n\t;float binop end");
+        self.print_stack_size(function_string);
+        function_string.push_str("\n\t;float binop end");
 
         (8, Type::Float)
     }
 
     fn generate_bool_op(
         &mut self,
-        function: &mut String,
+        function_string: &mut String,
         operator: &str,
         left_type: Type<'a>,
     ) -> (usize, Type<'a>) {
         match left_type {
-            Type::Int => self.generate_int_comparison(function, operator),
-            Type::Float => self.generate_float_comparison(function, operator),
-            Type::Bool => self.generate_bool_comparison(function, operator),
+            Type::Int => self.generate_int_comparison(function_string, operator),
+            Type::Float => self.generate_float_comparison(function_string, operator),
+            Type::Bool => self.generate_bool_comparison(function_string, operator),
             _ => unreachable!(),
         }
         self.shadow_stack.pop_back();
-        self.print_stack_size(function);
+        self.print_stack_size(function_string);
         (8, Type::Bool)
     }
 
-    fn generate_int_comparison(&self, function: &mut String, operator: &str) {
-        function.push_str("\n\t;int binop start");
+    fn generate_int_comparison(
+        &self, function_string: &mut String,
+        operator: &str,
+    ) {
+        function_string.push_str("\n\t;int binop start");
         let set_instruction = match operator {
             "<" => "setl",
             "<=" => "setle",
@@ -636,16 +645,19 @@ impl<'a> AssemblyGenerator<'a> {
             _ => unreachable!(),
         };
 
-        function.push_str(&format!(
+        function_string.push_str(&format!(
             "\n\tpop rax\n\tpop r10\n\tcmp rax, r10\n\t{} al\n\tand rax, 1\n\tpush rax",
             set_instruction
         ));
-        self.print_stack_size(function);
-        function.push_str("\n\t;int binop end");
+        self.print_stack_size(function_string);
+        function_string.push_str("\n\t;int binop end");
     }
 
-    fn generate_float_comparison(&self, function: &mut String, operator: &str) {
-        function.push_str("\n\t;float start\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8");
+    fn generate_float_comparison(
+        &self, function_string: &mut String,
+        operator: &str,
+    ) {
+        function_string.push_str("\n\t;float start\n\tmovsd xmm0, [rsp]\n\tadd rsp, 8\n\tmovsd xmm1, [rsp]\n\tadd rsp, 8");
 
         let (cmp_instruction, swap_operands) = match operator {
             "<" => ("cmpltsd", false),
@@ -669,16 +681,19 @@ impl<'a> AssemblyGenerator<'a> {
             )
         };
 
-        function.push_str(&cmp_code);
-        self.print_stack_size(function);
+        function_string.push_str(&cmp_code);
+        self.print_stack_size(function_string);
     }
 
-    fn generate_bool_comparison(&self, function: &mut String, operator: &str) {
+    fn generate_bool_comparison(
+        &self, function_string: &mut String,
+        operator: &str,
+    ) {
         match operator {
-            "&&" => function.push_str("\n\t;and start\n\tpop rax\n\tpop r10\n\tand rax, r10\n\tpush rax\n\t;and end"),
-            "||" => function.push_str("\n\t;or start\n\tpop rax\n\tpop r10\n\tor rax, r10\n\tpush rax\n\t;or end"),
+            "&&" => function_string.push_str("\n\t;and start\n\tpop rax\n\tpop r10\n\tand rax, r10\n\tpush rax\n\t;and end"),
+            "||" => function_string.push_str("\n\t;or start\n\tpop rax\n\tpop r10\n\tor rax, r10\n\tpush rax\n\t;or end"),
             "==" | "!=" => {
-                function.push_str(
+                function_string.push_str(
                     &"\n\t;bool eq or neq start\n\tpop rax\n\tpop r10\n\tcmp rax, r10\n\t\
                      {} al\n\tand rax, 1\n\tpush rax\n\t;bool eq or neq end"
                         .replace("{}", if operator == "==" { "sete" } else { "setne" }),
@@ -686,7 +701,7 @@ impl<'a> AssemblyGenerator<'a> {
             }
             _ => unreachable!(),
         }
-        self.print_stack_size(function);
+        self.print_stack_size(function_string);
     }
 
     fn get_constant(&mut self, value: AssemblyValue) -> &str {
@@ -698,10 +713,13 @@ impl<'a> AssemblyGenerator<'a> {
         entry
     }
 
-    fn check_add_alignment_with(&mut self, function: &mut String, t: &Type<'a>) {
+    fn check_add_alignment_with(
+        &mut self, function_string: &mut String,
+        t: &Type<'a>,
+    ) {
         let s = Self::get_type_stack_size(t);
         self.shadow_stack.push_back((s,false,None));
-        self.check_add_alignment(function);
+        self.check_add_alignment(function_string);
         let a = self.shadow_stack.pop_back().unwrap();
         self.shadow_stack.pop_back();
         self.shadow_stack.push_back(a);
@@ -725,51 +743,26 @@ impl<'a> AssemblyGenerator<'a> {
         }
     }
 
-    fn add_one_to_stack(&self, function: &mut String, expression: &Expression<'a>) {
-        let size = Self::get_type_stack_size(&expression.resolved_type);
-        function.push_str(&format!("\n\tsub rsp, {}", size));
-    }
-
-    fn add_all_to_stack(&self, function: &mut String, types: &Vec<&Expression<'a>>) {
-        for e in types {
-            self.add_one_to_stack(function, e);
-        }
-    }
-
-    fn pre_call_padding(&mut self, function: &mut String, types: &Vec<&Expression<'a>>) -> (usize,bool,Option<Type<'a>>) {
-        self.add_all_to_stack(function, types);
-        self.check_add_alignment(function);
-        let padding = self.shadow_stack.pop_back().unwrap().clone();
-        for _ in 0..types.len() { self.shadow_stack.pop_back();}
-        padding
-    }
-
-    fn stack_inspect(&self) -> String {
-        let mut out = String::new();
-        for (size,padding,typ) in self.shadow_stack.iter() {
-            out.push_str(
-                &format!("\n\tsize:{}\tpadding:{}\ttype{}",
-                size,
-                padding,
-                typ.clone().unwrap_or(Type::Void)));
-        }
-        return out;
-    }
-
-    fn check_add_alignment(&mut self, function: &mut String) {
-        function.push_str("\n\t;Check align");
+    fn check_add_alignment(
+        &mut self,
+        function_string: &mut String,
+    ) {
+        function_string.push_str("\n\t;Check align");
         if self.stack_size() % 16 == 0 {
-            function.push_str("\n\tsub rsp, 8 ;Add align");
+            function_string.push_str("\n\tsub rsp, 8 ;Add align");
             self.shadow_stack.push_back((8,true,None));
         } else {
-            function.push_str("\n\t;no align");
+            function_string.push_str("\n\t;no align");
             self.shadow_stack.push_back((0,true,None));
         }
-        self.print_stack_size(function);
+        self.print_stack_size(function_string);
     }
 
-fn check_remove_alignment(&mut self, function: &mut String) {
-    function.push_str("\n\t;remove align marker");
+fn check_remove_alignment(
+    &mut self,
+    function_string: &mut String,
+) {
+    function_string.push_str("\n\t;remove align marker");
     // Search for the most recent alignment marker in the shadow stack.
     let pos_opt = self.shadow_stack
         .iter()
@@ -781,16 +774,19 @@ fn check_remove_alignment(&mut self, function: &mut String) {
     if let Some(pos) = pos_opt {
         let (size, _padding, _) = self.shadow_stack.remove(pos).unwrap();
         if pos != self.shadow_stack.len() - 1 {
-            function.push_str("\n\t; mid stack align remove");
+            function_string.push_str("\n\t; mid stack align remove");
         }
         if size != 0 {
-            function.push_str(&format!("\n\tadd rsp, {} ;remove align", size));
+            function_string.push_str(&format!("\n\tadd rsp, {} ;remove align", size));
         }
     }
-    self.print_stack_size(function);
+    self.print_stack_size(function_string);
 }
 
-    fn print_stack_size(&self, function: &mut String) {
+    fn print_stack_size(
+        &self,
+        function_string: &mut String,
+    ) {
         let mut stac = String::new();
         for (size,padding,typ) in self.shadow_stack.iter() {
             if *padding  {
@@ -800,7 +796,7 @@ fn check_remove_alignment(&mut self, function: &mut String) {
                     &format!("{}:{} ",typ.clone().unwrap_or(Type::Void), size));
             }
         }
-       function.push_str(&format!("\n\t;Stack#{}# from: {}", self.stack_size(), stac));
+       function_string.push_str(&format!("\n\t;Stack#{}# from: {}", self.stack_size(), stac));
     }
 }
 
