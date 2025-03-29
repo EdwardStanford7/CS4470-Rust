@@ -24,8 +24,10 @@ extern _to_int
 extern _to_float
 
 section .data
-const0: dq 1
-const1: db `(ArrayType (BoolType) 1)`, 0
+const0: dq 3
+const1: dq 2
+const2: dq 1
+const3: db `(ArrayType (IntType) 1)`, 0
 
 section .text
 jpl_main:
@@ -34,25 +36,38 @@ _jpl_main:
 	mov rbp, rsp
 	push r12
 	mov r12, rbp ; end of jpl_main prelude
-	sub rsp, 8 ; Add alignment
-	mov rax, [rel const0] ; True
+	mov rax, [rel const0] ; 3
 	push rax
-	mov rdi, 8
-	sub rsp, 8 ; Add alignment
+	mov rax, [rel const1] ; 2
+	push rax
+	mov rax, [rel const2] ; 1
+	push rax
+	mov rdi, 24
 	call _jpl_alloc
-	add rsp, 8 ; Remove alignment
-	; Moving 8 bytes from rsp to rax 
+	; Moving 24 bytes from rsp to rax 
+		mov r10, [rsp + 16]
+		mov [rax + 16], r10
+		mov r10, [rsp + 8]
+		mov [rax + 8], r10
 		mov r10, [rsp + 0]
 		mov [rax + 0], r10
-	add rsp, 8
+	add rsp, 24
 	push rax
-	mov rax, 1
+	mov rax, 3
 	push rax
-	lea rdi, [rel const1] ; '(ArrayType (BoolType) 1)'
+	sub rsp, 8 ; Add alignment
+	sub rsp, 16
+	; Moving 16 bytes from rbp - 24 to rsp 
+		mov r10, [rbp - 24 + 8]
+		mov [rsp + 8], r10
+		mov r10, [rbp - 24 + 0]
+		mov [rsp + 0], r10
+	lea rdi, [rel const3] ; '(ArrayType (IntType) 1)'
 	lea rsi, [rsp]
 	call _show
 	add rsp, 16
 	add rsp, 8 ; Remove alignment
+	add rsp, 16 ; Local variables
 	pop r12 ; begin jpl_main postlude
 	pop rbp
 	ret

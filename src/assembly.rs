@@ -74,10 +74,9 @@ impl<'a> AssemblyGenerator<'a> {
         // self.stack_size += 16;
 
         for command in commands {
+            let s_height = self.shadow_stack.len();
             self.generate_command(&mut main_function, &command, &environment);
-            self.print_stack_size(&mut main_function);
-            // assert!(self.stack_size() >= 16, 
-            //     "\n failure due to \n{}\n\n{} < 16", command.to_string(), self.stack_size());
+            assert!(s_height == self.shadow_stack.len() || s_height == self.shadow_stack.len() - 1);
         }
 
         if self.stack_size() > 16 {
@@ -113,6 +112,7 @@ impl<'a> AssemblyGenerator<'a> {
     ) {
         match command.node.as_ref() {
             CommandType::Show { expression } => {
+                let s_height = self.shadow_stack.len();
                 function.push_str("\n\t;SHOW start\t\t\t\t--- C");
                 self.print_stack_size(function);
                 self.check_add_alignment_with(function, &expression.resolved_type);
@@ -136,12 +136,15 @@ impl<'a> AssemblyGenerator<'a> {
                 self.shadow_stack.pop_back();
                 self.print_stack_size(function);
                 function.push_str("\n\t;SHOW end\t\t\t\t--- C");
+                assert!(s_height == self.shadow_stack.len());
             }
             CommandType::Let { variable, rvalue} => {
+                let s_height = self.shadow_stack.len();
                 function.push_str("\n\t;LET start\t\t\t\t--- C");
                 let res = self.generate_expression(function, rvalue, environment);
                 self.offsets.insert(variable.name.to_string(), (res,self.stack_size()));
                 function.push_str("\n\t;LET end\t\t\t\t--- C");
+                assert!(s_height + 1 == self.shadow_stack.len());
             }
             // CommandType::Function {
             //     name,
@@ -345,7 +348,7 @@ impl<'a> AssemblyGenerator<'a> {
                 function.push_str("\n\tpush rax");
                 function.push_str(&format!("\n\tmov rax, {}", elements.len()));
                 function.push_str("\n\tpush rax");
-                self.shadow_stack.push_back((16, false, None));
+                self.shadow_stack.push_back((16, false, Some(expression.resolved_type.clone())));
 
                 function.push_str("\n\t;array literal end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
@@ -359,9 +362,22 @@ impl<'a> AssemblyGenerator<'a> {
             }
             ExpressionType::Variable { name } => {
                 let s_height = self.shadow_stack.len();
+                let ret = self.handle_variable(function, name, expression);
+                assert!(s_height + 1 == self.shadow_stack.len());
+                ret
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    fn handle_variable(&mut self, function: &mut String, name: &str, expression: &Expression<'a>) -> (usize, Type<'a>) {
+        match expression.resolved_type {
+            Type::Int | Type::Bool | Type::Float => {
+                //TODO: handle array bounds?
+                let s_height = self.shadow_stack.len();
                 function.push_str("\n\t;var start\t\t\t--- E");
                 self.print_stack_size(function);
-                let (res,offset) = self.offsets.get(*name).unwrap();
+                let (res,offset) = self.offsets.get(name).unwrap();
                 function.push_str(&format!("\n\tsub rsp, {} ;allocate for variable", res.0));
                 function.push_str(&format!("\n\tmov r10, [rbp - {} + 0] ;get from offset",offset - res.0));//get
                 function.push_str("\n\tmov [rsp + 0], r10 ;push into allocated location");//push
@@ -371,7 +387,21 @@ impl<'a> AssemblyGenerator<'a> {
                 assert!(s_height + 1 == self.shadow_stack.len());
                 res.clone()
             }
-            _ => unimplemented!(),
+            Type::Array { element_type: _, rank } => {
+                let s_height = self.shadow_stack.len();
+                function.push_str("\n\t;array var start\t\t\t--- E");
+                self.print_stack_size(function);
+                let (res,offset) = self.offsets.get(name).unwrap();
+                for i in 0..rank {
+                    function.push_str(&format!("\n\tmov r10, [rbp - {} + {}]", offset - res.0, i * 8));
+                    function.push_str("\n\tpush r10");
+                } 
+                self.shadow_stack.push_back((res.0,false,Some(expression.resolved_type.clone())));
+                function.push_str("\n\t;array var end\t\t\t--- E");
+                assert!(s_height + 1 == self.shadow_stack.len());
+                res.clone()
+            }
+            _ => unreachable!(),
         }
     }
 
