@@ -6,8 +6,8 @@ $(BINARY):	src/*.rs
 	cargo build --release
 
 compile:
-	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-	Cargo build
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -y
+	cargo build
 
 run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
