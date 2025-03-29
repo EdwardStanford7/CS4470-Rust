@@ -2,108 +2,338 @@
 Homework 11 part 1 .....................................
 Passed 37/37 = 100.0% tests
 Homework 11 part 2 ...W
-004.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+004.jpl: 5 lines differ
 ======= Standard Out: =======
-
-
-failure for function return type (ArrayType (IntType) 1)
-
-
-=======================
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:200:25:
-not implemented
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
+*** 004.jpl.expected
+--- Your compiler
+***************
+*** 32,38 ****
+  _f:
+  push rbp
+  mov rbp, rsp
+- push rdi
+  mov rax, [rel const0] ; 3
+  push rax
+  mov rax, [rel const1] ; 2
+--- 32,37 ----
+***************
+*** 57,62 ****
+--- 56,62 ----
+  mov r10, [rsp]
+  mov [rax], r10
+  add rsp, 24 ; Local variables
++ add rsp, 0 ; Local variables
+  pop rbp
+  ret
+  jpl_main:
+***************
+*** 66,74 ****
+  push r12
+  mov r12, rbp ; end of jpl_main prelude
+  sub rsp, 8 ; Add alignment
+- sub rsp, 16
+- lea rdi, [rsp]
+  call _f
+  lea rdi, [rel const3] ; '(ArrayType (IntType) 1)'
+  lea rsi, [rsp]
+  call _show
+--- 66,73 ----
+  push r12
+  mov r12, rbp ;end of jpl_main prelude
+  sub rsp, 8 ;Add align
+  call _f
++ CALL CODE
+  lea rdi, [rel const3]
+  lea rsi, [rsp]
+  call _show
 
 =======================
 W
-005.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+005.jpl: 5 lines differ
 ======= Standard Out: =======
-
-
-failure for function return type (ArrayType (BoolType) 1)
-
-
-=======================
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:200:25:
-not implemented
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
+*** 005.jpl.expected
+--- Your compiler
+***************
+*** 31,37 ****
+  _f:
+  push rbp
+  mov rbp, rsp
+- push rdi
+  mov rax, [rel const0] ; False
+  push rax
+  mov rax, [rel const1] ; True
+--- 31,36 ----
+***************
+*** 54,59 ****
+--- 53,59 ----
+  mov r10, [rsp]
+  mov [rax], r10
+  add rsp, 24 ; Local variables
++ add rsp, 0 ; Local variables
+  pop rbp
+  ret
+  jpl_main:
+***************
+*** 63,71 ****
+  push r12
+  mov r12, rbp ; end of jpl_main prelude
+  sub rsp, 8 ; Add alignment
+- sub rsp, 16
+- lea rdi, [rsp]
+  call _f
+  lea rdi, [rel const2] ; '(ArrayType (BoolType) 1)'
+  lea rsi, [rsp]
+  call _show
+--- 63,70 ----
+  push r12
+  mov r12, rbp ;end of jpl_main prelude
+  sub rsp, 8 ;Add align
+  call _f
++ CALL CODE
+  lea rdi, [rel const2]
+  lea rsi, [rsp]
+  call _show
 
 =======================
 W
-006.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+006.jpl: 5 lines differ
 ======= Standard Out: =======
-
-
-failure for function return type (ArrayType (FloatType) 1)
-
-
-=======================
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:200:25:
-not implemented
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
+*** 006.jpl.expected
+--- Your compiler
+***************
+*** 31,37 ****
+  _f:
+  push rbp
+  mov rbp, rsp
+- push rdi
+  mov rax, [rel const0] ; 2.0
+  push rax
+  mov rax, [rel const1] ; 1.0
+--- 31,36 ----
+***************
+*** 54,59 ****
+--- 53,59 ----
+  mov r10, [rsp]
+  mov [rax], r10
+  add rsp, 24 ; Local variables
++ add rsp, 0 ; Local variables
+  pop rbp
+  ret
+  jpl_main:
+***************
+*** 63,71 ****
+  push r12
+  mov r12, rbp ; end of jpl_main prelude
+  sub rsp, 8 ; Add alignment
+- sub rsp, 16
+- lea rdi, [rsp]
+  call _f
+  lea rdi, [rel const2] ; '(ArrayType (FloatType) 1)'
+  lea rsi, [rsp]
+  call _show
+--- 63,70 ----
+  push r12
+  mov r12, rbp ;end of jpl_main prelude
+  sub rsp, 8 ;Add align
+  call _f
++ CALL CODE
+  lea rdi, [rel const2]
+  lea rsi, [rsp]
+  call _show
 
 =======================
 W
-007.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+007.jpl: 11 lines differ
 ======= Standard Out: =======
-
-
-failure for function return type (ArrayType (ArrayType (IntType) 1) 1)
-
-
-=======================
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:200:25:
-not implemented
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
+*** 007.jpl.expected
+--- Your compiler
+***************
+*** 30,36 ****
+  _f:
+  push rbp
+  mov rbp, rsp
+- push rdi
+  mov rax, [rel const0] ; 1
+  push rax
+  mov rdi, 8
+--- 30,35 ----
+***************
+*** 42,50 ****
+  mov rax, 1
+  push rax
+  sub rsp, 16
+! mov r10, [rbp - 16]
+  mov [rsp + 8], r10
+! mov r10, [rbp - 24]
+  mov [rsp], r10
+  mov rdi, 16
+  sub rsp, 8 ; Add alignment
+--- 41,49 ----
+  mov rax, 1
+  push rax
+  sub rsp, 16
+! mov r10, [rbp]
+  mov [rsp + 8], r10
+! mov r10, [rbp - 8]
+  mov [rsp], r10
+  mov rdi, 16
+  sub rsp, 8 ;Add align
+***************
+*** 63,69 ****
+  mov [rax + 8], r10
+  mov r10, [rsp]
+  mov [rax], r10
+! add rsp, 40 ; Local variables
+  pop rbp
+  ret
+  jpl_main:
+--- 62,69 ----
+  mov [rax + 8], r10
+  mov r10, [rsp]
+  mov [rax], r10
+! add rsp, 24 ; Local variables
+! add rsp, 0 ; Local variables
+  pop rbp
+  ret
+  jpl_main:
+***************
+*** 73,81 ****
+  push r12
+  mov r12, rbp ; end of jpl_main prelude
+  sub rsp, 8 ; Add alignment
+- sub rsp, 16
+- lea rdi, [rsp]
+  call _f
+  lea rdi, [rel const1] ; '(ArrayType (ArrayType (IntType) 1) 1)'
+  lea rsi, [rsp]
+  call _show
+--- 73,80 ----
+  push r12
+  mov r12, rbp ;end of jpl_main prelude
+  sub rsp, 8 ;Add align
+  call _f
++ CALL CODE
+  lea rdi, [rel const1]
+  lea rsi, [rsp]
+  call _show
 
 =======================
 W
-008.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+008.jpl: 41 lines differ
 ======= Standard Out: =======
-
-
-failure for function return type (ArrayType (ArrayType (ArrayType (IntType) 1) 1) 1)
-
-
-=======================
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:200:25:
-not implemented
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
+*** 008.jpl.expected
+--- Your compiler
+***************
+*** 30,36 ****
+  _f:
+  push rbp
+  mov rbp, rsp
+- push rdi
+  mov rax, [rel const0] ; 3
+  push rax
+  mov rdi, 8
+--- 30,35 ----
+***************
+*** 38,43 ****
+--- 37,59 ----
+  mov r10, [rsp]
+  mov [rax], r10
+  add rsp, 8
++ push rax
++ mov rax, 1
++ push rax
++ sub rsp, 16
++ mov r10, [rbp]
++ mov [rsp + 8], r10
++ mov r10, [rbp - 8]
++ mov [rsp], r10
++ mov rdi, 16
++ sub rsp, 8 ;Add align
++ call _jpl_alloc
++ add rsp, 8 ;remove align
++ mov r10, [rsp + 8]
++ mov [rax + 8], r10
++ mov r10, [rsp]
++ mov [rax], r10
++ add rsp, 16
+  push rax
+  mov rax, 1
+  push rax
+***************
+*** 58,86 ****
+  push rax
+  mov rax, 1
+  push rax
+- sub rsp, 16
+- mov r10, [rbp - 32]
+- mov [rsp + 8], r10
+- mov r10, [rbp - 40]
+- mov [rsp], r10
+- mov rdi, 16
+- sub rsp, 8 ; Add alignment
+- call _jpl_alloc
+- add rsp, 8 ; Remove alignment
+- mov r10, [rsp + 8]
+- mov [rax + 8], r10
+- mov r10, [rsp]
+- mov [rax], r10
+- add rsp, 16
+- push rax
+- mov rax, 1
+- push rax
+  mov rax, [rbp - 8] ; Address to write return value into
+  mov r10, [rsp + 8]
+  mov [rax + 8], r10
+  mov r10, [rsp]
+  mov [rax], r10
+! add rsp, 56 ; Local variables
+  pop rbp
+  ret
+  jpl_main:
+--- 74,86 ----
+  push rax
+  mov rax, 1
+  push rax
+  mov rax, [rbp - 8] ; Address to write return value into
+  mov r10, [rsp + 8]
+  mov [rax + 8], r10
+  mov r10, [rsp]
+  mov [rax], r10
+! add rsp, 24 ; Local variables
+! add rsp, 16 ; Local variables
+  pop rbp
+  ret
+  jpl_main:
+***************
+*** 90,98 ****
+  push r12
+  mov r12, rbp ; end of jpl_main prelude
+  sub rsp, 8 ; Add alignment
+- sub rsp, 16
+- lea rdi, [rsp]
+  call _f
+  lea rdi, [rel const1] ; '(ArrayType (ArrayType (ArrayType (IntType) 1) 1) 1)'
+  lea rsi, [rsp]
+  call _show
+--- 90,97 ----
+  push r12
+  mov r12, rbp ;end of jpl_main prelude
+  sub rsp, 8 ;Add align
+  call _f
++ CALL CODE
+  lea rdi, [rel const1]
+  lea rsi, [rsp]
+  call _show
 
 =======================
 W
 009.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because function has arguments
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:442:21:
-not implemented
+thread 'main' panicked at src/assembly.rs:450:21:
+not implemented: 
+
+failure because function has arguments
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -113,7 +343,7 @@ W
 010.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -124,7 +354,7 @@ W
 011.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -135,7 +365,7 @@ W
 012.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -146,7 +376,7 @@ W
 013.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -155,17 +385,12 @@ make[2]: *** [run] Error 101
 =======================
 W
 014.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because function has arguments
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:442:21:
-not implemented
+thread 'main' panicked at src/assembly.rs:450:21:
+not implemented: 
+
+failure because function has arguments
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -175,7 +400,7 @@ W
 015.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -186,7 +411,7 @@ W
 016.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -197,7 +422,7 @@ W
 017.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -208,7 +433,7 @@ W
 018.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -219,7 +444,7 @@ W
 019.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -230,7 +455,7 @@ W
 020.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -241,7 +466,7 @@ W
 021.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -252,7 +477,7 @@ W
 022.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -263,7 +488,7 @@ W
 023.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:493:59:
+thread 'main' panicked at src/assembly.rs:502:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -274,7 +499,7 @@ W
 024.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -283,17 +508,12 @@ make[2]: *** [run] Error 101
 =======================
 W
 025.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because function has arguments
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:442:21:
-not implemented
+thread 'main' panicked at src/assembly.rs:450:21:
+not implemented: 
+
+failure because function has arguments
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -303,7 +523,7 @@ W
 026.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -314,7 +534,7 @@ W
 027.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -325,7 +545,7 @@ W
 028.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:493:59:
+thread 'main' panicked at src/assembly.rs:502:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -336,7 +556,7 @@ W
 029.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -347,7 +567,7 @@ W
 030.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:493:59:
+thread 'main' panicked at src/assembly.rs:502:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -358,7 +578,7 @@ W
 031.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -367,17 +587,12 @@ make[2]: *** [run] Error 101
 =======================
 W
 032.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because function has arguments
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:442:21:
-not implemented
+thread 'main' panicked at src/assembly.rs:450:21:
+not implemented: 
+
+failure because function has arguments
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -387,7 +602,7 @@ W
 033.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -398,7 +613,7 @@ W
 034.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -407,20 +622,10 @@ make[2]: *** [run] Error 101
 =======================
 W
 035.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure for call return type (ArrayType (IntType) 6)
-
-
-failure for function return type (ArrayType (IntType) 6)
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:200:25:
-not implemented
+thread 'main' panicked at src/assembly.rs:467:29:
+not implemented: Only rank 1 arrays are supported in call, found: (ArrayType (IntType) 6)
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -429,28 +634,57 @@ make[2]: *** [run] Error 101
 
 Passed 3/35 = 8.6% tests
 Homework 11 part 3 W
-001.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+001.jpl: 5 lines differ
 ======= Standard Out: =======
-
-
-failure for function return type (ArrayType (IntType) 1)
-
-
-=======================
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:200:25:
-not implemented
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
+*** 001.jpl.expected
+--- Your compiler
+***************
+*** 33,39 ****
+  _f:
+  push rbp
+  mov rbp, rsp
+- push rdi
+  mov rax, [rel const1] ; 3
+  push rax
+  mov rax, [rel const2] ; 2
+--- 33,38 ----
+***************
+*** 58,63 ****
+--- 57,63 ----
+  mov r10, [rsp]
+  mov [rax], r10
+  add rsp, 24 ; Local variables
++ add rsp, 0 ; Local variables
+  pop rbp
+  ret
+  jpl_main:
+***************
+*** 68,76 ****
+  mov r12, rbp ; end of jpl_main prelude
+  mov rax, [rel const0] ; 8
+  push rax
+- sub rsp, 16
+- lea rdi, [rsp]
+  call _f
+  lea rdi, [rel const4] ; '(ArrayType (IntType) 1)'
+  lea rsi, [rsp]
+  call _show
+--- 68,75 ----
+  mov r12, rbp ;end of jpl_main prelude
+  mov rax, [rel const0]
+  push rax
+  call _f
++ CALL CODE
+  lea rdi, [rel const4]
+  lea rsi, [rsp]
+  call _show
 
 =======================
 W
 002.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -461,7 +695,7 @@ W
 003.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -472,7 +706,7 @@ W
 004.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -483,7 +717,7 @@ W
 005.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -494,7 +728,7 @@ W
 006.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -509,7 +743,7 @@ Homework 11 part 5 W
 001.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -520,7 +754,7 @@ W
 002.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -531,7 +765,7 @@ W
 003.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -542,7 +776,7 @@ W
 004.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -553,7 +787,7 @@ W
 005.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -564,7 +798,7 @@ W
 006.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -575,7 +809,7 @@ W
 007.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -586,7 +820,7 @@ W
 008.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -597,7 +831,7 @@ W
 009.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -608,7 +842,7 @@ W
 010.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:702:18:
+thread 'main' panicked at src/assembly.rs:711:18:
 internal error: entered unreachable code
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -619,7 +853,7 @@ W
 011.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -630,7 +864,7 @@ W
 012.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -641,7 +875,7 @@ W
 013.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -652,7 +886,7 @@ W
 014.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
@@ -661,17 +895,12 @@ make[2]: *** [run] Error 101
 =======================
 W
 015.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Out: =======
-
-
-failure because function has arguments
-
-
-=======================
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:442:21:
-not implemented
+thread 'main' panicked at src/assembly.rs:450:21:
+not implemented: 
+
+failure because function has arguments
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
@@ -681,7 +910,7 @@ W
 016.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:481:59:
+thread 'main' panicked at src/assembly.rs:490:59:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101

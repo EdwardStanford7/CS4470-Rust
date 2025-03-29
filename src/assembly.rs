@@ -121,10 +121,7 @@ impl<'a> AssemblyGenerator<'a> {
             StatementType::Let { variable, rvalue } => {
                 self.handle_let(function_string, environment, variable, rvalue);
             }
-            _ => {
-                println!("\n\nfailure because of statement {}", statement.to_string());
-                unimplemented!()
-            }
+            _ => unimplemented!("\n\nfailure because of statement {}", statement.to_string())
         }
     }
 
@@ -174,43 +171,55 @@ impl<'a> AssemblyGenerator<'a> {
             } => {
                 let main_shadow_stack = self.shadow_stack.clone();
                 self.shadow_stack = VecDeque::new();
-                let mut function = String::new();
-                function.push_str("\n\t;FUNC start\t\t\t\t--- FFFF");
-                function.push_str(&format!("\n{}:\n_{}:", name, name));
+                let mut new_function_string = String::new();
+                new_function_string.push_str("\n\t;FUNC start\t\t\t\t--- FFFF");
+                new_function_string.push_str(&format!("\n{}:\n_{}:", name, name));
                 // Function prelude
-                function.push_str(&format!("\n\t;{} prelude", name));
-                function.push_str("\n\tpush rbp");
-                function.push_str("\n\tmov rbp, rsp");
+                new_function_string.push_str(&format!("\n\t;{} prelude", name));
+                new_function_string.push_str("\n\tpush rbp");
+                new_function_string.push_str("\n\tmov rbp, rsp");
 
                 for statement in statements {
-                    self.generate_statement(&mut function, &statement, environment);
+                    self.generate_statement(&mut new_function_string, &statement, environment);
                 }
 
-                function.push_str(&format!("\n\t; {} postlude", name));
+                new_function_string.push_str(&format!("\n\t; {} postlude", name));
                 match return_type {
                     Type::Int | Type::Bool  => {
-                        function.push_str("\n\tpop rax ; put top of stack in rax");
+                        new_function_string.push_str("\n\tpop rax ; put top of stack in rax");
                     }
                     Type::Float => {
-                        function.push_str("\n\tmovsd xmm0, [rsp]");
-                        function.push_str("\n\tadd rsp, 8");
+                        new_function_string.push_str("\n\tmovsd xmm0, [rsp]");
+                        new_function_string.push_str("\n\tadd rsp, 8");
                     }
-                    _ => {
-                        println!("\n\nfailure for function return type {}", return_type.to_string());
-                        unimplemented!()
+                    Type::Array { ref element_type, rank } => {
+                        if *rank != 1 {
+                            unimplemented!("Only rank 1 arrays are supported found: {}", return_type.to_string());
+                        }
+                        // For rank 1 arrays, assume that the array is stored on the stack as 16 bytes:
+                        // the top 8 bytes represent the array length and the next 8 bytes represent the array pointer.
+                        // We want to return the array pointer in rax.
+                        // function.push_str("\n\tpop r10 ; pop array length");
+                        // function.push_str("\n\tpop rax ; pop array pointer");
+                        // new_function_string.push_str("\n\tFN CODE");
+                        new_function_string.push_str("\n\tmov rax, [rbp - 8] ; Address to write return value into");
+	                    new_function_string.push_str("\n\t; Moving 16 bytes from rsp to rax ");
+	                    new_function_string.push_str("\n\t	mov r10, [rsp + 8]");
+	                    new_function_string.push_str("\n\t	mov [rax + 8], r10");
+	                    new_function_string.push_str("\n\t	mov r10, [rsp + 0]");
+	                    new_function_string.push_str("\n\t	mov [rax + 0], r10");
+	                    new_function_string.push_str("\n\tadd rsp, 24 ; Local variables");
                     }
+                    _ => unimplemented!("\n\nfailure for function return type {}", return_type.to_string())
                 }
-                function.push_str(&format!("\n\tadd rsp, {} ; Local variables",self.stack_size()));
-                function.push_str("\n\tpop rbp");
-                function.push_str("\n\tret");
-                function.push_str("\n\t;FUNC end\t\t\t\t--- FFFF");
-                self.functions.push(function);
+                new_function_string.push_str(&format!("\n\tadd rsp, {} ; Local variables",self.stack_size()));
+                new_function_string.push_str("\n\tpop rbp");
+                new_function_string.push_str("\n\tret");
+                new_function_string.push_str("\n\t;FUNC end\t\t\t\t--- FFFF");
+                self.functions.push(new_function_string);
                 self.shadow_stack = main_shadow_stack;
             }
-            _ => {
-                println!("\n\nfailure for command type {}", command.to_string());
-                unimplemented!()
-            }
+            _ => unimplemented!("\n\nfailure for command type {}", command.to_string())
         }
     }
 
@@ -438,8 +447,7 @@ impl<'a> AssemblyGenerator<'a> {
                 let s_height = self.shadow_stack.len();
                 self.check_add_alignment(function_string);
                 if arguments.len() != 0 {
-                    println!("\n\nfailure because function has arguments");
-                    unimplemented!()
+                    unimplemented!("\n\nfailure because function has arguments")
                 }
                 function_string.push_str(&format!("\n\tcall _{}", function.to_string()));
                 self.check_remove_alignment(function_string);
@@ -454,17 +462,18 @@ impl<'a> AssemblyGenerator<'a> {
                         function_string.push_str("\n\tsub rsp, 8");
                         function_string.push_str("\n\tmovsd [rsp], xmm0");
                     }
-                    _ => {
-                        println!("\n\nfailure for call return type {}", ret_type.to_string());
+                    Type::Array { element_type, rank } => {
+                        if *rank != 1 {
+                            unimplemented!("Only rank 1 arrays are supported in call, found: {}", expression.resolved_type.to_string());
+                        }
+                        function_string.push_str("\n\tCALL CODE");
                     }
+                    _ => unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
                 }
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (size, ret_type)
             }
-            _ => {
-                println!("failure because for expression: {}", expression.to_string());
-                unimplemented!();
-            }
+            _ => unimplemented!("failure because for expression: {}", expression.to_string())
         }
     }
 
