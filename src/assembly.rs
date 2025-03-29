@@ -71,7 +71,6 @@ impl<'a> AssemblyGenerator<'a> {
         // jpl_main prelude
         main_function.push_str("\n\njpl_main:\n_jpl_main:\n\tpush rbp\n\tmov rbp, rsp\n\tpush r12\n\tmov r12, rbp ;end of jpl_main prelude");
         self.shadow_stack.push_back((16,false,None));
-        // self.stack_size += 16;
 
         for command in commands {
             let s_height = self.shadow_stack.len();
@@ -102,6 +101,28 @@ impl<'a> AssemblyGenerator<'a> {
             sum += e;
         }
         return sum;
+    }
+
+    fn generate_statement(
+        &mut self,
+        function: &mut String,
+        statement: &Statement<'a>,
+        environment: &TypeEnvironment<'a>,
+    ) {
+        match &statement.node {
+            StatementType::Return { value } => {
+                // generate expression
+                self.generate_expression(function, value, environment);
+                self.shadow_stack.pop_back();
+                self.shadow_stack.pop_back();
+                self.print_stack_size(function);
+                function.push_str("\n\t;RETURN end\t\t\t\t--- C");
+            }
+            _ => {
+                println!("\n\nfailure because of statement {}", statement.to_string());
+                unimplemented!()
+            }
+        }
     }
 
     fn generate_command(
@@ -154,7 +175,7 @@ impl<'a> AssemblyGenerator<'a> {
                         let res = self.generate_expression(function, rvalue, environment);
                         self.offsets.insert(variable.name.to_string(), (res.clone(),self.stack_size()));
                         for (i,b_name) in indices.iter().enumerate() {
-                            let stack_location = i * 8 + self.stack_size() - res.0 + 16;
+                            let stack_location = i * 8 + self.stack_size() - res.0 + 16; //this is a little suspicious
                             self.offsets.insert(b_name.to_string(), ((8, Type::Int),stack_location));
                         }
                         function.push_str("\n\t;LET end\t\t\t\t--- C");
@@ -162,33 +183,52 @@ impl<'a> AssemblyGenerator<'a> {
                     }
                 }
             }
-            // CommandType::Function {
-            //     name,
-            //     parameters,
-            //     return_type,
-            //     statements,
-            //     has_return,
-            // } => {
-            //     let mut function = String::new();
-            //     function.push_str(&format!("\n{}:\n_{}:", name, name));
+            CommandType::Function {
+                name,
+                parameters,
+                return_type,
+                statements,
+                has_return,
+            } => {
+                let main_shadow_stack = self.shadow_stack.clone();
+                self.shadow_stack = VecDeque::new();
+                let mut function = String::new();
+                function.push_str("\n\t;FUNC start\t\t\t\t--- FFFF");
+                function.push_str(&format!("\n{}:\n_{}:", name, name));
+                // Function prelude
+                function.push_str(&format!("\n\t;{} prelude", name));
+                function.push_str("\n\tpush rbp");
+                function.push_str("\n\tmov rbp, rsp");
 
-            //     // Function prelude
-            //     function.push_str(&format!("\n\t;{} prelude", name));
-            //     function.push_str("\n\tpush rbp");
-            //     function.push_str("\n\tmov rbp, rsp");
+                for statement in statements {
+                    self.generate_statement(&mut function, &statement, environment);
+                }
 
-            //     for statement in statements {
-            //         // self.generate_statement(statement, environment);
-            //     }
-
-            //     // Function postlude
-            //     function.push_str(&format!("\n\t;{} postlude", name));
-            //     function.push_str("\n\tpop rbp");
-            //     function.push_str("\n\tret");
-
-            //     self.functions.push(function);
-            // }
-            _ => unimplemented!()
+                function.push_str(&format!("\n\t; {} postlude", name));
+                match return_type {
+                    Type::Int | Type::Bool  => {
+                        function.push_str("\n\tpop rax ; put top of stack in rax");
+                    }
+                    Type::Float => {
+                        function.push_str("\n\tmovsd xmm0, [rsp]");
+                        function.push_str("\n\tadd rsp, 8");
+                    }
+                    _ => {
+                        println!("\n\nfailure for function return type {}", return_type.to_string());
+                        unimplemented!()
+                    }
+                }
+                function.push_str(&format!("\n\tadd rsp, {} ; Local variables",self.stack_size()));
+                function.push_str("\n\tpop rbp");
+                function.push_str("\n\tret");
+                function.push_str("\n\t;FUNC end\t\t\t\t--- FFFF");
+                self.functions.push(function);
+                self.shadow_stack = main_shadow_stack;
+            }
+            _ => {
+                println!("\n\nfailure for command type {}", command.to_string());
+                unimplemented!()
+            }
         }
     }
 
@@ -197,58 +237,58 @@ impl<'a> AssemblyGenerator<'a> {
     /// Returns size of expression in bytes
     fn generate_expression(
         &mut self,
-        function: &mut String,
+        function_string: &mut String,
         expression: &Expression<'a>,
         environment: &TypeEnvironment<'a>,
     ) -> (usize, Type<'a>) {
         match expression.node.as_ref() {
             ExpressionType::Int { value } => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;int const start\t\t\t--- E");
-                self.print_stack_size(function);
+                function_string.push_str("\n\t;int const start\t\t\t--- E");
+                self.print_stack_size(function_string);
                 let startstack = self.stack_size();
                 let constant = self.get_constant(AssemblyValue::Number(value.to_string()));
-                function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
-                function.push_str("\n\tpush rax");
+                function_string.push_str(&format!("\n\tmov rax, [rel {}]", constant));
+                function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((8,false,Some(expression.resolved_type.clone())));
                 assert!(startstack == self.stack_size() - 8);
-                self.print_stack_size(function);
-                function.push_str("\n\t;int const end\t\t\t\t--- E");
+                self.print_stack_size(function_string);
+                function_string.push_str("\n\t;int const end\t\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (8, Type::Int)
             }
             ExpressionType::Float { value } => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;float const start\t\t\t--- E");
+                function_string.push_str("\n\t;float const start\t\t\t--- E");
                 let startstack = self.stack_size();
                 let constant = self.get_constant(AssemblyValue::Number(format!("{:?}", value)));
-                function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
-                function.push_str("\n\tpush rax");
+                function_string.push_str(&format!("\n\tmov rax, [rel {}]", constant));
+                function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((8,false,Some(expression.resolved_type.clone())));
                 assert!(startstack == self.stack_size() - 8);
-                function.push_str("\n\t;float const end\t\t\t--- E");
+                function_string.push_str("\n\t;float const end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (8, Type::Float)
             }
             ExpressionType::True => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;true const start\t\t\t--- E");
+                function_string.push_str("\n\t;true const start\t\t\t--- E");
                 let constant = self.get_constant(AssemblyValue::Number("1".to_string()));
-                function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
-                function.push_str("\n\tpush rax");
+                function_string.push_str(&format!("\n\tmov rax, [rel {}]", constant));
+                function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((8,false,Some(expression.resolved_type.clone())));
-                function.push_str("\n\t;true const end\t\t\t--- E");
+                function_string.push_str("\n\t;true const end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (8, Type::Bool)
             }
             ExpressionType::False => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;false const start\t\t\t--- E");
+                function_string.push_str("\n\t;false const start\t\t\t--- E");
                 let constant = self.get_constant(AssemblyValue::Number("0".to_string()));
-                function.push_str(&format!("\n\tmov rax, [rel {}]", constant));
-                function.push_str("\n\tpush rax");
+                function_string.push_str(&format!("\n\tmov rax, [rel {}]", constant));
+                function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((8,false,Some(expression.resolved_type.clone())));
-                function.push_str("\n\t;int const end\t\t\t--- E");
+                function_string.push_str("\n\t;int const end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (8, Type::Bool)
             }
@@ -257,34 +297,34 @@ impl<'a> AssemblyGenerator<'a> {
                 expression,
             } => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;unop start\t\t\t--- E");
+                function_string.push_str("\n\t;unop start\t\t\t--- E");
                 let startstack = self.stack_size();
-                let (size, typ) = self.generate_expression(function, expression, environment);
+                let (size, typ) = self.generate_expression(function_string, expression, environment);
                 assert!(startstack == self.stack_size() - 8);
 
                 match typ {
                     Type::Int => {
-                        function.push_str("\n\tpop rax");
-                        function.push_str("\n\tneg rax");
-                        function.push_str("\n\tpush rax");
+                        function_string.push_str("\n\tpop rax");
+                        function_string.push_str("\n\tneg rax");
+                        function_string.push_str("\n\tpush rax");
                     }
                     Type::Float => {
-                        function.push_str("\n\tmovsd xmm1, [rsp]");
-                        function.push_str("\n\tadd rsp, 8");
-                        function.push_str("\n\tpxor xmm0, xmm0");
-                        function.push_str("\n\tsubsd xmm0, xmm1");
-                        function.push_str("\n\tsub rsp, 8");
-                        function.push_str("\n\tmovsd [rsp], xmm0");
+                        function_string.push_str("\n\tmovsd xmm1, [rsp]");
+                        function_string.push_str("\n\tadd rsp, 8");
+                        function_string.push_str("\n\tpxor xmm0, xmm0");
+                        function_string.push_str("\n\tsubsd xmm0, xmm1");
+                        function_string.push_str("\n\tsub rsp, 8");
+                        function_string.push_str("\n\tmovsd [rsp], xmm0");
                     }
                     Type::Bool => {
-                        function.push_str("\n\tpop rax");
-                        function.push_str("\n\txor rax, 1");
-                        function.push_str("\n\tpush rax");
+                        function_string.push_str("\n\tpop rax");
+                        function_string.push_str("\n\txor rax, 1");
+                        function_string.push_str("\n\tpush rax");
                     }
                     _ => unreachable!(),
                 }
                 assert!(startstack == self.stack_size() - 8);
-                function.push_str("\n\t;unop end\t\t\t\t--- E");
+                function_string.push_str("\n\t;unop end\t\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (size, typ)
             }
@@ -294,60 +334,60 @@ impl<'a> AssemblyGenerator<'a> {
                 right,
             } => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;binop start\t\t\t\t--- E");
+                function_string.push_str("\n\t;binop start\t\t\t\t--- E");
                 if *operator == "%" && matches!(left.resolved_type, Type::Float) {
-                    function.push_str("\n\t;fmod alignment add");
-                    self.check_add_alignment(function);
+                    function_string.push_str("\n\t;fmod alignment add");
+                    self.check_add_alignment(function_string);
                 }
                 let alignedstack = self.stack_size();
 
                 assert!(alignedstack == self.stack_size());
-                self.generate_expression(function, right, environment);
+                self.generate_expression(function_string, right, environment);
                 assert!(alignedstack == self.stack_size() - 8, "\n{}", right.to_string());
-                let (_, left_type) = self.generate_expression(function, left, environment);
+                let (_, left_type) = self.generate_expression(function_string, left, environment);
 
                 assert!(alignedstack == self.stack_size() - 16, "\n{}\n{}", right.to_string(), left.to_string());
                 let result = match expression.resolved_type {
-                    Type::Int => self.generate_int_op(function, operator),
-                    Type::Float => self.generate_float_op(function, operator),
+                    Type::Int => self.generate_int_op(function_string, operator),
+                    Type::Float => self.generate_float_op(function_string, operator),
                     Type::Bool => match left_type {
-                        Type::Int => self.generate_bool_op(function, operator, Type::Int),
-                        Type::Float => self.generate_bool_op(function, operator, Type::Float),
-                        Type::Bool => self.generate_bool_op(function, operator, Type::Bool),
+                        Type::Int => self.generate_bool_op(function_string, operator, Type::Int),
+                        Type::Float => self.generate_bool_op(function_string, operator, Type::Float),
+                        Type::Bool => self.generate_bool_op(function_string, operator, Type::Bool),
                         _ => unreachable!(),
                     },
                     _ => unreachable!(),
                 };
-                function.push_str("\n\t;unop end\t\t\t\t--- E");
+                function_string.push_str("\n\t;unop end\t\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 result
             }
             ExpressionType::ArrayLiteral { elements } => {
                 let s_height = self.shadow_stack.len();
-                function.push_str("\n\t;array literal start\t\t\t--- E");
+                function_string.push_str("\n\t;array literal start\t\t\t--- E");
                 // Generate code for each element (in reverse order) and capture the element size.
                 let mut element_size = 0;
                 for element in elements.iter().rev() {
-                    let (size, _) = self.generate_expression(function, element, environment);
+                    let (size, _) = self.generate_expression(function_string, element, environment);
                     element_size = size;
-                    self.print_stack_size(function);
+                    self.print_stack_size(function_string);
                 }
-                function.push_str("\n\t;array literal done iterating");
-                function.push_str(&format!("\n\tmov rdi, {}", elements.len() * element_size));
-                self.print_stack_size(function);
-                self.check_add_alignment(function);
-                self.print_stack_size(function);
-                function.push_str("\n\tcall _jpl_alloc");
-                self.print_stack_size(function);
-                self.check_remove_alignment(function);
-                self.print_stack_size(function);
+                function_string.push_str("\n\t;array literal done iterating");
+                function_string.push_str(&format!("\n\tmov rdi, {}", elements.len() * element_size));
+                self.print_stack_size(function_string);
+                self.check_add_alignment(function_string);
+                self.print_stack_size(function_string);
+                function_string.push_str("\n\tcall _jpl_alloc");
+                self.print_stack_size(function_string);
+                self.check_remove_alignment(function_string);
+                self.print_stack_size(function_string);
 
-                function.push_str(&format!(
+                function_string.push_str(&format!(
                     "\n\t;Moving {} bytes from rsp to allocated memory",
                     elements.len() * element_size
                 ));
                 for i in (0..elements.len() * element_size / 8).rev() {
-                    function.push_str(&format!(
+                    function_string.push_str(&format!(
                         "\n\tmov r10, [rsp + {}]\n\tmov [rax + {}], r10",
                         i * 8,
                         i * 8
@@ -355,18 +395,18 @@ impl<'a> AssemblyGenerator<'a> {
                 }
 
                 // Remove the element values from the stack and shadow stack.
-                function.push_str(&format!("\n\tadd rsp, {}", elements.len() * element_size));
+                function_string.push_str(&format!("\n\tadd rsp, {}", elements.len() * element_size));
                 for _ in 0..elements.len() {
                     self.shadow_stack.pop_back();
                 }
 
                 // Push the allocated array pointer and the dimension onto the stack.
-                function.push_str("\n\tpush rax");
-                function.push_str(&format!("\n\tmov rax, {}", elements.len()));
-                function.push_str("\n\tpush rax");
+                function_string.push_str("\n\tpush rax");
+                function_string.push_str(&format!("\n\tmov rax, {}", elements.len()));
+                function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((16, false, Some(expression.resolved_type.clone())));
 
-                function.push_str("\n\t;array literal end\t\t\t--- E");
+                function_string.push_str("\n\t;array literal end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (
                     16,
@@ -378,11 +418,41 @@ impl<'a> AssemblyGenerator<'a> {
             }
             ExpressionType::Variable { name } => {
                 let s_height = self.shadow_stack.len();
-                let ret = self.handle_variable(function, name, expression);
+                let ret = self.handle_variable(function_string, name, expression);
                 assert!(s_height + 1 == self.shadow_stack.len());
                 ret
             }
-            _ => unimplemented!(),
+            ExpressionType::Call { function, arguments } => {
+                let s_height = self.shadow_stack.len();
+                self.check_add_alignment(function_string);
+                if arguments.len() != 0 {
+                    println!("\n\nfailure because function has arguments");
+                    unimplemented!()
+                }
+                function_string.push_str(&format!("\n\tcall _{}", function.to_string()));
+                self.check_remove_alignment(function_string);
+                let ret_type = expression.resolved_type.clone();
+                let size = Self::get_type_stack_size(&ret_type);
+                self.shadow_stack.push_back((size,false,Some(ret_type.clone())));
+                match &expression.resolved_type {
+                    Type::Int | Type::Bool => {
+                        function_string.push_str("\n\tpush rax");
+                    }
+                    Type::Float => {
+                        function_string.push_str("\n\tsub rsp, 8");
+                        function_string.push_str("\n\tmovsd [rsp], xmm0");
+                    }
+                    _ => {
+                        println!("\n\nfailure for call return type {}", ret_type.to_string());
+                    }
+                }
+                assert!(s_height + 1 == self.shadow_stack.len());
+                (size, ret_type)
+            }
+            _ => {
+                println!("failure because for expression: {}", expression.to_string());
+                unimplemented!();
+            }
         }
     }
 
