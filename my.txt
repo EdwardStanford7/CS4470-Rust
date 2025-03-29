@@ -1,0 +1,95 @@
+global jpl_main
+global _jpl_main
+extern _fail_assertion
+extern _jpl_alloc
+extern _get_time
+extern _show
+extern _print
+extern _print_time
+extern _read_image
+extern _write_image
+extern _fmod
+extern _sqrt
+extern _exp
+extern _sin
+extern _cos
+extern _tan
+extern _asin
+extern _acos
+extern _atan
+extern _log
+extern _pow
+extern _atan2
+extern _to_int
+extern _to_float
+
+
+section .data
+const0: dq 1
+const1: db `(ArrayType (BoolType) 1)`, 0
+
+
+section .text
+
+jpl_main:
+_jpl_main:
+	push rbp
+	mov rbp, rsp
+	push r12
+	mov r12, rbp ;end of jpl_main prelude
+	;SHOW start				--- C
+	;Stack#16# from: (VoidType):16 
+	;Check align
+	sub rsp, 8 ;Add align
+	;Stack#40# from: (VoidType):16 (VoidType):16 [8] 
+	;Stack#24# from: (VoidType):16 [8] 
+	;array literal start			--- E
+	;true const start			--- E
+	mov rax, [rel const0]
+	push rax
+	;true const end			--- E
+	;Stack#32# from: (VoidType):16 [8] (BoolType):8 
+	;array literal done iterating
+	mov rdi, 8
+	;Stack#32# from: (VoidType):16 [8] (BoolType):8 
+	;Check align
+	sub rsp, 8 ;Add align
+	;Stack#40# from: (VoidType):16 [8] (BoolType):8 [8] 
+	;Stack#40# from: (VoidType):16 [8] (BoolType):8 [8] 
+	call _jpl_alloc
+	;Stack#40# from: (VoidType):16 [8] (BoolType):8 [8] 
+	;remove align marker
+	; mid stack align remove
+	add rsp, 8 ;remove align
+	;Stack#32# from: (VoidType):16 [8] (BoolType):8 
+	;Stack#32# from: (VoidType):16 [8] (BoolType):8 
+	;Moving 8 bytes from rsp to allocated memory
+	mov r10, [rsp + 0]
+	mov [rax + 0], r10
+	add rsp, 8
+	push rax
+	mov rax, 1
+	push rax
+	;array literal end			--- E
+	;Stack#40# from: (VoidType):16 [8] (VoidType):8 (VoidType):8 
+	lea rdi, [rel const1]
+	lea rsi, [rsp]
+	;Stack#48# from: (VoidType):16 [8] (VoidType):8 (VoidType):8 (VoidType):8 
+	call _show
+	;Stack#48# from: (VoidType):16 [8] (VoidType):8 (VoidType):8 (VoidType):8 
+	add rsp, 16
+	;Stack#40# from: (VoidType):16 [8] (VoidType):8 (VoidType):8 
+	;remove align marker
+	; mid stack align remove
+	add rsp, 8 ;remove align
+	;Stack#32# from: (VoidType):16 (VoidType):8 (VoidType):8 
+	;Stack#32# from: (VoidType):16 (VoidType):8 (VoidType):8 
+	;Stack#24# from: (VoidType):16 (VoidType):8 
+	;SHOW end				--- C
+	;Stack#24# from: (VoidType):16 (VoidType):8 
+	add rsp, 8;Deallocate local variables
+
+	pop r12 ;begin jpl_main postlude
+	pop rbp
+	ret
+Compilation succeeded, assembly generation complete.

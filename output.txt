@@ -1,0 +1,1392 @@
+/Applications/Xcode.app/Contents/Developer/usr/bin/make -C ./grader test-hw10 PART=all
+Homework 10 part 1 W
+001.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+   Compiling myjplc v0.1.0 (/Users/robertmorelli/Documents/school-repos/CS4470-Rust)
+    Finished `release` profile [optimized] target(s) in 0.84s
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+002.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+003.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+004.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+005.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+006.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+007.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+008.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+009.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+010.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+011.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+012.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+013.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+014.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+015.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+016.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+017.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+018.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+019.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+020.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+021.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+022.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+023.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+024.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+025.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+026.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+027.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+028.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+029.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+030.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+031.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+032.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+033.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+034.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+035.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+036.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+037.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+038.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+039.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+040.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+041.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+042.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+043.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+044.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+045.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+046.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+047.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+048.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+049.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+050.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+051.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+052.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+053.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+054.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+055.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+056.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+
+Passed 0/56 = 0.0% tests
+Homework 10 part 2 W
+001.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+002.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+003.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:267:17:
+
+(BinopExpr (FloatType) (FloatExpr (FloatType) 45) % (FloatExpr (FloatType) 62))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+004.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+005.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+006.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+007.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+008.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+009.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+010.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+011.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+012.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+013.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+014.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+015.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+016.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+017.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+018.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+019.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:267:17:
+
+(BinopExpr (FloatType) (FloatExpr (FloatType) 13) % (FloatExpr (FloatType) 68))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+020.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+021.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+022.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+023.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+024.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+025.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+026.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+027.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+028.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+029.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:322:17:
+assertion failed: startstack == self.stack_size() - 16
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+030.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+
+Passed 0/30 = 0.0% tests
+Homework 10 part 3 W
+001.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+002.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+003.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+004.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:267:17:
+
+(BinopExpr (BoolType) (UnopExpr (FloatType) - (BinopExpr (FloatType) (UnopExpr (FloatType) - (UnopExpr (FloatType) - (UnopExpr (FloatType) - (UnopExpr (FloatType) - (BinopExpr (FloatType) (FloatExpr (FloatType) 47) - (BinopExpr (FloatType) (FloatExpr (FloatType) 31) % (UnopExpr (FloatType) - (FloatExpr (FloatType) 71)))))))) + (BinopExpr (FloatType) (FloatExpr (FloatType) 81) / (FloatExpr (FloatType) 6)))) < (FloatExpr (FloatType) 92))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+005.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+006.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+007.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+008.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(FloatType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+009.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(BoolType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+W
+010.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:141:17:
+
+16 != 24
+
+	size:16	padding:false	type(VoidType)
+	size:8	padding:false	type(IntType)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+
+Passed 0/10 = 0.0% tests
