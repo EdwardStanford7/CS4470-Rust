@@ -25,10 +25,7 @@ extern _to_float
 
 
 section .data
-const0: dq 3
-const1: dq 2
-const2: dq 1
-const3: db `(ArrayType (IntType) 1)`, 0
+const0: db `(ArrayType (IntType) 6)`, 0
 
 
 section .text
@@ -38,64 +35,40 @@ _f:
 	;f prelude
 	push rbp
 	mov rbp, rsp
-	;array literal start			--- E
-	;int const start			--- E
-	;Stack#0# from: 
-	mov rax, [rel const0]
-	push rax
-	;Stack#8# from: (IntType):8 
-	;int const end				--- E
-	;Stack#8# from: (IntType):8 
-	;int const start			--- E
-	;Stack#8# from: (IntType):8 
-	mov rax, [rel const1]
-	push rax
-	;Stack#16# from: (IntType):8 (IntType):8 
-	;int const end				--- E
-	;Stack#16# from: (IntType):8 (IntType):8 
-	;int const start			--- E
-	;Stack#16# from: (IntType):8 (IntType):8 
-	mov rax, [rel const2]
-	push rax
-	;Stack#24# from: (IntType):8 (IntType):8 (IntType):8 
-	;int const end				--- E
-	;Stack#24# from: (IntType):8 (IntType):8 (IntType):8 
-	;array literal done iterating
-	mov rdi, 24
-	;Stack#24# from: (IntType):8 (IntType):8 (IntType):8 
+	push rdi
+	;Stack#16# from: (VoidType):8 (IntType):8 
 	;Check align
-	;no align
-	;Stack#24# from: (IntType):8 (IntType):8 (IntType):8 [0] 
-	;Stack#24# from: (IntType):8 (IntType):8 (IntType):8 [0] 
-	call _jpl_alloc
-	;Stack#24# from: (IntType):8 (IntType):8 (IntType):8 [0] 
+	sub rsp, 8 ;Add align
+	;Stack#24# from: (VoidType):8 (IntType):8 [8] 
+	sub rsp, 56
+	lea rdi, [rsp + 0]
+	call _f
+	;Stack#24# from: (VoidType):8 (IntType):8 [8] 
 	;remove align marker
 	; mid stack align remove
-	;Stack#24# from: (IntType):8 (IntType):8 (IntType):8 
-	;Stack#24# from: (IntType):8 (IntType):8 (IntType):8 
-	;Moving 24 bytes from rsp to allocated memory
-	mov r10, [rsp + 16]
-	mov [rax + 16], r10
-	mov r10, [rsp + 8]
-	mov [rax + 8], r10
-	mov r10, [rsp + 0]
-	mov [rax + 0], r10
-	add rsp, 24
-	push rax
-	mov rax, 3
-	push rax
-	;array literal end			--- E
-	;Stack#0# from: 
+	add rsp, 8 ;remove align
+	;Stack#16# from: (VoidType):8 (IntType):8 
+	; nothing??
+	;Stack#8# from: (VoidType):8 
 	;RETURN end				--- C
 	; f postlude
 	mov rax, [rbp - 8] ; Address to write return value into
-	; Moving 16 bytes from rsp to rax 
+		mov r10, [rsp + 48]
+		mov [rax + 48], r10
+		mov r10, [rsp + 40]
+		mov [rax + 40], r10
+		mov r10, [rsp + 32]
+		mov [rax + 32], r10
+		mov r10, [rsp + 24]
+		mov [rax + 24], r10
+		mov r10, [rsp + 16]
+		mov [rax + 16], r10
 		mov r10, [rsp + 8]
 		mov [rax + 8], r10
 		mov r10, [rsp + 0]
 		mov [rax + 0], r10
-	add rsp, 24 ; Local variables
-	add rsp, 0 ; Local variables
+	;Stack#64# from: (VoidType):8 (ArrayType (IntType) 6):56 
+	add rsp, 64 ; Local variables
 	pop rbp
 	ret
 	;FUNC end				--- FFFF
@@ -108,32 +81,38 @@ _jpl_main:
 	mov rbp, rsp
 	push r12
 	mov r12, rbp ;end of jpl_main prelude
+	;Stack#8# from: (VoidType):8 
+	;Stack#16# from: (VoidType):8 (IntType):8 
 	;SHOW start				--- C
 	;Stack#16# from: (VoidType):16 
 	;Check align
-	sub rsp, 8 ;Add align
-	;Stack#40# from: (VoidType):16 (VoidType):16 [8] 
-	;Stack#24# from: (VoidType):16 [8] 
-	;Check align
 	;no align
-	;Stack#24# from: (VoidType):16 [8] [0] 
+	;Stack#72# from: (VoidType):16 (VoidType):56 [0] 
+	;Stack#16# from: (VoidType):16 [0] 
+	;Stack#16# from: (VoidType):16 [0] 
+	;Check align
+	sub rsp, 8 ;Add align
+	;Stack#24# from: (VoidType):16 [0] [8] 
+	sub rsp, 56
+	lea rdi, [rsp + 0]
 	call _f
+	;Stack#24# from: (VoidType):16 [0] [8] 
 	;remove align marker
 	; mid stack align remove
-	;Stack#24# from: (VoidType):16 [8] 
-	CALL CODE
-	;Stack#40# from: (VoidType):16 [8] (ArrayType (IntType) 1):16 
-	lea rdi, [rel const3]
-	lea rsi, [rsp]
-	;Stack#48# from: (VoidType):16 [8] (ArrayType (IntType) 1):16 (VoidType):8 
-	call _show
-	;Stack#48# from: (VoidType):16 [8] (ArrayType (IntType) 1):16 (VoidType):8 
-	add rsp, 16
-	;Stack#40# from: (VoidType):16 [8] (ArrayType (IntType) 1):16 
-	;remove align marker
 	add rsp, 8 ;remove align
-	;Stack#32# from: (VoidType):16 (ArrayType (IntType) 1):16 
-	;Stack#32# from: (VoidType):16 (ArrayType (IntType) 1):16 
+	;Stack#16# from: (VoidType):16 [0] 
+	; nothing??
+	;Stack#72# from: (VoidType):16 [0] (ArrayType (IntType) 6):56 
+	lea rdi, [rel const0]
+	lea rsi, [rsp]
+	;Stack#80# from: (VoidType):16 [0] (ArrayType (IntType) 6):56 (VoidType):8 
+	call _show
+	;Stack#80# from: (VoidType):16 [0] (ArrayType (IntType) 6):56 (VoidType):8 
+	add rsp, 56
+	;Stack#72# from: (VoidType):16 [0] (ArrayType (IntType) 6):56 
+	;remove align marker
+	;Stack#72# from: (VoidType):16 (ArrayType (IntType) 6):56 
+	;Stack#72# from: (VoidType):16 (ArrayType (IntType) 6):56 
 	;Stack#16# from: (VoidType):16 
 	;SHOW end				--- C
 
