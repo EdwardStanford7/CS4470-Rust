@@ -34,33 +34,40 @@ _f:
 	;f prelude
 	push rbp
 	mov rbp, rsp
-	push rdi
+	;Stack#8# from: (VoidType):8 
+	;binop start				--- E
+	;var start			--- E
+	;Stack#8# from: (VoidType):8 
+	sub rsp, 8 ;allocate for variable
+	mov r10, [rbp - -8 + 0] ;get from offset
+	mov [rsp + 0], r10 ;push into allocated location
 	;Stack#16# from: (VoidType):8 (IntType):8 
-	;array var start			--- E
+	;var end			--- E
+	;var start			--- E
 	;Stack#16# from: (VoidType):8 (IntType):8 
-	sub rsp, 16<---
-	;Stack#32# from: (VoidType):8 (IntType):8 (ArrayType (IntType) 2):16 
-	mov r10, [rbp - -16 + 16]
-	mov [rsp + 16], r10
-	mov r10, [rbp - -16 + 8]
-	mov [rsp + 8], r10
-	mov r10, [rbp - -16 + 0]
-	mov [rsp + 0], r10
-	;array var end			--- E
+	sub rsp, 8 ;allocate for variable
+	mov r10, [rbp - -16 + 0] ;get from offset
+	mov [rsp + 0], r10 ;push into allocated location
+	;Stack#24# from: (VoidType):8 (IntType):8 (IntType):8 
+	;var end			--- E
+	;int op
+	;Stack#24# from: (VoidType):8 (IntType):8 (IntType):8 
+	pop rax
+	pop r10
+	add rax, r10
+	push rax
 	;Stack#16# from: (VoidType):8 (IntType):8 
+	;Stack#16# from: (VoidType):8 (IntType):8 
+	;int op
+	;unop end				--- E
+	;Stack#8# from: (VoidType):8 
 	; postlude
-	mov rax, [rbp - 8] ; Address to write return value into
-		mov r10, [rsp + 16]
-		mov [rax + 16], r10
-		mov r10, [rsp + 8]
-		mov [rax + 8], r10
-		mov r10, [rsp + 0]
-		mov [rax + 0], r10
-	;Stack#40# from: (VoidType):8 (IntType):8 (ArrayType (IntType) 2):24 
-	add rsp, 32 ; Local variables
+	pop rax ; put top of stack in rax
+	;Stack#8# from: (VoidType):8 
+	add rsp, 0 ; Local variables
 	pop rbp
 	ret
-	;Stack#16# from: (VoidType):8 (IntType):8 
+	;Stack#8# from: (VoidType):8 
 	;FUNC end				--- FFFF
 
 
@@ -72,7 +79,6 @@ _jpl_main:
 	push r12
 	mov r12, rbp ;end of jpl_main prelude
 	;Stack#8# from: (VoidType):8 
-	;Stack#16# from: (VoidType):8 (IntType):8 
 
 	pop r12 ;begin jpl_main postlude
 	pop rbp

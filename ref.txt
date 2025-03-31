@@ -30,24 +30,20 @@ f:
 _f:
 	push rbp
 	mov rbp, rsp
-	push rdi
-	sub rsp, 24
-	; Moving 24 bytes from rbp - -16 to rsp 
-		mov r10, [rbp - -16 + 16]
-		mov [rsp + 16], r10
-		mov r10, [rbp - -16 + 8]
-		mov [rsp + 8], r10
+	sub rsp, 8
+	; Moving 8 bytes from rbp - -24 to rsp 
+		mov r10, [rbp - -24 + 0]
+		mov [rsp + 0], r10
+	sub rsp, 8
+	; Moving 8 bytes from rbp - -16 to rsp 
 		mov r10, [rbp - -16 + 0]
 		mov [rsp + 0], r10
-	mov rax, [rbp - 8] ; Address to write return value into
-	; Moving 24 bytes from rsp to rax 
-		mov r10, [rsp + 16]
-		mov [rax + 16], r10
-		mov r10, [rsp + 8]
-		mov [rax + 8], r10
-		mov r10, [rsp + 0]
-		mov [rax + 0], r10
-	add rsp, 32 ; Local variables
+	pop rax
+	pop r10
+	add rax, r10
+	push rax
+	pop rax
+	add rsp, 0 ; Local variables
 	pop rbp
 	ret
 

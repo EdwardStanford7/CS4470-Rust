@@ -257,10 +257,10 @@ impl<'a> AssemblyGenerator<'a> {
                                     let start = -(sta_param_num * 16 + 8);
                                     self.offsets.insert(param.0.name.to_string(), ((8*(1 + indices.len()), param.1.clone()), start, false));
                                     sta_param_num += 1;
-                                    // for (i,b_name) in indices.iter().enumerate() {
-                                    //     let stack_location = start + (i * 8) as isize;
-                                    //     self.offsets.insert(b_name.to_string(), ((8, Type::Int), stack_location, false));
-                                    // }
+                                    for (i,b_name) in indices.iter().enumerate() {
+                                        let stack_location = start - (i * 8) as isize;
+                                        self.offsets.insert(b_name.to_string(), ((8, Type::Int), stack_location, false));
+                                    }
                                 }
                                 LValueType::Variable { .. } => {
                                     self.offsets.insert(param.0.name.to_string(), ((16, param.1.clone()), -(sta_param_num * 16 + 8), false));
@@ -615,7 +615,6 @@ impl<'a> AssemblyGenerator<'a> {
     ) -> (usize, Type<'a>) {
         match expression.resolved_type {
             Type::Int | Type::Bool | Type::Float => {
-                //TODO: handle array bounds?
                 let s_height = self.shadow_stack.len();
                 function_string.push_str("\n\t;var start\t\t\t--- E");
                 self.print_stack_size(function_string);
@@ -624,7 +623,7 @@ impl<'a> AssemblyGenerator<'a> {
                 );
                 function_string.push_str(&format!("\n\tsub rsp, {} ;allocate for variable", res.0));
                 let var_offset_reg = if *from_main && in_statement { "r12" } else { "rbp" };
-                function_string.push_str(&format!("\n\tmov r10, [{} - {} + 0] ;get from offset",var_offset_reg, offset - 8));//get
+                function_string.push_str(&format!("\n\tmov r10, [{} - {} + 0] ;get from offset",var_offset_reg, offset - 8));
                 function_string.push_str("\n\tmov [rsp + 0], r10 ;push into allocated location");//push
                 self.shadow_stack.push_back((res.0,false,Some(expression.resolved_type.clone())));
                 self.print_stack_size(function_string);

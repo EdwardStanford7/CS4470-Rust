@@ -1,52 +1,8 @@
 /Applications/Xcode.app/Contents/Developer/usr/bin/make -C ./grader test-hw11 PART=all
 Homework 11 part 1 .....................................
 Passed 37/37 = 100.0% tests
-Homework 11 part 2 .......................W
-024.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:623:21:
-not implemented: expression was this: (VarExpr (IntType) w)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-.W
-026.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:623:21:
-not implemented: expression was this: (VarExpr (IntType) h)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-..W
-029.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:623:21:
-not implemented: expression was this: (VarExpr (IntType) z)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-.W
-031.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:623:21:
-not implemented: expression was this: (VarExpr (IntType) H)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-....
-Passed 31/35 = 88.6% tests
+Homework 11 part 2 ...................................
+Passed 35/35 = 100.0% tests
 Homework 11 part 3 ......
 Passed 6/6 = 100.0% tests
 Homework 11 part 4 ................
