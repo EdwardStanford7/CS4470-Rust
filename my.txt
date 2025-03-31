@@ -25,11 +25,6 @@ extern _to_float
 
 
 section .data
-const0: dq 1
-const1: dq 15
-const2: dq 14
-const3: dq 13
-const4: db `(IntType)`, 0
 
 
 section .text
@@ -39,50 +34,33 @@ _f:
 	;f prelude
 	push rbp
 	mov rbp, rsp
-	;LET start				--- C
+	push rdi
+	;Stack#16# from: (VoidType):8 (IntType):8 
 	;array var start			--- E
-	;Stack#8# from: (VoidType):8 
-	sub rsp, 16
-	;Stack#24# from: (VoidType):8 (ArrayType (IntType) 1):16 
+	;Stack#16# from: (VoidType):8 (IntType):8 
+	sub rsp, 16<---
+	;Stack#32# from: (VoidType):8 (IntType):8 (ArrayType (IntType) 2):16 
+	mov r10, [rbp - -16 + 16]
+	mov [rsp + 16], r10
 	mov r10, [rbp - -16 + 8]
 	mov [rsp + 8], r10
 	mov r10, [rbp - -16 + 0]
 	mov [rsp + 0], r10
 	;array var end			--- E
-	;LET end				--- C
-	;Stack#24# from: (VoidType):8 (ArrayType (IntType) 1):16 
-	;binop start				--- E
-	;int const start			--- E
-	;Stack#24# from: (VoidType):8 (ArrayType (IntType) 1):16 
-	mov rax, [rel const0]
-	push rax
-	;Stack#32# from: (VoidType):8 (ArrayType (IntType) 1):16 (IntType):8 
-	;int const end				--- E
-	;var start			--- E
-	;Stack#32# from: (VoidType):8 (ArrayType (IntType) 1):16 (IntType):8 
-	sub rsp, 8 ;allocate for variable
-	mov r10, [rbp - 16 + 0] ;get from offset
-	mov [rsp + 0], r10 ;push into allocated location
-	;Stack#40# from: (VoidType):8 (ArrayType (IntType) 1):16 (IntType):8 (IntType):8 
-	;var end			--- E
-	;int op
-	;Stack#40# from: (VoidType):8 (ArrayType (IntType) 1):16 (IntType):8 (IntType):8 
-	pop rax
-	pop r10
-	add rax, r10
-	push rax
-	;Stack#32# from: (VoidType):8 (ArrayType (IntType) 1):16 (IntType):8 
-	;Stack#32# from: (VoidType):8 (ArrayType (IntType) 1):16 (IntType):8 
-	;int op
-	;unop end				--- E
-	;Stack#24# from: (VoidType):8 (ArrayType (IntType) 1):16 
+	;Stack#16# from: (VoidType):8 (IntType):8 
 	; postlude
-	pop rax ; put top of stack in rax
-	;Stack#24# from: (VoidType):8 (ArrayType (IntType) 1):16 
-	add rsp, 16 ; Local variables
+	mov rax, [rbp - 8] ; Address to write return value into
+		mov r10, [rsp + 16]
+		mov [rax + 16], r10
+		mov r10, [rsp + 8]
+		mov [rax + 8], r10
+		mov r10, [rsp + 0]
+		mov [rax + 0], r10
+	;Stack#40# from: (VoidType):8 (IntType):8 (ArrayType (IntType) 2):24 
+	add rsp, 32 ; Local variables
 	pop rbp
 	ret
-	;Stack#24# from: (VoidType):8 (ArrayType (IntType) 1):16 
+	;Stack#16# from: (VoidType):8 (IntType):8 
 	;FUNC end				--- FFFF
 
 
@@ -94,85 +72,7 @@ _jpl_main:
 	push r12
 	mov r12, rbp ;end of jpl_main prelude
 	;Stack#8# from: (VoidType):8 
-	;SHOW start				--- C
-	;Stack#16# from: (VoidType):16 
-	;Check align
-	;no align
-	;Stack#24# from: (VoidType):16 (VoidType):8 [0] 
-	;Stack#16# from: (VoidType):16 [0] 
-	;Stack#16# from: (VoidType):16 [0] 
-	;Check align
-	sub rsp, 8 ;Add align
-	;Stack#24# from: (VoidType):16 [0] [8] 
-	;array literal start			--- E
-	;int const start			--- E
-	;Stack#24# from: (VoidType):16 [0] [8] 
-	mov rax, [rel const1]
-	push rax
-	;Stack#32# from: (VoidType):16 [0] [8] (IntType):8 
-	;int const end				--- E
-	;Stack#32# from: (VoidType):16 [0] [8] (IntType):8 
-	;int const start			--- E
-	;Stack#32# from: (VoidType):16 [0] [8] (IntType):8 
-	mov rax, [rel const2]
-	push rax
-	;Stack#40# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 
-	;int const end				--- E
-	;Stack#40# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 
-	;int const start			--- E
-	;Stack#40# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 
-	mov rax, [rel const3]
-	push rax
-	;Stack#48# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 (IntType):8 
-	;int const end				--- E
-	;Stack#48# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 (IntType):8 
-	;array literal done iterating
-	mov rdi, 24
-	;Stack#48# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 (IntType):8 
-	;Check align
-	sub rsp, 8 ;Add align
-	;Stack#56# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 (IntType):8 [8] 
-	;Stack#56# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 (IntType):8 [8] 
-	call _jpl_alloc
-	;Stack#56# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 (IntType):8 [8] 
-	;remove align marker
-	; mid stack align remove
-	add rsp, 8 ;remove align
-	;Stack#48# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 (IntType):8 
-	;Stack#48# from: (VoidType):16 [0] [8] (IntType):8 (IntType):8 (IntType):8 
-	;Moving 24 bytes from rsp to allocated memory
-	mov r10, [rsp + 16]
-	mov [rax + 16], r10
-	mov r10, [rsp + 8]
-	mov [rax + 8], r10
-	mov r10, [rsp + 0]
-	mov [rax + 0], r10
-	add rsp, 24
-	push rax
-	mov rax, 3
-	push rax
-	;array literal end			--- E
-	call _f
-	;Stack#24# from: (VoidType):16 [0] [8] 
-	;remove align marker
-	; mid stack align remove
-	add rsp, 8 ;remove align
-	;Stack#16# from: (VoidType):16 [0] 
-	push rax
-	add rsp, 16
-	;Stack#24# from: (VoidType):16 [0] (IntType):8 
-	lea rdi, [rel const4]
-	lea rsi, [rsp]
-	;Stack#32# from: (VoidType):16 [0] (IntType):8 (VoidType):8 
-	call _show
-	;Stack#32# from: (VoidType):16 [0] (IntType):8 (VoidType):8 
-	add rsp, 8
-	;Stack#24# from: (VoidType):16 [0] (IntType):8 
-	;remove align marker
-	;Stack#24# from: (VoidType):16 (IntType):8 
-	;Stack#24# from: (VoidType):16 (IntType):8 
-	;Stack#16# from: (VoidType):16 
-	;SHOW end				--- C
+	;Stack#16# from: (VoidType):8 (IntType):8 
 
 	pop r12 ;begin jpl_main postlude
 	pop rbp

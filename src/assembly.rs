@@ -245,16 +245,22 @@ impl<'a> AssemblyGenerator<'a> {
                             self.shadow_stack.push_back((size, false, Some(param.1.clone())));
                             self.offsets.insert(param.0.name.to_string(), ((size, param.1.clone()), self.stack_size() as isize, false));
                         }
-                        Type::Array { element_type, rank } => {
-                            if *element_type.as_ref() != Type::Int {
-                                unimplemented!("TODO: element type array not supported: ({})", element_type.to_string())
-                            }
-                            if *rank != 1 {
-                                unimplemented!("TODO: ranked array not supported: ({})", rank)
+                        Type::Array { element_type, rank:_ } => {
+                            match element_type.as_ref() {
+                                Type::Int | Type::Bool | Type::Float => {}
+                                _ => {
+                                    unimplemented!("TODO: element type array not supported: ({})", element_type.to_string())
+                                }
                             }
                             match &param.0.node {
-                                LValueType::Array { .. } => {
-                                    unimplemented!("TODO: array bindings")
+                                LValueType::Array { indices } => {
+                                    let start = -(sta_param_num * 16 + 8);
+                                    self.offsets.insert(param.0.name.to_string(), ((8*(1 + indices.len()), param.1.clone()), start, false));
+                                    sta_param_num += 1;
+                                    // for (i,b_name) in indices.iter().enumerate() {
+                                    //     let stack_location = start + (i * 8) as isize;
+                                    //     self.offsets.insert(b_name.to_string(), ((8, Type::Int), stack_location, false));
+                                    // }
                                 }
                                 LValueType::Variable { .. } => {
                                     self.offsets.insert(param.0.name.to_string(), ((16, param.1.clone()), -(sta_param_num * 16 + 8), false));
@@ -503,28 +509,38 @@ impl<'a> AssemblyGenerator<'a> {
                 let ret_type = expression.resolved_type.clone();
                 let size = Self::get_type_stack_size(&ret_type);
                 let s_height = self.shadow_stack.len();
-
-
-                //let argsize = arguments.into_iter().map(|e| Self::get_type_stack_size(&e.resolved_type)).sum::<usize>();
-
+                let mut int_arg_num = 0;
+                let mut flo_arg_num = 0;
+                let mut arr_arg_num = 0;
                 match &expression.resolved_type {
                     Type::Int | Type::Bool | Type::Float => {
                         self.print_stack_size(function_string);
                         self.check_add_alignment(function_string);
                     }
-                    Type::Array { element_type:_, rank } => {
+                    Type::Array {  element_type, rank } => {
                         self.print_stack_size(function_string);
                         self.check_add_alignment_with(function_string, &ret_type);
                         function_string.push_str(&format!("\n\tsub rsp, {}", (rank + 1) * 8));
-                        function_string.push_str("\n\tlea rdi, [rsp + 0]");
                     }
                     _ => unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
                 }
                 for arg in arguments.iter().rev() {
-                    self.generate_expression(function_string, arg, environment, in_statement);
+                    match arg.resolved_type {
+                        Type::Array { .. } => {
+                            self.generate_expression(function_string, arg, environment, in_statement);
+                        }
+                        _ => {}
+                    }
                 }
-                let mut int_arg_num = 0;
-                let mut flo_arg_num = 0;
+                for arg in arguments.iter().rev() {
+                    match arg.resolved_type {
+                        Type::Array { .. } => {
+                        }
+                        _ => {
+                            self.generate_expression(function_string, arg, environment, in_statement);
+                        }
+                    }
+                }
                 for arg in arguments.iter() {
                     match &arg.resolved_type {
                         Type::Int | Type::Bool  => {
@@ -539,20 +555,28 @@ impl<'a> AssemblyGenerator<'a> {
                             self.shadow_stack.pop_back();
                         }
                         Type::Array { .. } => {
+                            arr_arg_num += 1;
                             self.shadow_stack.pop_back();
                         }
                         _=> unimplemented!("arg type not supported: {}", arg.resolved_type.to_string())
                     }
                 }
+                match &expression.resolved_type {
+                    Type::Int | Type::Bool | Type::Float => {}
+                    Type::Array { .. } => {
+                        function_string.push_str(&format!("\n\tlea rdi, [rsp + {}]", arr_arg_num * 16));
+                    }
+                    _ => unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
+                }
                 function_string.push_str(&format!("\n\tcall _{}", function.to_string()));
                 for arg in arguments.iter() {
                     match &arg.resolved_type {
-                        Type::Array { element_type, rank } => {
-                            if *element_type.as_ref() != Type::Int {
-                                unimplemented!("TODO: element type array not supported: ({})", element_type.to_string())
-                            }
-                            if *rank != 1 {
-                                unimplemented!("TODO: ranked array not supported: ({})", rank)
+                        Type::Array { element_type, rank:_ } => {
+                            match element_type.as_ref() {
+                                Type::Int | Type::Bool | Type::Float => {}
+                                _ => {
+                                    unimplemented!("TODO: element type array not supported: ({})", element_type.to_string())
+                                }
                             }
                             function_string.push_str("\n\tadd rsp, 16");
                         }
@@ -569,6 +593,9 @@ impl<'a> AssemblyGenerator<'a> {
                     Type::Float => {
                         function_string.push_str("\n\tsub rsp, 8");
                         function_string.push_str("\n\tmovsd [rsp], xmm0");
+                    }
+                    Type::Array { .. } => {
+                        function_string.push_str("\n\t; array value in stack allocated placeholder");
                     }
                     _ => unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
                 }

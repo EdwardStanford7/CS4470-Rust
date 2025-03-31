@@ -16,6 +16,9 @@ run: $(BINARY)
 test:
 	$(MAKE) -C ./grader test-hw11 PART=all
 
+test-last:
+	$(MAKE) -C ./grader test-hw10 PART=all
+
 run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw2 PART=all COMPILE_MODE=" -m lex"
 	$(MAKE) -C ./grader test-hw3 PART=all COMPILE_MODE=" -m parse"

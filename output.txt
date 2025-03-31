@@ -1,200 +1,54 @@
 /Applications/Xcode.app/Contents/Developer/usr/bin/make -C ./grader test-hw11 PART=all
 Homework 11 part 1 .....................................
 Passed 37/37 = 100.0% tests
-Homework 11 part 2 ...W
-004.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:573:26:
-not implemented: 
-
-failure for call return type (ArrayType (IntType) 1)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-W
-005.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:573:26:
-not implemented: 
-
-failure for call return type (ArrayType (BoolType) 1)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-W
-006.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:573:26:
-not implemented: 
-
-failure for call return type (ArrayType (FloatType) 1)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-W
-007.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:573:26:
-not implemented: 
-
-failure for call return type (ArrayType (ArrayType (IntType) 1) 1)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-W
-008.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:573:26:
-not implemented: 
-
-failure for call return type (ArrayType (ArrayType (ArrayType (IntType) 1) 1) 1)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-...........W
-020.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:250:33:
-not implemented: TODO: element type array not supported: ((FloatType))
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-..W
-023.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:257:37:
-not implemented: TODO: array bindings
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-W
+Homework 11 part 2 .......................W
 024.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:257:37:
-not implemented: TODO: array bindings
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-W
-025.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:250:33:
-not implemented: TODO: element type array not supported: ((BoolType))
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-W
-026.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:250:33:
-not implemented: TODO: element type array not supported: ((FloatType))
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-W
-027.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:250:33:
-not implemented: TODO: element type array not supported: ((BoolType))
+thread 'main' panicked at src/assembly.rs:623:21:
+not implemented: expression was this: (VarExpr (IntType) w)
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
 
 =======================
 .W
+026.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
+======= Standard Error: =======
+
+thread 'main' panicked at src/assembly.rs:623:21:
+not implemented: expression was this: (VarExpr (IntType) h)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+make[2]: *** [run] Error 101
+
+
+=======================
+..W
 029.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:257:37:
-not implemented: TODO: array bindings
+thread 'main' panicked at src/assembly.rs:623:21:
+not implemented: expression was this: (VarExpr (IntType) z)
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
 
 =======================
-W
-030.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:253:33:
-not implemented: TODO: ranked array not supported: (2)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-W
+.W
 031.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
 ======= Standard Error: =======
 
-thread 'main' panicked at src/assembly.rs:253:33:
-not implemented: TODO: ranked array not supported: (2)
+thread 'main' panicked at src/assembly.rs:623:21:
+not implemented: expression was this: (VarExpr (IntType) H)
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make[2]: *** [run] Error 101
 
 
 =======================
-...W
-035.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:573:26:
-not implemented: 
-
-failure for call return type (ArrayType (IntType) 6)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-
-Passed 20/35 = 57.1% tests
-Homework 11 part 3 W
-001.jpl: Could not find 'Compilation succeeded' or 'Compilation failed'
-======= Standard Error: =======
-
-thread 'main' panicked at src/assembly.rs:573:26:
-not implemented: 
-
-failure for call return type (ArrayType (IntType) 1)
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-make[2]: *** [run] Error 101
-
-
-=======================
-.....
-Passed 5/6 = 83.3% tests
+....
+Passed 31/35 = 88.6% tests
+Homework 11 part 3 ......
+Passed 6/6 = 100.0% tests
 Homework 11 part 4 ................
 Passed 16/16 = 100.0% tests
 Homework 11 part 5 ................

@@ -24,35 +24,30 @@ extern _to_int
 extern _to_float
 
 section .data
-const0: dq 1
-const1: dq 15
-const2: dq 14
-const3: dq 13
-const4: db `(IntType)`, 0
 
 section .text
 f:
 _f:
 	push rbp
 	mov rbp, rsp
-	sub rsp, 16
-	; Moving 16 bytes from rbp - -16 to rsp 
+	push rdi
+	sub rsp, 24
+	; Moving 24 bytes from rbp - -16 to rsp 
+		mov r10, [rbp - -16 + 16]
+		mov [rsp + 16], r10
 		mov r10, [rbp - -16 + 8]
 		mov [rsp + 8], r10
 		mov r10, [rbp - -16 + 0]
 		mov [rsp + 0], r10
-	mov rax, [rel const0] ; 1
-	push rax
-	sub rsp, 8
-	; Moving 8 bytes from rbp - 16 to rsp 
-		mov r10, [rbp - 16 + 0]
-		mov [rsp + 0], r10
-	pop rax
-	pop r10
-	add rax, r10
-	push rax
-	pop rax
-	add rsp, 16 ; Local variables
+	mov rax, [rbp - 8] ; Address to write return value into
+	; Moving 24 bytes from rsp to rax 
+		mov r10, [rsp + 16]
+		mov [rax + 16], r10
+		mov r10, [rsp + 8]
+		mov [rax + 8], r10
+		mov r10, [rsp + 0]
+		mov [rax + 0], r10
+	add rsp, 32 ; Local variables
 	pop rbp
 	ret
 
@@ -62,36 +57,6 @@ _jpl_main:
 	mov rbp, rsp
 	push r12
 	mov r12, rbp ; end of jpl_main prelude
-	sub rsp, 8 ; Add alignment
-	mov rax, [rel const1] ; 15
-	push rax
-	mov rax, [rel const2] ; 14
-	push rax
-	mov rax, [rel const3] ; 13
-	push rax
-	mov rdi, 24
-	sub rsp, 8 ; Add alignment
-	call _jpl_alloc
-	add rsp, 8 ; Remove alignment
-	; Moving 24 bytes from rsp to rax 
-		mov r10, [rsp + 16]
-		mov [rax + 16], r10
-		mov r10, [rsp + 8]
-		mov [rax + 8], r10
-		mov r10, [rsp + 0]
-		mov [rax + 0], r10
-	add rsp, 24
-	push rax
-	mov rax, 3
-	push rax
-	call _f
-	add rsp, 16
-	add rsp, 8 ; Remove alignment
-	push rax
-	lea rdi, [rel const4] ; '(IntType)'
-	lea rsi, [rsp]
-	call _show
-	add rsp, 8
 	pop r12 ; begin jpl_main postlude
 	pop rbp
 	ret
