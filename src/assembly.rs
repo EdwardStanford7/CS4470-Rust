@@ -118,7 +118,41 @@ impl<'a> AssemblyGenerator<'a> {
                 self.generate_expression(function_string, value, environment, true);
                 self.shadow_stack.pop_back();
                 self.print_stack_size(function_string);
-                function_string.push_str("\n\t;RETURN end\t\t\t\t--- C");
+                let return_type = value.resolved_type.clone();
+
+
+
+                function_string.push_str(&format!("\n\t; postlude"));
+                match return_type {
+                    Type::Int | Type::Bool  => {
+                        function_string.push_str("\n\tpop rax ; put top of stack in rax");
+                    }
+                    Type::Float => {
+                        function_string.push_str("\n\tmovsd xmm0, [rsp]");
+                        function_string.push_str("\n\tadd rsp, 8");
+                    }
+                    Type::Array {  rank , element_type:_ } => {
+                        function_string.push_str("\n\tmov rax, [rbp - 8] ; Address to write return value into");
+                        for i in (0..rank+1).rev() {
+                            function_string.push_str(&format!("\n\t	mov r10, [rsp + {}]", i * 8));
+                            function_string.push_str(&format!("\n\t	mov [rax + {}], r10", i * 8));
+                        }
+                        self.shadow_stack.push_back((8*(rank+1),false,Some(return_type.clone())));
+                    }
+                    _ => unimplemented!("\n\nfailure for function return type {}", return_type.to_string())
+                }
+                self.print_stack_size(function_string);
+                function_string.push_str(&format!("\n\tadd rsp, {} ; Local variables", self.stack_size() - 8));
+                match return_type {
+                    Type::Array { .. } => {
+                        self.shadow_stack.pop_back();
+                    }
+                    _ => {}
+                }
+                // self.shadow_stack.pop_back(); rbp isnt real
+                function_string.push_str("\n\tpop rbp");
+                function_string.push_str("\n\tret");
+
             }
             StatementType::Let { variable, rvalue } => {
                 self.handle_let(function_string, environment, variable, rvalue, true);
@@ -217,36 +251,6 @@ impl<'a> AssemblyGenerator<'a> {
                 for statement in statements {
                     self.generate_statement(&mut new_function_string, &statement, environment);
                 }
-                new_function_string.push_str(&format!("\n\t; {} postlude", name));
-                match return_type {
-                    Type::Int | Type::Bool  => {
-                        new_function_string.push_str("\n\tpop rax ; put top of stack in rax");
-                    }
-                    Type::Float => {
-                        new_function_string.push_str("\n\tmovsd xmm0, [rsp]");
-                        new_function_string.push_str("\n\tadd rsp, 8");
-                    }
-                    Type::Array {  rank , element_type:_ } => {
-                        new_function_string.push_str("\n\tmov rax, [rbp - 8] ; Address to write return value into");
-                        for i in (0..rank+1).rev() {
-                            new_function_string.push_str(&format!("\n\t	mov r10, [rsp + {}]", i * 8));
-                            new_function_string.push_str(&format!("\n\t	mov [rax + {}], r10", i * 8));
-                        }
-                        self.shadow_stack.push_back((8*(rank+1),false,Some(return_type.clone())));
-                    }
-                    _ => unimplemented!("\n\nfailure for function return type {}", return_type.to_string())
-                }
-                self.print_stack_size(&mut new_function_string);
-                new_function_string.push_str(&format!("\n\tadd rsp, {} ; Local variables", self.stack_size() - 8));
-                match return_type {
-                    Type::Array { .. } => {
-                        self.shadow_stack.pop_back();
-                    }
-                    _ => {}
-                }
-                self.shadow_stack.pop_back();//for rbp
-                new_function_string.push_str("\n\tpop rbp");
-                new_function_string.push_str("\n\tret");
                 self.print_stack_size(&mut new_function_string);
                 new_function_string.push_str("\n\t;FUNC end\t\t\t\t--- FFFF");
                 self.functions.push(new_function_string);
