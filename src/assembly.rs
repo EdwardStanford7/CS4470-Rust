@@ -31,7 +31,7 @@ struct AssemblyGenerator<'a> {
     jump_counter: usize,
     // stack_size: usize,
     // padding: Vec<usize>,
-    offsets: HashMap<String, ((usize, Type<'a>), usize, bool)>,
+    offsets: HashMap<String, ((usize, Type<'a>), isize, bool)>,
     shadow_stack: VecDeque<(usize,bool,Option<Type<'a>>)>
 }
 
@@ -205,7 +205,6 @@ impl<'a> AssemblyGenerator<'a> {
                 statements,
                 has_return:_,
             } => {
-                // let first_not_int = if let Some(a) = parameters.first() { a.1 != Type::Int } else  { false };
                 let main_shadow_stack = self.shadow_stack.clone();
                 self.shadow_stack = VecDeque::new();
                 let mut new_function_string = String::new();
@@ -219,6 +218,7 @@ impl<'a> AssemblyGenerator<'a> {
                 new_function_string.push_str("\n\tmov rbp, rsp");
                 let mut int_param_num = 0;
                 let mut flo_param_num = 0;
+                let mut sta_param_num = 0;
                 match return_type {
                     Type::Array { .. } => {
                         new_function_string.push_str(&format!("\n\tpush {}", INT_REGS[int_param_num]));
@@ -235,7 +235,7 @@ impl<'a> AssemblyGenerator<'a> {
                             int_param_num += 1;
                             let size = Self::get_type_stack_size(&param.1);
                             self.shadow_stack.push_back((size, false, Some(param.1.clone())));
-                            self.offsets.insert(param.0.name.to_string(), ((size, param.1.clone()), self.stack_size(), false));
+                            self.offsets.insert(param.0.name.to_string(), ((size, param.1.clone()), self.stack_size() as isize, false));
                         }
                         Type::Float  => {
                             new_function_string.push_str(&format!("\n\tsub rsp, 8"));
@@ -243,9 +243,26 @@ impl<'a> AssemblyGenerator<'a> {
                             flo_param_num += 1;
                             let size = Self::get_type_stack_size(&param.1);
                             self.shadow_stack.push_back((size, false, Some(param.1.clone())));
-                            self.offsets.insert(param.0.name.to_string(), ((size, param.1.clone()), self.stack_size(), false));
+                            self.offsets.insert(param.0.name.to_string(), ((size, param.1.clone()), self.stack_size() as isize, false));
                         }
-                        _=> unimplemented!()
+                        Type::Array { element_type, rank } => {
+                            if *element_type.as_ref() != Type::Int {
+                                unimplemented!("TODO: element type array not supported: ({})", element_type.to_string())
+                            }
+                            if *rank != 1 {
+                                unimplemented!("TODO: ranked array not supported: ({})", rank)
+                            }
+                            match &param.0.node {
+                                LValueType::Array { .. } => {
+                                    unimplemented!("TODO: array bindings")
+                                }
+                                LValueType::Variable { .. } => {
+                                    self.offsets.insert(param.0.name.to_string(), ((16, param.1.clone()), -(sta_param_num * 16 + 8), false));
+                                    sta_param_num += 1;
+                                }
+                            }
+                        }
+                        _=> unimplemented!("TODO: struct param types ({})", param.1.to_string())
                     }
                 }
                 for statement in statements {
@@ -272,7 +289,7 @@ impl<'a> AssemblyGenerator<'a> {
                 let s_height = self.shadow_stack.len();
                 function_string.push_str("\n\t;LET start\t\t\t\t--- C");
                 let res = self.generate_expression(function_string, rvalue, environment, in_statement);
-                self.offsets.insert(variable.name.to_string(), (res,self.stack_size(), !in_statement));
+                self.offsets.insert(variable.name.to_string(), (res,self.stack_size() as isize, !in_statement));
                 function_string.push_str("\n\t;LET end\t\t\t\t--- C");
                 assert!(s_height + 1 == self.shadow_stack.len());
             }
@@ -280,10 +297,10 @@ impl<'a> AssemblyGenerator<'a> {
                 let s_height = self.shadow_stack.len();
                 function_string.push_str("\n\t;LET start\t\t\t\t--- C");
                 let res = self.generate_expression(function_string, rvalue, environment, in_statement);
-                self.offsets.insert(variable.name.to_string(), (res.clone(),self.stack_size(), !in_statement));
+                self.offsets.insert(variable.name.to_string(), (res.clone(),self.stack_size() as isize, !in_statement));
                 for (i,b_name) in indices.iter().enumerate() {
                     let stack_location = i * 8 + self.stack_size() - res.0 + 16; //this is a little suspicious
-                    self.offsets.insert(b_name.to_string(), ((8, Type::Int),stack_location, !in_statement));
+                    self.offsets.insert(b_name.to_string(), ((8, Type::Int), stack_location as isize, !in_statement));
                 }
                 function_string.push_str("\n\t;LET end\t\t\t\t--- C");
                 assert!(s_height + 1 == self.shadow_stack.len());
@@ -521,10 +538,27 @@ impl<'a> AssemblyGenerator<'a> {
                             flo_arg_num += 1;
                             self.shadow_stack.pop_back();
                         }
-                        _=> unimplemented!()
+                        Type::Array { .. } => {
+                            self.shadow_stack.pop_back();
+                        }
+                        _=> unimplemented!("arg type not supported: {}", arg.resolved_type.to_string())
                     }
                 }
                 function_string.push_str(&format!("\n\tcall _{}", function.to_string()));
+                for arg in arguments.iter() {
+                    match &arg.resolved_type {
+                        Type::Array { element_type, rank } => {
+                            if *element_type.as_ref() != Type::Int {
+                                unimplemented!("TODO: element type array not supported: ({})", element_type.to_string())
+                            }
+                            if *rank != 1 {
+                                unimplemented!("TODO: ranked array not supported: ({})", rank)
+                            }
+                            function_string.push_str("\n\tadd rsp, 16");
+                        }
+                        _ => {}
+                    }
+                }
                 self.print_stack_size(function_string);
                 self.check_remove_alignment(function_string);
                 self.shadow_stack.push_back((size,false,Some(ret_type.clone())));
@@ -535,9 +569,6 @@ impl<'a> AssemblyGenerator<'a> {
                     Type::Float => {
                         function_string.push_str("\n\tsub rsp, 8");
                         function_string.push_str("\n\tmovsd [rsp], xmm0");
-                    }
-                    Type::Array { .. } => {
-                        function_string.push_str("\n\t; nothing??");
                     }
                     _ => unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
                 }
@@ -561,7 +592,9 @@ impl<'a> AssemblyGenerator<'a> {
                 let s_height = self.shadow_stack.len();
                 function_string.push_str("\n\t;var start\t\t\t--- E");
                 self.print_stack_size(function_string);
-                let (res,offset,from_main) = self.offsets.get(name).unwrap();
+                let (res,offset,from_main) = self.offsets.get(name).unwrap_or_else(|| 
+                    unimplemented!("expression was this: {}", expression.to_string())
+                );
                 function_string.push_str(&format!("\n\tsub rsp, {} ;allocate for variable", res.0));
                 let var_offset_reg = if *from_main && in_statement { "r12" } else { "rbp" };
                 function_string.push_str(&format!("\n\tmov r10, [{} - {} + 0] ;get from offset",var_offset_reg, offset - 8));//get
@@ -574,7 +607,9 @@ impl<'a> AssemblyGenerator<'a> {
             }
             Type::Array { element_type: _, rank } => {
                 let s_height = self.shadow_stack.len();
-                let (res,offset,from_main) = self.offsets.get(name).unwrap();
+                let (res,offset,from_main) = self.offsets.get(name).unwrap_or_else(|| 
+                    unimplemented!("expression was this: {}", expression.to_string())
+                );
                 function_string.push_str("\n\t;array var start\t\t\t--- E");
                 self.print_stack_size(function_string);
                 self.shadow_stack.push_back((res.0,false,Some(expression.resolved_type.clone())));
