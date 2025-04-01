@@ -460,11 +460,7 @@ impl<'a> AssemblyGenerator<'a> {
                     Type::Array { .. } => {
                         let size = Self::get_type_stack_size(&ret_type);
                         self.shadow_stack.push_back((size, false, Some(ret_type.clone())));
-                        let float_params_on_stack = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Float)).skip(FLO_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
-                        let int_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Int)).skip(INT_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
-                        let arr_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Array { .. })).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
-                        let all_stack_params = float_params_on_stack.into_iter().chain(int_params).chain(arr_params).collect::<Vec<_>>();
-                        self.check_add_alignment_with(function_string, all_stack_params);
+                        self.check_add_alignment_with_all(function_string, arguments);
                         function_string.push_str(&format!("\n\tsub rsp, {}", size))
                     }
                     _ => unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
@@ -804,6 +800,26 @@ impl<'a> AssemblyGenerator<'a> {
         self.check_add_alignment(function_string);
         let a = self.shadow_stack.pop_back().unwrap();
         for _ in ts {
+            self.shadow_stack.pop_back();
+        }
+        self.shadow_stack.push_back(a);
+    }
+
+    fn check_add_alignment_with_all(
+        &mut self, function_string: &mut String,
+        arguments: &Vec<Expression<'a>>,
+    ) {
+        let float_params_on_stack = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Float)).skip(FLO_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
+        let int_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Int)).skip(INT_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
+        let arr_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Array { .. })).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
+        let all_stack_params = float_params_on_stack.into_iter().chain(int_params).chain(arr_params).collect::<Vec<_>>();
+        for t in all_stack_params.iter() {
+            let s = Self::get_type_stack_size(t);
+            self.shadow_stack.push_back((s,false,None));
+        }
+        self.check_add_alignment(function_string);
+        let a = self.shadow_stack.pop_back().unwrap();
+        for _ in all_stack_params {
             self.shadow_stack.pop_back();
         }
         self.shadow_stack.push_back(a);
