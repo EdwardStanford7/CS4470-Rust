@@ -155,7 +155,7 @@ impl<'a> AssemblyGenerator<'a> {
         match command.node.as_ref() {
             CommandType::Show { expression } => {
                 let s_height = self.shadow_stack.len();
-                self.check_add_alignment_with(function_string, &expression.resolved_type);
+                self.check_add_alignment_with(function_string, vec![expression.resolved_type.clone()]);
                 let expr_result = self.generate_expression(function_string, expression, environment, false);
                 let size = expr_result.0;
                 let typ_str = expr_result.1.to_string();
@@ -452,14 +452,20 @@ impl<'a> AssemblyGenerator<'a> {
                 let s_height = self.shadow_stack.len();
                 let mut int_arg_num = 0;
                 let mut flo_arg_num = 0;
-                let mut arr_arg_num = 0;
+                let mut arr_arg_size = 0;
                 match &expression.resolved_type {
                     Type::Int | Type::Bool | Type::Float => {
-                        self.check_add_alignment(function_string);
+                        self.check_add_alignment(function_string);//wrong
                     }
-                    Type::Array {  element_type:_, rank } => {
-                        self.check_add_alignment_with(function_string, &ret_type);
-                        function_string.push_str(&format!("\n\tsub rsp, {}", (rank + 1) * 8));
+                    Type::Array { .. } => {
+                        let size = Self::get_type_stack_size(&ret_type);
+                        self.shadow_stack.push_back((size, false, Some(ret_type.clone())));
+                        let float_params_on_stack = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Float)).skip(FLO_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
+                        let int_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Int)).skip(INT_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
+                        let arr_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Array { .. })).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
+                        let all_stack_params = float_params_on_stack.into_iter().chain(int_params).chain(arr_params).collect::<Vec<_>>();
+                        self.check_add_alignment_with(function_string, all_stack_params);
+                        function_string.push_str(&format!("\n\tsub rsp, {}", size))
                     }
                     _ => unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
                 }
@@ -493,8 +499,7 @@ impl<'a> AssemblyGenerator<'a> {
                             self.shadow_stack.pop_back();
                         }
                         Type::Array { .. } => {
-                            arr_arg_num += 1;
-                            self.shadow_stack.pop_back();
+                            arr_arg_size += Self::get_type_stack_size(&arg.resolved_type);
                         }
                         _=> unimplemented!("arg type not supported: {}", arg.resolved_type.to_string())
                     }
@@ -502,7 +507,7 @@ impl<'a> AssemblyGenerator<'a> {
                 match &expression.resolved_type {
                     Type::Int | Type::Bool | Type::Float => {}
                     Type::Array { .. } => {
-                        function_string.push_str(&format!("\n\tlea rdi, [rsp + {}]", arr_arg_num * 16));
+                        function_string.push_str(&format!("\n\tlea rdi, [rsp + {}]", arr_arg_size));
                     }
                     _ => unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
                 }
@@ -516,14 +521,23 @@ impl<'a> AssemblyGenerator<'a> {
                                     unimplemented!("TODO: element type array not supported: ({})", element_type.to_string())
                                 }
                             }
-                            function_string.push_str("\n\tadd rsp, 16");
+                            function_string.push_str(&format!("\n\tadd rsp, {}", Self::get_type_stack_size(&arg.resolved_type)));
+                            self.shadow_stack.pop_back();
                         }
-                        Type::Int | Type::Bool | Type::Float => {}
+                        Type::Int | Type::Bool | Type::Float => {
+                        }
                         _ => unimplemented!("unsupported arg type")
                     }
                 }
                 self.check_remove_alignment(function_string);
-                self.shadow_stack.push_back((size,false,Some(ret_type.clone())));
+
+                match &expression.resolved_type {
+                    Type::Int | Type::Bool | Type::Float => {
+                        self.shadow_stack.push_back((size,false,Some(ret_type.clone())));
+                    }
+                    Type::Array { .. } => {}
+                    _ => unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
+                }
                 match &expression.resolved_type {
                     Type::Int | Type::Bool => {
                         function_string.push_str("\n\tpush rax");
@@ -781,13 +795,17 @@ impl<'a> AssemblyGenerator<'a> {
 
     fn check_add_alignment_with(
         &mut self, function_string: &mut String,
-        t: &Type<'a>,
+        ts: Vec<Type<'a>>,
     ) {
-        let s = Self::get_type_stack_size(t);
-        self.shadow_stack.push_back((s,false,None));
+        for t in ts.iter() {
+            let s = Self::get_type_stack_size(t);
+            self.shadow_stack.push_back((s,false,None));
+        }
         self.check_add_alignment(function_string);
         let a = self.shadow_stack.pop_back().unwrap();
-        self.shadow_stack.pop_back();
+        for _ in ts {
+            self.shadow_stack.pop_back();
+        }
         self.shadow_stack.push_back(a);
     }
 
