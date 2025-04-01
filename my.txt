@@ -25,52 +25,11 @@ extern _to_float
 
 
 section .data
+const0: dq 0
+const1: db `(BoolType)`, 0
 
 
 section .text
-	;FUNC start				--- FFFF
-f:
-_f:
-	;f prelude
-	push rbp
-	mov rbp, rsp
-	;Stack#8# from: (VoidType):8 
-	;binop start				--- E
-	;var start			--- E
-	;Stack#8# from: (VoidType):8 
-	sub rsp, 8 ;allocate for variable
-	mov r10, [rbp - -8 + 0] ;get from offset
-	mov [rsp + 0], r10 ;push into allocated location
-	;Stack#16# from: (VoidType):8 (IntType):8 
-	;var end			--- E
-	;var start			--- E
-	;Stack#16# from: (VoidType):8 (IntType):8 
-	sub rsp, 8 ;allocate for variable
-	mov r10, [rbp - -16 + 0] ;get from offset
-	mov [rsp + 0], r10 ;push into allocated location
-	;Stack#24# from: (VoidType):8 (IntType):8 (IntType):8 
-	;var end			--- E
-	;int op
-	;Stack#24# from: (VoidType):8 (IntType):8 (IntType):8 
-	pop rax
-	pop r10
-	add rax, r10
-	push rax
-	;Stack#16# from: (VoidType):8 (IntType):8 
-	;Stack#16# from: (VoidType):8 (IntType):8 
-	;int op
-	;unop end				--- E
-	;Stack#8# from: (VoidType):8 
-	; postlude
-	pop rax ; put top of stack in rax
-	;Stack#8# from: (VoidType):8 
-	add rsp, 0 ; Local variables
-	pop rbp
-	ret
-	;Stack#8# from: (VoidType):8 
-	;FUNC end				--- FFFF
-
-
 
 jpl_main:
 _jpl_main:
@@ -78,7 +37,59 @@ _jpl_main:
 	mov rbp, rsp
 	push r12
 	mov r12, rbp ;end of jpl_main prelude
-	;Stack#8# from: (VoidType):8 
+	;LET start				--- C
+	;false const start			--- E
+	mov rax, [rel const0]
+	push rax
+	;int const end			--- E
+	;LET end				--- C
+	;SHOW start				--- C
+	;Stack#24# from: (VoidType):16 (BoolType):8 
+	;Check align
+	sub rsp, 8 ;Add align
+	;Stack#40# from: (VoidType):16 (BoolType):8 (VoidType):8 [8] 
+	;Stack#32# from: (VoidType):16 (BoolType):8 [8] 
+	;binop start				--- E
+	;var start			--- E
+	;Stack#32# from: (VoidType):16 (BoolType):8 [8] 
+	sub rsp, 8 ;allocate for variable
+	mov r10, [rbp - 16 + 0] ;get from offset
+	mov [rsp + 0], r10 ;push into allocated location
+	;Stack#40# from: (VoidType):16 (BoolType):8 [8] (BoolType):8 
+	;var end			--- E
+	;var start			--- E
+	;Stack#40# from: (VoidType):16 (BoolType):8 [8] (BoolType):8 
+	sub rsp, 8 ;allocate for variable
+	mov r10, [rbp - 16 + 0] ;get from offset
+	mov [rsp + 0], r10 ;push into allocated location
+	;Stack#48# from: (VoidType):16 (BoolType):8 [8] (BoolType):8 (BoolType):8 
+	;var end			--- E
+	;bool eq or neq start
+	pop rax
+	pop r10
+	cmp rax, r10
+	sete al
+	and rax, 1
+	push rax
+	;bool eq or neq end
+	;Stack#48# from: (VoidType):16 (BoolType):8 [8] (BoolType):8 (BoolType):8 
+	;Stack#40# from: (VoidType):16 (BoolType):8 [8] (BoolType):8 
+	;unop end				--- E
+	;Stack#40# from: (VoidType):16 (BoolType):8 [8] (BoolType):8 
+	lea rdi, [rel const1]
+	lea rsi, [rsp]
+	;Stack#48# from: (VoidType):16 (BoolType):8 [8] (BoolType):8 (VoidType):8 
+	call _show
+	;Stack#48# from: (VoidType):16 (BoolType):8 [8] (BoolType):8 (VoidType):8 
+	add rsp, 8
+	;Stack#40# from: (VoidType):16 (BoolType):8 [8] (BoolType):8 
+	;remove align marker
+	add rsp, 8 ;remove align
+	;Stack#32# from: (VoidType):16 (BoolType):8 (BoolType):8 
+	;Stack#32# from: (VoidType):16 (BoolType):8 (BoolType):8 
+	;Stack#24# from: (VoidType):16 (BoolType):8 
+	;SHOW end				--- C
+	add rsp, 8;Deallocate local variables
 
 	pop r12 ;begin jpl_main postlude
 	pop rbp

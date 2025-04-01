@@ -29,8 +29,6 @@ struct AssemblyGenerator<'a> {
     functions: Vec<String>,
     constants: HashMap<AssemblyValue, String>,
     jump_counter: usize,
-    // stack_size: usize,
-    // padding: Vec<usize>,
     offsets: HashMap<String, ((usize, Type<'a>), isize, bool)>,
     shadow_stack: VecDeque<(usize,bool,Option<Type<'a>>)>
 }
@@ -59,8 +57,6 @@ impl<'a> AssemblyGenerator<'a> {
             constants: HashMap::new(),
             offsets: HashMap::new(),
             jump_counter: 1,
-            // stack_size: 0,
-            // padding: Vec::new(),
             shadow_stack: VecDeque::new()
         }
     }
@@ -99,11 +95,7 @@ impl<'a> AssemblyGenerator<'a> {
     }
 
     fn stack_size(&self) -> usize {
-        let mut sum = 0;
-        for (e,_,_) in self.shadow_stack.iter(){
-            sum += e;
-        }
-        return sum;
+        self.shadow_stack.iter().map(|(e,_,_)| e).sum()
     }
 
     fn generate_statement(
@@ -114,15 +106,9 @@ impl<'a> AssemblyGenerator<'a> {
     ) {
         match &statement.node {
             StatementType::Return { value } => {
-                self.print_stack_size(function_string);
                 self.generate_expression(function_string, value, environment, true);
                 self.shadow_stack.pop_back();
-                self.print_stack_size(function_string);
                 let return_type = value.resolved_type.clone();
-
-
-
-                function_string.push_str(&format!("\n\t; postlude"));
                 match return_type {
                     Type::Int | Type::Bool  => {
                         function_string.push_str("\n\tpop rax ; put top of stack in rax");
@@ -132,6 +118,7 @@ impl<'a> AssemblyGenerator<'a> {
                         function_string.push_str("\n\tadd rsp, 8");
                     }
                     Type::Array {  rank , element_type:_ } => {
+                        //sussy
                         function_string.push_str("\n\tmov rax, [rbp - 8] ; Address to write return value into");
                         for i in (0..rank+1).rev() {
                             function_string.push_str(&format!("\n\t	mov r10, [rsp + {}]", i * 8));
@@ -141,7 +128,6 @@ impl<'a> AssemblyGenerator<'a> {
                     }
                     _ => unimplemented!("\n\nfailure for function return type {}", return_type.to_string())
                 }
-                self.print_stack_size(function_string);
                 function_string.push_str(&format!("\n\tadd rsp, {} ; Local variables", self.stack_size() - 8));
                 match return_type {
                     Type::Array { .. } => {
@@ -149,7 +135,6 @@ impl<'a> AssemblyGenerator<'a> {
                     }
                     _ => {}
                 }
-                // self.shadow_stack.pop_back(); rbp isnt real
                 function_string.push_str("\n\tpop rbp");
                 function_string.push_str("\n\tret");
 
@@ -170,29 +155,19 @@ impl<'a> AssemblyGenerator<'a> {
         match command.node.as_ref() {
             CommandType::Show { expression } => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;SHOW start\t\t\t\t--- C");
-                self.print_stack_size(function_string);
                 self.check_add_alignment_with(function_string, &expression.resolved_type);
-                self.print_stack_size(function_string);
                 let expr_result = self.generate_expression(function_string, expression, environment, false);
-                self.print_stack_size(function_string);
                 let size = expr_result.0;
                 let typ_str = expr_result.1.to_string();
                 let const_name = self.get_constant(AssemblyValue::String(typ_str));
                 function_string.push_str(&format!("\n\tlea rdi, [rel {}]", const_name));
                 self.shadow_stack.push_back((8,false,None));
                 function_string.push_str("\n\tlea rsi, [rsp]");
-                self.print_stack_size(function_string);
                 function_string.push_str("\n\tcall _show");
-                self.print_stack_size(function_string);
                 self.shadow_stack.pop_back();
                 function_string.push_str(&format!("\n\tadd rsp, {}", size));
-                self.print_stack_size(function_string);
                 self.check_remove_alignment(function_string);
-                self.print_stack_size(function_string);
                 self.shadow_stack.pop_back();
-                self.print_stack_size(function_string);
-                function_string.push_str("\n\t;SHOW end\t\t\t\t--- C");
                 assert!(s_height == self.shadow_stack.len());
             }
             CommandType::Let { variable, rvalue} => {
@@ -208,23 +183,20 @@ impl<'a> AssemblyGenerator<'a> {
                 let main_shadow_stack = self.shadow_stack.clone();
                 self.shadow_stack = VecDeque::new();
                 let mut new_function_string = String::new();
-                new_function_string.push_str("\n\t;FUNC start\t\t\t\t--- FFFF");
                 new_function_string.push_str(&format!("\n{}:\n_{}:", name, name));
                 // Function prelude
                 new_function_string.push_str(&format!("\n\t;{} prelude", name));
                 new_function_string.push_str("\n\tpush rbp");
                 self.shadow_stack.push_back((8,false,None));
-                self.print_stack_size(function_string);
                 new_function_string.push_str("\n\tmov rbp, rsp");
                 let mut int_param_num = 0;
                 let mut flo_param_num = 0;
-                let mut sta_param_num = 0;
+                let mut arr_param_size = 0;
                 match return_type {
                     Type::Array { .. } => {
                         new_function_string.push_str(&format!("\n\tpush {}", INT_REGS[int_param_num]));
                         int_param_num += 1;
                         self.shadow_stack.push_back((8,false,Some(Type::Int)));
-                        self.print_stack_size(function_string);
                     }
                     _ => {}
                 }
@@ -254,17 +226,19 @@ impl<'a> AssemblyGenerator<'a> {
                             }
                             match &param.0.node {
                                 LValueType::Array { indices } => {
-                                    let start = -(sta_param_num * 16 + 8);
-                                    self.offsets.insert(param.0.name.to_string(), ((8*(1 + indices.len()), param.1.clone()), start, false));
-                                    sta_param_num += 1;
+                                    let start = -(arr_param_size + 8);
+                                    let size = Self::get_type_stack_size(&param.1);
+                                    self.offsets.insert(param.0.name.to_string(), ((size, param.1.clone()), start, false));
+                                    arr_param_size += size as isize;
                                     for (i,b_name) in indices.iter().enumerate() {
                                         let stack_location = start - (i * 8) as isize;
                                         self.offsets.insert(b_name.to_string(), ((8, Type::Int), stack_location, false));
                                     }
                                 }
                                 LValueType::Variable { .. } => {
-                                    self.offsets.insert(param.0.name.to_string(), ((16, param.1.clone()), -(sta_param_num * 16 + 8), false));
-                                    sta_param_num += 1;
+                                    let size  = Self::get_type_stack_size(&param.1);
+                                    self.offsets.insert(param.0.name.to_string(), ((size, param.1.clone()), -(arr_param_size + 8), false));
+                                    arr_param_size += size as isize;
                                 }
                             }
                         }
@@ -274,8 +248,6 @@ impl<'a> AssemblyGenerator<'a> {
                 for statement in statements {
                     self.generate_statement(&mut new_function_string, &statement, environment);
                 }
-                self.print_stack_size(&mut new_function_string);
-                new_function_string.push_str("\n\t;FUNC end\t\t\t\t--- FFFF");
                 self.functions.push(new_function_string);
                 self.shadow_stack = main_shadow_stack;
             }
@@ -293,22 +265,19 @@ impl<'a> AssemblyGenerator<'a> {
         match &variable.node {
             LValueType::Variable => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;LET start\t\t\t\t--- C");
                 let res = self.generate_expression(function_string, rvalue, environment, in_statement);
                 self.offsets.insert(variable.name.to_string(), (res,self.stack_size() as isize, !in_statement));
-                function_string.push_str("\n\t;LET end\t\t\t\t--- C");
                 assert!(s_height + 1 == self.shadow_stack.len());
             }
             LValueType::Array { indices } => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;LET start\t\t\t\t--- C");
                 let res = self.generate_expression(function_string, rvalue, environment, in_statement);
                 self.offsets.insert(variable.name.to_string(), (res.clone(),self.stack_size() as isize, !in_statement));
                 for (i,b_name) in indices.iter().enumerate() {
-                    let stack_location = i * 8 + self.stack_size() - res.0 + 16; //this is a little suspicious
+                    //this is a little suspicious
+                    let stack_location = i * 8 + self.stack_size() - res.0 + 16;
                     self.offsets.insert(b_name.to_string(), ((8, Type::Int), stack_location as isize, !in_statement));
                 }
-                function_string.push_str("\n\t;LET end\t\t\t\t--- C");
                 assert!(s_height + 1 == self.shadow_stack.len());
             }
         }
@@ -327,51 +296,41 @@ impl<'a> AssemblyGenerator<'a> {
         match expression.node.as_ref() {
             ExpressionType::Int { value } => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;int const start\t\t\t--- E");
-                self.print_stack_size(function_string);
                 let startstack = self.stack_size();
                 let constant = self.get_constant(AssemblyValue::Number(value.to_string()));
                 function_string.push_str(&format!("\n\tmov rax, [rel {}]", constant));
                 function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((8,false,Some(expression.resolved_type.clone())));
                 assert!(startstack == self.stack_size() - 8);
-                self.print_stack_size(function_string);
-                function_string.push_str("\n\t;int const end\t\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (8, Type::Int)
             }
             ExpressionType::Float { value } => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;float const start\t\t\t--- E");
                 let startstack = self.stack_size();
                 let constant = self.get_constant(AssemblyValue::Number(format!("{:?}", value)));
                 function_string.push_str(&format!("\n\tmov rax, [rel {}]", constant));
                 function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((8,false,Some(expression.resolved_type.clone())));
                 assert!(startstack == self.stack_size() - 8);
-                function_string.push_str("\n\t;float const end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (8, Type::Float)
             }
             ExpressionType::True => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;true const start\t\t\t--- E");
                 let constant = self.get_constant(AssemblyValue::Number("1".to_string()));
                 function_string.push_str(&format!("\n\tmov rax, [rel {}]", constant));
                 function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((8,false,Some(expression.resolved_type.clone())));
-                function_string.push_str("\n\t;true const end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (8, Type::Bool)
             }
             ExpressionType::False => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;false const start\t\t\t--- E");
                 let constant = self.get_constant(AssemblyValue::Number("0".to_string()));
                 function_string.push_str(&format!("\n\tmov rax, [rel {}]", constant));
                 function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((8,false,Some(expression.resolved_type.clone())));
-                function_string.push_str("\n\t;int const end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (8, Type::Bool)
             }
@@ -380,7 +339,6 @@ impl<'a> AssemblyGenerator<'a> {
                 expression,
             } => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;unop start\t\t\t--- E");
                 let startstack = self.stack_size();
                 let (size, typ) = self.generate_expression(function_string, expression, environment, in_statement);
                 assert!(startstack == self.stack_size() - 8);
@@ -407,7 +365,6 @@ impl<'a> AssemblyGenerator<'a> {
                     _ => unreachable!(),
                 }
                 assert!(startstack == self.stack_size() - 8);
-                function_string.push_str("\n\t;unop end\t\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (size, typ)
             }
@@ -417,7 +374,6 @@ impl<'a> AssemblyGenerator<'a> {
                 right,
             } => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;binop start\t\t\t\t--- E");
                 if *operator == "%" && matches!(left.resolved_type, Type::Float) {
                     function_string.push_str("\n\t;fmod alignment add");
                     self.check_add_alignment(function_string);
@@ -441,30 +397,21 @@ impl<'a> AssemblyGenerator<'a> {
                     },
                     _ => unreachable!(),
                 };
-                function_string.push_str("\n\t;unop end\t\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 result
             }
             ExpressionType::ArrayLiteral { elements } => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;array literal start\t\t\t--- E");
-                // Generate code for each element (in reverse order) and capture the element size.
                 let mut element_size = 0;
                 for element in elements.iter().rev() {
                     let (size, _) = self.generate_expression(function_string, element, environment, in_statement);
                     element_size = size;
-                    self.print_stack_size(function_string);
                 }
                 function_string.push_str("\n\t;array literal done iterating");
                 function_string.push_str(&format!("\n\tmov rdi, {}", elements.len() * element_size));
-                self.print_stack_size(function_string);
                 self.check_add_alignment(function_string);
-                self.print_stack_size(function_string);
                 function_string.push_str("\n\tcall _jpl_alloc");
-                self.print_stack_size(function_string);
                 self.check_remove_alignment(function_string);
-                self.print_stack_size(function_string);
-
                 function_string.push_str(&format!(
                     "\n\t;Moving {} bytes from rsp to allocated memory",
                     elements.len() * element_size
@@ -476,20 +423,14 @@ impl<'a> AssemblyGenerator<'a> {
                         i * 8
                     ));
                 }
-
-                // Remove the element values from the stack and shadow stack.
                 function_string.push_str(&format!("\n\tadd rsp, {}", elements.len() * element_size));
                 for _ in 0..elements.len() {
                     self.shadow_stack.pop_back();
                 }
-
-                // Push the allocated array pointer and the dimension onto the stack.
                 function_string.push_str("\n\tpush rax");
                 function_string.push_str(&format!("\n\tmov rax, {}", elements.len()));
                 function_string.push_str("\n\tpush rax");
                 self.shadow_stack.push_back((16, false, Some(expression.resolved_type.clone())));
-
-                function_string.push_str("\n\t;array literal end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 (
                     16,
@@ -514,11 +455,9 @@ impl<'a> AssemblyGenerator<'a> {
                 let mut arr_arg_num = 0;
                 match &expression.resolved_type {
                     Type::Int | Type::Bool | Type::Float => {
-                        self.print_stack_size(function_string);
                         self.check_add_alignment(function_string);
                     }
-                    Type::Array {  element_type, rank } => {
-                        self.print_stack_size(function_string);
+                    Type::Array {  element_type:_, rank } => {
                         self.check_add_alignment_with(function_string, &ret_type);
                         function_string.push_str(&format!("\n\tsub rsp, {}", (rank + 1) * 8));
                     }
@@ -534,8 +473,7 @@ impl<'a> AssemblyGenerator<'a> {
                 }
                 for arg in arguments.iter().rev() {
                     match arg.resolved_type {
-                        Type::Array { .. } => {
-                        }
+                        Type::Array { .. } => {}
                         _ => {
                             self.generate_expression(function_string, arg, environment, in_statement);
                         }
@@ -580,10 +518,10 @@ impl<'a> AssemblyGenerator<'a> {
                             }
                             function_string.push_str("\n\tadd rsp, 16");
                         }
-                        _ => {}
+                        Type::Int | Type::Bool | Type::Float => {}
+                        _ => unimplemented!("unsupported arg type")
                     }
                 }
-                self.print_stack_size(function_string);
                 self.check_remove_alignment(function_string);
                 self.shadow_stack.push_back((size,false,Some(ret_type.clone())));
                 match &expression.resolved_type {
@@ -616,8 +554,6 @@ impl<'a> AssemblyGenerator<'a> {
         match expression.resolved_type {
             Type::Int | Type::Bool | Type::Float => {
                 let s_height = self.shadow_stack.len();
-                function_string.push_str("\n\t;var start\t\t\t--- E");
-                self.print_stack_size(function_string);
                 let (res,offset,from_main) = self.offsets.get(name).unwrap_or_else(|| 
                     unimplemented!("expression was this: {}", expression.to_string())
                 );
@@ -626,8 +562,6 @@ impl<'a> AssemblyGenerator<'a> {
                 function_string.push_str(&format!("\n\tmov r10, [{} - {} + 0] ;get from offset",var_offset_reg, offset - 8));
                 function_string.push_str("\n\tmov [rsp + 0], r10 ;push into allocated location");//push
                 self.shadow_stack.push_back((res.0,false,Some(expression.resolved_type.clone())));
-                self.print_stack_size(function_string);
-                function_string.push_str("\n\t;var end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 res.clone()
             }
@@ -636,17 +570,13 @@ impl<'a> AssemblyGenerator<'a> {
                 let (res,offset,from_main) = self.offsets.get(name).unwrap_or_else(|| 
                     unimplemented!("expression was this: {}", expression.to_string())
                 );
-                function_string.push_str("\n\t;array var start\t\t\t--- E");
-                self.print_stack_size(function_string);
                 self.shadow_stack.push_back((res.0,false,Some(expression.resolved_type.clone())));
                 function_string.push_str(&format!("\n\tsub rsp, {}", res.0));
-                self.print_stack_size(function_string);
                 let var_offset_reg = if *from_main && in_statement { "r12" } else { "rbp" };
                 for i in (0..rank+1).rev() {
                     function_string.push_str(&format!("\n\tmov r10, [{} - {} + {}]", var_offset_reg, offset - 8, i * 8));
                     function_string.push_str(&format!("\n\tmov [rsp + {}], r10",i * 8));
                 }
-                function_string.push_str("\n\t;array var end\t\t\t--- E");
                 assert!(s_height + 1 == self.shadow_stack.len());
                 res.clone()
             }
@@ -661,12 +591,10 @@ impl<'a> AssemblyGenerator<'a> {
         function_string.push_str("\n\t;int op");
         match operator {
             "+" => {
-                self.print_stack_size(function_string);
                 self.shadow_stack.pop_back();
                 self.shadow_stack.pop_back();
                 self.shadow_stack.push_back((8,false,Some(Type::Int)));
                 function_string.push_str("\n\tpop rax\n\tpop r10\n\tadd rax, r10\n\tpush rax");
-                self.print_stack_size(function_string);
             },
             "-" => {
                 self.shadow_stack.pop_back();
@@ -681,11 +609,9 @@ impl<'a> AssemblyGenerator<'a> {
                 function_string.push_str("\n\tpop rax\n\tpop r10\n\timul rax, r10\n\tpush rax");
             },
             "/" | "%" => {
-                self.print_stack_size(function_string);
                 self.shadow_stack.pop_back();
                 self.shadow_stack.pop_back();
                 function_string.push_str("\n\tpop rax\n\tpop r10\n\tcmp r10, 0");
-                self.print_stack_size(function_string);
                 let jump_label = format!(".jump{}", self.jump_counter);
                 self.jump_counter += 1;
                 function_string.push_str(&format!("\n\tjne {}", jump_label));
@@ -717,7 +643,6 @@ impl<'a> AssemblyGenerator<'a> {
                 unreachable!();
             }
         }
-        self.print_stack_size(function_string);
         function_string.push_str("\n\t;int op");
         (8, Type::Int)
     }
@@ -753,7 +678,6 @@ impl<'a> AssemblyGenerator<'a> {
             _ => unreachable!(),
         }
         self.shadow_stack.pop_back();
-        self.print_stack_size(function_string);
         function_string.push_str("\n\t;float binop end");
 
         (8, Type::Float)
@@ -772,7 +696,6 @@ impl<'a> AssemblyGenerator<'a> {
             _ => unreachable!(),
         }
         self.shadow_stack.pop_back();
-        self.print_stack_size(function_string);
         (8, Type::Bool)
     }
 
@@ -795,7 +718,6 @@ impl<'a> AssemblyGenerator<'a> {
             "\n\tpop rax\n\tpop r10\n\tcmp rax, r10\n\t{} al\n\tand rax, 1\n\tpush rax",
             set_instruction
         ));
-        self.print_stack_size(function_string);
         function_string.push_str("\n\t;int binop end");
     }
 
@@ -828,7 +750,6 @@ impl<'a> AssemblyGenerator<'a> {
         };
 
         function_string.push_str(&cmp_code);
-        self.print_stack_size(function_string);
     }
 
     fn generate_bool_comparison(
@@ -847,7 +768,6 @@ impl<'a> AssemblyGenerator<'a> {
             }
             _ => unreachable!(),
         }
-        self.print_stack_size(function_string);
     }
 
     fn get_constant(&mut self, value: AssemblyValue) -> &str {
@@ -901,7 +821,6 @@ impl<'a> AssemblyGenerator<'a> {
             function_string.push_str("\n\t;no align");
             self.shadow_stack.push_back((0,true,None));
         }
-        self.print_stack_size(function_string);
     }
 
 fn check_remove_alignment(
@@ -909,13 +828,8 @@ fn check_remove_alignment(
     function_string: &mut String,
 ) {
     function_string.push_str("\n\t;remove align marker");
-    // Search for the most recent alignment marker in the shadow stack.
-    let pos_opt = self.shadow_stack
-        .iter()
-        .enumerate()
-        .rev()
-        .find(|(_, entry)| entry.1) // entry.1 is the padding flag
-        .map(|(i, _)| i);
+    let pos_opt = self.shadow_stack.iter().enumerate().rev()
+        .find(|(_, entry)| entry.1).map(|(i, _)| i);
 
     if let Some(pos) = pos_opt {
         let (size, _padding, _) = self.shadow_stack.remove(pos).unwrap();
@@ -926,9 +840,9 @@ fn check_remove_alignment(
             function_string.push_str(&format!("\n\tadd rsp, {} ;remove align", size));
         }
     }
-    self.print_stack_size(function_string);
 }
 
+    #[allow(dead_code)]
     fn print_stack_size(
         &self,
         function_string: &mut String,

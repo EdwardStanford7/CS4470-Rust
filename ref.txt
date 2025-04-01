@@ -24,35 +24,39 @@ extern _to_int
 extern _to_float
 
 section .data
+const0: dq 0
+const1: db `(BoolType)`, 0
 
 section .text
-f:
-_f:
-	push rbp
-	mov rbp, rsp
-	sub rsp, 8
-	; Moving 8 bytes from rbp - -24 to rsp 
-		mov r10, [rbp - -24 + 0]
-		mov [rsp + 0], r10
-	sub rsp, 8
-	; Moving 8 bytes from rbp - -16 to rsp 
-		mov r10, [rbp - -16 + 0]
-		mov [rsp + 0], r10
-	pop rax
-	pop r10
-	add rax, r10
-	push rax
-	pop rax
-	add rsp, 0 ; Local variables
-	pop rbp
-	ret
-
 jpl_main:
 _jpl_main:
 	push rbp
 	mov rbp, rsp
 	push r12
 	mov r12, rbp ; end of jpl_main prelude
+	mov rax, [rel const0] ; False
+	push rax
+	sub rsp, 8 ; Add alignment
+	sub rsp, 8
+	; Moving 8 bytes from rbp - 16 to rsp 
+		mov r10, [rbp - 16 + 0]
+		mov [rsp + 0], r10
+	sub rsp, 8
+	; Moving 8 bytes from rbp - 16 to rsp 
+		mov r10, [rbp - 16 + 0]
+		mov [rsp + 0], r10
+	pop rax
+	pop r10
+	cmp rax, r10
+	sete al
+	and rax, 1
+	push rax
+	lea rdi, [rel const1] ; '(BoolType)'
+	lea rsi, [rsp]
+	call _show
+	add rsp, 8
+	add rsp, 8 ; Remove alignment
+	add rsp, 8 ; Local variables
 	pop r12 ; begin jpl_main postlude
 	pop rbp
 	ret
