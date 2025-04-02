@@ -4,9 +4,132 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
+use std::fmt::Write;
 
 const INT_REGS: [&str;6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 const FLO_REGS: [&str;8] = ["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7"];
+
+enum Shadow<'a> {
+    Padding(bool),
+    Item(Type<'a>)
+}
+
+struct AsmFunction<'a> {
+    body: String,
+    stack_size: isize,
+    shadow_stack: VecDeque<Shadow<'a>>
+}
+
+impl<'a> AsmFunction<'a> {
+    fn new() -> Self {
+        Self {
+            body: String::new(),
+            stack_size: 0,
+            shadow_stack: VecDeque::new(),
+        }
+    }
+     fn push_comment(&mut self, string: &str) {
+        write!(&mut self.body, "\n\t ; {}", string);
+     }
+     fn push_instructions(&mut self, strings: Vec<&str>) {
+        strings.iter().for_each(|string| self.push_instruction(string));
+     }
+     fn push_instruction(&mut self, string: &str) {
+        write!(&mut self.body, "\n\t{}", string);
+     }
+     fn add_shadow_expr(&mut self, expr: &Expression<'a>) {
+        self.add_shadow_type(&expr.resolved_type);
+     }
+     fn add_shadow_type(&mut self, typ: &Type<'a>) {
+        self.shadow_stack.push_back(Shadow::Item(typ.clone()));
+        self.stack_size += Self::get_type_stack_size(typ);
+     }
+     fn remove_shadow(&mut self) {
+        let index = self.shadow_stack.iter().enumerate().rev()
+        .find(|(_,element)| matches!(element, Shadow::Item(..)))
+        .map(|(i, _)| i).unwrap_or_else(||
+            unreachable!("popped with no elements")
+        );
+        match self.shadow_stack.remove(index).unwrap() {
+            Shadow::Item(element) => {
+                self.stack_size -= Self::get_type_stack_size(&element);
+            }
+            _ => unreachable!(),
+        }
+     }
+     fn pad_shadow(&mut self) {
+        self.push_comment("check align");
+        let align = self.stack_size % 16 == 0;
+        self.shadow_stack.push_back(Shadow::Padding(align));
+        if align {
+            self.push_instruction("sub rsp, 8");
+        }
+     }
+     fn unpad_shadow(&mut self) {
+        let index = self.shadow_stack.iter().enumerate().rev()
+        .find(|(_,element)| matches!(element, Shadow::Padding(..)))
+        .map(|(i, _)| i).unwrap_or_else(||
+            unreachable!("popped with no elements")
+        );
+        match self.shadow_stack.remove(index).unwrap() {
+            Shadow::Padding(true) => {
+                self.stack_size -= 8;
+                self.push_instruction("add rsp, 8")
+            }
+            Shadow::Padding(false) => self.push_comment("no unpad"),
+            _ => unreachable!(),
+        }
+    }
+
+
+    fn check_add_alignment_with_all(
+        &mut self,
+        expression: &Expression<'a>,
+    ) {
+        match expression.node.as_ref() {
+            ExpressionType::Call { function:_, arguments } => {
+                let float_params_on_stack = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Float)).skip(FLO_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
+                let int_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Int)).skip(INT_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
+                let arr_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Array { .. })).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
+                let all_stack_params = float_params_on_stack.into_iter().chain(int_params).chain(arr_params).collect::<Vec<_>>();
+                all_stack_params.iter().map(|t| self.add_shadow_type(t));
+                self.pad_shadow();
+                all_stack_params.iter().map(|_| self.remove_shadow());
+            }
+            ExpressionType::Binop { left, right, operator } => {
+                self.check_add_alignment_with_all(left);
+                self.check_add_alignment_with_all(right);
+            }
+            _ => unimplemented!("TODO: check_add_alignment_with_all for {:?}", expression.node)
+        }
+    }
+
+
+
+    fn get_type_stack_size(typ: &Type<'a>) -> isize {
+        match typ {
+            Type::Int | Type::Float | Type::Bool | Type::Void => 8,
+            Type::Array {
+                element_type: _,
+                rank,
+            } => 8 + 8 * *rank as isize,
+            Type::Struct { name: _, elements } => {
+                let mut size = 0;
+                for (_, typ) in elements {
+                    size += Self::get_type_stack_size(typ);
+                }
+                size
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<'a> Display for AsmFunction<'a> {
+     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.body)
+     }
+}
 
 /// Very much not sure about this
 #[derive(Eq, Hash, PartialEq, Clone)]
@@ -26,11 +149,10 @@ impl Display for AssemblyValue {
 
 struct AssemblyGenerator<'a> {
     data_section: Vec<AssemblyValue>,
-    functions: Vec<String>,
+    functions: Vec<AsmFunction<'a>>,
     constants: HashMap<AssemblyValue, String>,
     jump_counter: usize,
-    offsets: HashMap<String, ((usize, Type<'a>), isize, bool)>,
-    shadow_stack: VecDeque<(usize,bool,Option<Type<'a>>)>
+    offsets: HashMap<String, ((usize, Type<'a>), isize, bool)>
 }
 
 impl<'a> Display for AssemblyGenerator<'a> {
@@ -57,7 +179,6 @@ impl<'a> AssemblyGenerator<'a> {
             constants: HashMap::new(),
             offsets: HashMap::new(),
             jump_counter: 1,
-            shadow_stack: VecDeque::new()
         }
     }
 
@@ -66,7 +187,7 @@ impl<'a> AssemblyGenerator<'a> {
         commands: Vec<Command<'a>>,
         environment: TypeEnvironment<'a>,
     ) -> String {
-        let mut main_function = String::new();
+        let mut main_function = AsmFunction::new();
         // jpl_main prelude
         main_function.push_str("\n\njpl_main:\n_jpl_main:\n\tpush rbp\n\tmov rbp, rsp\n\tpush r12\n\tmov r12, rbp ;end of jpl_main prelude");
         self.shadow_stack.push_back((16,false,None));
@@ -788,93 +909,6 @@ impl<'a> AssemblyGenerator<'a> {
         });
         entry
     }
-
-    fn check_add_alignment_with(
-        &mut self, function_string: &mut String,
-        ts: Vec<Type<'a>>,
-    ) {
-        for t in ts.iter() {
-            let s = Self::get_type_stack_size(t);
-            self.shadow_stack.push_back((s,false,None));
-        }
-        self.check_add_alignment(function_string);
-        let a = self.shadow_stack.pop_back().unwrap();
-        for _ in ts {
-            self.shadow_stack.pop_back();
-        }
-        self.shadow_stack.push_back(a);
-    }
-
-    fn check_add_alignment_with_all(
-        &mut self, function_string: &mut String,
-        arguments: &Vec<Expression<'a>>,
-    ) {
-        let float_params_on_stack = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Float)).skip(FLO_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
-        let int_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Int)).skip(INT_REGS.len()).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
-        let arr_params = arguments.iter().filter(|arg| matches!(arg.resolved_type, Type::Array { .. })).map(|arg| arg.resolved_type.clone()).collect::<Vec<_>>();
-        let all_stack_params = float_params_on_stack.into_iter().chain(int_params).chain(arr_params).collect::<Vec<_>>();
-        for t in all_stack_params.iter() {
-            let s = Self::get_type_stack_size(t);
-            self.shadow_stack.push_back((s,false,None));
-        }
-        self.check_add_alignment(function_string);
-        let a = self.shadow_stack.pop_back().unwrap();
-        for _ in all_stack_params {
-            self.shadow_stack.pop_back();
-        }
-        self.shadow_stack.push_back(a);
-    }
-
-    fn get_type_stack_size(typ: &Type<'a>) -> usize {
-        match typ {
-            Type::Int | Type::Float | Type::Bool | Type::Void => 8,
-            Type::Array {
-                element_type: _,
-                rank,
-            } => 8 + 8 * rank,
-            Type::Struct { name: _, elements } => {
-                let mut size = 0;
-                for (_, typ) in elements {
-                    size += Self::get_type_stack_size(typ);
-                }
-                size
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn check_add_alignment(
-        &mut self,
-        function_string: &mut String,
-    ) {
-        function_string.push_str("\n\t;Check align");
-        if self.stack_size() % 16 == 0 {
-            function_string.push_str("\n\tsub rsp, 8 ;Add align");
-            self.shadow_stack.push_back((8,true,None));
-        } else {
-            function_string.push_str("\n\t;no align");
-            self.shadow_stack.push_back((0,true,None));
-        }
-    }
-
-fn check_remove_alignment(
-    &mut self,
-    function_string: &mut String,
-) {
-    function_string.push_str("\n\t;remove align marker");
-    let pos_opt = self.shadow_stack.iter().enumerate().rev()
-        .find(|(_, entry)| entry.1).map(|(i, _)| i);
-
-    if let Some(pos) = pos_opt {
-        let (size, _padding, _) = self.shadow_stack.remove(pos).unwrap();
-        if pos != self.shadow_stack.len() - 1 {
-            function_string.push_str("\n\t; mid stack align remove");
-        }
-        if size != 0 {
-            function_string.push_str(&format!("\n\tadd rsp, {} ;remove align", size));
-        }
-    }
-}
 
     #[allow(dead_code)]
     fn print_stack_size(

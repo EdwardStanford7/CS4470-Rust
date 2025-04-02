@@ -10,3 +10,5 @@ output.txt
 example/jplc
 example/jpli
 Cargo.lock
+.idea/workspace.xml
+test.jpl
