@@ -5,10 +5,18 @@ BINARY = target/release/myjplc
 $(BINARY):	src/*.rs
 	cargo build --release
 
+
+# curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+compile:
+	cargo build
+
 run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
 
 test:
+	$(MAKE) -C ./grader test-hw11 PART=all
+
+test-last:
 	$(MAKE) -C ./grader test-hw10 PART=all
 
 run-all: $(BINARY)
