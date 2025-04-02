@@ -7,3 +7,6 @@ outsrcswift.txt
 printsrcswift.sh
 outsrc.txt
 output.txt
+example/jplc
+example/jpli
+Cargo.lock
