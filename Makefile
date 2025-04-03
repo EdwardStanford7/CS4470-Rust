@@ -5,7 +5,6 @@ BINARY = target/release/myjplc
 $(BINARY):	src/*.rs
 	cargo build --release
 
-
 # curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 compile:
 	cargo build
@@ -27,6 +26,7 @@ run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw6 PART=all COMPILE_MODE=" -m typecheck"
 	$(MAKE) -C ./grader test-hw7 PART=all COMPILE_MODE=" -m typecheck"
 	$(MAKE) -C ./grader test-hw10 PART=all COMPILE_MODE=" -m assembly"
+	$(MAKE) -C ./grader test-hw11 PART=all COMPILE_MODE=" -m assembly"
 
 time-all:
 	time $(MAKE) run-all
@@ -34,4 +34,4 @@ time-all:
 clean:
 	cargo clean
 
-.PHONY: run test build clean time-all run-all
+.PHONY: run test test-last build clean time-all run-all
