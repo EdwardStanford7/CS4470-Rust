@@ -13,10 +13,10 @@ run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
 
 test:
-	$(MAKE) -C ./grader test-hw11 PART=all
+	$(MAKE) -C ./grader test-hw12 PART=all
 
 test-last:
-	$(MAKE) -C ./grader test-hw10 PART=all
+	$(MAKE) -C ./grader test-hw1011 PART=all
 
 run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw2 PART=all COMPILE_MODE=" -m lex"
@@ -27,6 +27,7 @@ run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw7 PART=all COMPILE_MODE=" -m typecheck"
 	$(MAKE) -C ./grader test-hw10 PART=all COMPILE_MODE=" -m assembly"
 	$(MAKE) -C ./grader test-hw11 PART=all COMPILE_MODE=" -m assembly"
+	$(MAKE) -C ./grader test-hw12 PART=all COMPILE_MODE=" -m assembly"
 
 time-all:
 	time $(MAKE) run-all

@@ -861,6 +861,47 @@ impl<'a> AssemblyGenerator<'a> {
                 let size = AsmFunction::get_type_stack_size(&ret_type);
                 (size as usize, ret_type)
             }
+            ExpressionType::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                asm_function.push_assert();
+                self.generate_expression(asm_function, condition, environment, in_statement);
+
+                asm_function.push_instruction("pop rax");
+                asm_function.remove_shadow();
+                asm_function.push_instruction("cmp rax, 0");
+
+                let else_label = format!(".jump{}", self.jump_counter);
+                self.jump_counter += 1;
+                let end_label = format!(".jump{}", self.jump_counter);
+                self.jump_counter += 1;
+
+                asm_function.push_instruction(&format!("je {}", else_label));
+                self.generate_expression(asm_function, then_branch, environment, in_statement);
+                asm_function.remove_shadow();
+                asm_function.push_instruction(&format!("jmp {}", end_label));
+                asm_function.push_label(&else_label);
+                self.generate_expression(asm_function, else_branch, environment, in_statement);
+                asm_function.push_label(&end_label);
+
+                assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+
+                (
+                    AsmFunction::get_type_stack_size(&then_branch.resolved_type) as usize,
+                    then_branch.resolved_type.clone(),
+                )
+            }
+            ExpressionType::ArrayIndex { array, indices } => {
+                unimplemented!("Array index expr not implemented yet");
+            }
+            ExpressionType::ArrayLoop { range, body } => {
+                unimplemented!("Array loop expr not implemented yet");
+            }
+            ExpressionType::SumLoop { range, body } => {
+                unimplemented!("Sum loop expr not implemented yet");
+            }
             _ => unimplemented!("failure because for expression: {}", expression.to_string()),
         }
     }
