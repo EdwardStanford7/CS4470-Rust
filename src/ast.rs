@@ -383,6 +383,33 @@ pub enum Type<'a> {
     },
 }
 
+impl<'a> Type<'a> {
+    pub fn isize(&self) -> isize {
+        match self {
+            Type::Unresolved => unreachable!(),
+            Type::Int => 8,
+            Type::Float => 8,
+            Type::Bool => 8,
+            Type::Void => 8,
+            Type::Struct { .. } => unreachable!(),
+            Type::Array { element_type:_, rank } => 8 + 8 * *rank as isize,
+            Type::Function { .. } => unreachable!(),
+        }
+    }
+    pub fn usize(&self) -> usize {
+        match self {
+            Type::Unresolved => unreachable!(),
+            Type::Int => 8,
+            Type::Float => 8,
+            Type::Bool => 8,
+            Type::Void => 8,
+            Type::Struct { .. } => unreachable!(),
+            Type::Array { element_type:_, rank } => 8 + 8 * *rank as usize,
+            Type::Function { .. } => unreachable!(),
+        }
+    }
+}
+
 fn type_to_string(typ: &Type<'_>) -> String {
     match typ {
         Type::Unresolved => "".to_string(),

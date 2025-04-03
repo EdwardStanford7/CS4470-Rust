@@ -24,12 +24,14 @@ fi
 
 echo "installing grader"
 gh repo clone utah-cs4470-sp25/grader grader_temp
+rm -rf grader
 mkdir grader
 cp -r grader_temp/* grader/
 rm -rf grader_temp
 
 echo "installing runtime"
 gh repo clone utah-cs4470-sp25/runtime rt_temp
+rm -rf rt
 mkdir rt
 cp -r rt_temp/* rt/
 rm -rf rt_temp

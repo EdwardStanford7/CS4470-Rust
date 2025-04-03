@@ -12,4 +12,6 @@ example/jpli
 Cargo.lock
 .idea/workspace.xml
 test.jpl
-output.txt
+**/*.txt
+examples/jplc
+examples/jpli

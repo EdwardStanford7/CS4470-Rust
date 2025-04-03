@@ -9,6 +9,16 @@ $(BINARY):	src/*.rs
 compile:
 	cargo build
 
+FO ?= grader
+SU ?= hw12/sum
+FI ?= 001.jpl
+
+diff-one:
+	@clear
+	cargo run -- grader/$(FO)/$(SU)/$(FI).jpl --mode assembly > my.txt
+	grader/jplc grader/$(FO)/$(SU)/$(FI).jpl -s > ref.txt
+	code-insiders --diff my.txt ref.txt
+
 run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
 
