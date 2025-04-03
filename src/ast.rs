@@ -392,7 +392,10 @@ impl<'a> Type<'a> {
             Type::Bool => 8,
             Type::Void => 8,
             Type::Struct { .. } => unreachable!(),
-            Type::Array { element_type:_, rank } => 8 + 8 * *rank as isize,
+            Type::Array {
+                element_type: _,
+                rank,
+            } => 8 + 8 * *rank as isize,
             Type::Function { .. } => unreachable!(),
         }
     }
@@ -404,7 +407,10 @@ impl<'a> Type<'a> {
             Type::Bool => 8,
             Type::Void => 8,
             Type::Struct { .. } => unreachable!(),
-            Type::Array { element_type:_, rank } => 8 + 8 * *rank as usize,
+            Type::Array {
+                element_type: _,
+                rank,
+            } => 8 + 8 * *rank as usize,
             Type::Function { .. } => unreachable!(),
         }
     }
