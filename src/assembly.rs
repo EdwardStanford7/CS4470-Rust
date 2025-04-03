@@ -373,6 +373,7 @@ impl<'a> AssemblyGenerator<'a> {
     ) {
         match command.node.as_ref() {
             CommandType::Show { expression } => {
+                asm_function.push_comment("show start");
                 asm_function.push_assert();
                 asm_function.print_shadow_stack();
                 asm_function.pad_shadow_with(expression);
@@ -390,6 +391,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.remove_shadow();
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(0), "\n\n{}", asm_function.body);
+                asm_function.push_comment("show end");
             }
             CommandType::Let { variable, rvalue } => {
                 self.handle_let(asm_function, environment, variable, rvalue, false);
@@ -681,6 +683,7 @@ impl<'a> AssemblyGenerator<'a> {
                 result
             }
             ExpressionType::ArrayLiteral { elements } => {
+                asm_function.push_comment("array literal start");
                 asm_function.push_assert();
                 let mut element_size = 0;
                 for element in elements.iter().rev() {
@@ -711,6 +714,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.add_shadow_expr(expression);
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                asm_function.push_comment("array literal end");
                 (16, expression.resolved_type.clone())
             }
             ExpressionType::Variable { name } => {
@@ -884,9 +888,12 @@ impl<'a> AssemblyGenerator<'a> {
                 )
             }
             ExpressionType::ArrayIndex { array, indices } => {
+                asm_function.push_comment("array index start");
                 if let Type::Array { element_type, rank } = &array.resolved_type {
                     asm_function.push_assert();
                     let element_type = element_type.as_ref();
+
+                    self.generate_expression(asm_function, array, environment, in_statement);
 
                     asm_function.push_comment("generating array index expressions");
                     for index_expr in indices.iter().rev() {
@@ -922,10 +929,10 @@ impl<'a> AssemblyGenerator<'a> {
                             &format!("jl {}", in_bounds_jump),
                             &self.assert("index too large"),
                         ]);
-                        asm_function.push_label(&in_bounds_jump);
                         asm_function.pad_shadow();
                         asm_function.push_instruction("call _fail_assertion");
                         asm_function.unpad_shadow();
+                        asm_function.push_label(&in_bounds_jump);
                     }
 
                     asm_function.push_comment("calculating linear index");
@@ -944,7 +951,7 @@ impl<'a> AssemblyGenerator<'a> {
                         asm_function.push_instruction("add rsp, 8");
                     }
 
-                    // asm_function.remove_shadow();
+                    asm_function.remove_shadow();
                     asm_function.push_instruction(&format!(
                         "add rsp, {}",
                         AsmFunction::get_type_stack_size(&array.resolved_type)
@@ -967,6 +974,7 @@ impl<'a> AssemblyGenerator<'a> {
                             &format!("mov [rsp + {}], r10", i),
                         ]);
                     }
+                    asm_function.push_comment("array index end");
 
                     assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
                     (
