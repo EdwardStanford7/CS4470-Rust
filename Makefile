@@ -18,12 +18,16 @@ diff-one:
 	cargo run -- grader/$(FO)/$(SU)/$(FI).jpl --mode assembly > my.txt
 	grader/jplc grader/$(FO)/$(SU)/$(FI).jpl -s > ref.txt
 	code-insiders --diff my.txt ref.txt
+	mat test > output.txt
+	code-insiders output.txt
+
 
 run: $(BINARY)
 	$(BINARY) $(TEST) $(COMPILE_MODE)
 
 test:
-	$(MAKE) -C ./grader test-hw12 PART=all
+	@clear
+	$(MAKE) -C ./grader test-hw12 PART=all > output.txt || code-insiders output.txt
 
 test-last:
 	$(MAKE) -C ./grader test-hw1011 PART=all
