@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Write;
+use std::vec;
 
 const INT_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 const FLO_REGS: [&str; 8] = [
@@ -71,7 +72,7 @@ impl<'a> AsmFunction<'a> {
     }
 
     fn push_comment(&mut self, string: &str) {
-        _ = write!(&mut self.body, "\n\t ; {}", string);
+        _ = write!(&mut self.body, "\n\t; {}", string);
     }
 
     fn push_instructions(&mut self, strings: Vec<&str>) {
@@ -380,23 +381,12 @@ impl<'a> AssemblyGenerator<'a> {
                 let size = expr_result.0;
                 let typ_str = expr_result.1.to_string();
                 let const_name = self.get_constant(AssemblyValue::String(typ_str));
-                // asm_function.push_str(&format!("\n\tlea rdi, [rel {}]", const_name));
                 asm_function.push_instruction(&format!("lea rdi, [rel {}]", const_name));
-                // self.shadow_stack.push_back((8,false,None));
                 asm_function.add_shadow_type(&Type::Int);
-
-                // asm_function.push_str("\n\tlea rsi, [rsp]");
-                asm_function.push_instruction("lea rsi, [rsp]");
-                // asm_function.push_str("\n\tcall _show");
-                asm_function.push_instruction("call _show");
-                // self.shadow_stack.pop_back();
+                asm_function.push_instructions(vec!["lea rsi, [rsp]", "call _show"]);
                 asm_function.remove_shadow();
-                // asm_function.push_str(&format!("\n\tadd rsp, {}", size));
                 asm_function.push_instruction(&format!("add rsp, {}", size));
-                // self.check_remove_alignment(asm_function);
                 asm_function.unpad_shadow();
-                // self.shadow_stack.pop_back();
-                // asm_function.unpad_shadow();
                 asm_function.remove_shadow();
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(0), "\n\n{}", asm_function.body);
@@ -894,7 +884,98 @@ impl<'a> AssemblyGenerator<'a> {
                 )
             }
             ExpressionType::ArrayIndex { array, indices } => {
-                unimplemented!("Array index expr not implemented yet");
+                if let Type::Array { element_type, rank } = &array.resolved_type {
+                    asm_function.push_assert();
+                    let element_type = element_type.as_ref();
+
+                    asm_function.push_comment("generating array index expressions");
+                    for index_expr in indices.iter().rev() {
+                        self.generate_expression(
+                            asm_function,
+                            index_expr,
+                            environment,
+                            in_statement,
+                        );
+                    }
+
+                    asm_function.push_comment("generating bounds checks");
+                    asm_function.print_shadow_stack();
+                    for (index, _) in indices.iter().enumerate() {
+                        let non_negative_jump = format!(".jump{}", self.jump_counter);
+                        self.jump_counter += 1;
+                        let in_bounds_jump = format!(".jump{}", self.jump_counter);
+                        self.jump_counter += 1;
+
+                        asm_function.push_instructions(vec![
+                            &format!("mov rax, [rsp + {}]", index * 8),
+                            "cmp rax, 0",
+                            &format!("jge {}", non_negative_jump),
+                            &self.assert("negative array index"),
+                        ]);
+                        asm_function.pad_shadow();
+                        asm_function.push_instruction("call _fail_assertion");
+                        asm_function.unpad_shadow();
+
+                        asm_function.push_label(&non_negative_jump);
+                        asm_function.push_instructions(vec![
+                            &format!("cmp rax, [rsp + {}]", (index + rank) * 8),
+                            &format!("jl {}", in_bounds_jump),
+                            &self.assert("index too large"),
+                        ]);
+                        asm_function.push_label(&in_bounds_jump);
+                        asm_function.pad_shadow();
+                        asm_function.push_instruction("call _fail_assertion");
+                        asm_function.unpad_shadow();
+                    }
+
+                    asm_function.push_comment("calculating linear index");
+                    asm_function.print_shadow_stack();
+                    asm_function.push_instruction("mov rax, 0");
+                    for (i, _) in indices.iter().enumerate().rev() {
+                        asm_function
+                            .push_instruction(&format!("imul rax, [rsp + {}]", (i + 1) * 8));
+                        asm_function.push_instruction(&format!("add rax, [rsp + {}]", i * 8));
+                    }
+                    asm_function.push_instruction("imul rax, 8");
+                    asm_function.push_instruction(&format!("add rax, [rsp + {}]", (rank + 1) * 8));
+
+                    for _ in indices.iter() {
+                        asm_function.remove_shadow();
+                        asm_function.push_instruction("add rsp, 8");
+                    }
+
+                    // asm_function.remove_shadow();
+                    asm_function.push_instruction(&format!(
+                        "add rsp, {}",
+                        AsmFunction::get_type_stack_size(&array.resolved_type)
+                    ));
+
+                    asm_function.push_instruction(&format!(
+                        "sub rsp, {}",
+                        AsmFunction::get_type_stack_size(element_type)
+                    ));
+                    asm_function.add_shadow_type(element_type);
+
+                    asm_function.push_comment("copying data from array to stack");
+                    asm_function.print_shadow_stack();
+                    for i in (0..(AsmFunction::get_type_stack_size(element_type)))
+                        .step_by(8)
+                        .rev()
+                    {
+                        asm_function.push_instructions(vec![
+                            &format!("mov r10, [rax + {}]", i),
+                            &format!("mov [rsp + {}], r10", i),
+                        ]);
+                    }
+
+                    assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                    (
+                        AsmFunction::get_type_stack_size(element_type) as usize,
+                        element_type.clone(),
+                    )
+                } else {
+                    unreachable!("Expected array type")
+                }
             }
             ExpressionType::ArrayLoop { range, body } => {
                 unimplemented!("Array loop expr not implemented yet");
@@ -1016,17 +1097,11 @@ impl<'a> AssemblyGenerator<'a> {
                 self.jump_counter += 1;
                 asm_function.push_instruction(&format!("jne {}", jump_label));
                 asm_function.pad_shadow();
-                asm_function.push_instruction(&format!(
-                    "lea rdi, [rel {}]",
-                    self.get_constant(AssemblyValue::String(
-                        if operator == "/" {
-                            "divide by zero"
-                        } else {
-                            "mod by zero"
-                        }
-                        .to_string()
-                    ))
-                ));
+                asm_function.push_instruction(&self.assert(if operator == "/" {
+                    "divide by zero"
+                } else {
+                    "mod by zero"
+                }));
                 asm_function.push_instruction("call _fail_assertion");
                 asm_function.unpad_shadow();
                 asm_function.push_label(jump_label);
@@ -1201,6 +1276,13 @@ impl<'a> AssemblyGenerator<'a> {
             format!("const{}", data_section_len)
         });
         entry
+    }
+
+    fn assert(&mut self, message: &str) -> String {
+        format!(
+            "lea rdi, [rel {}]",
+            self.get_constant(AssemblyValue::String(message.to_string()))
+        )
     }
 }
 
