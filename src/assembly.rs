@@ -421,10 +421,7 @@ impl<'a> AssemblyGenerator<'a> {
                     new_asm_function.add_shadow_type(&param.1);
                     self.offsets.insert(
                         param.0.name.to_string(),
-                        (
-                            new_asm_function.stack_size,
-                            false,
-                        ),
+                        (new_asm_function.stack_size, false),
                     );
                     int_param_num += 1;
                 }
@@ -437,10 +434,7 @@ impl<'a> AssemblyGenerator<'a> {
                     new_asm_function.add_shadow_type(&param.1);
                     self.offsets.insert(
                         param.0.name.to_string(),
-                        (
-                            new_asm_function.stack_size,
-                            false,
-                        ),
+                        (new_asm_function.stack_size, false),
                     );
                 }
                 Type::Array {
@@ -460,27 +454,18 @@ impl<'a> AssemblyGenerator<'a> {
                         LValueType::Array { indices } => {
                             let start = -(arr_param_size + 8);
                             let size = param.1.isize();
-                            self.offsets.insert(
-                                param.0.name.to_string(),
-                                (start, false),
-                            );
+                            self.offsets
+                                .insert(param.0.name.to_string(), (start, false));
                             arr_param_size += size;
                             for (i, b_name) in indices.iter().enumerate() {
                                 let stack_location = start - (i * 8) as isize;
-                                self.offsets.insert(
-                                    b_name.to_string(),
-                                    (stack_location, false),
-                                );
+                                self.offsets
+                                    .insert(b_name.to_string(), (stack_location, false));
                             }
                         }
                         LValueType::Variable { .. } => {
-                            self.offsets.insert(
-                                param.0.name.to_string(),
-                                (
-                                    -(arr_param_size + 8),
-                                    false,
-                                ),
-                            );
+                            self.offsets
+                                .insert(param.0.name.to_string(), (-(arr_param_size + 8), false));
                             arr_param_size += param.1.isize();
                         }
                     }
@@ -524,10 +509,8 @@ impl<'a> AssemblyGenerator<'a> {
                     let loc = 8 * i as isize;
                     let place = 16 - rvalue.resolved_type.isize();
                     let stack_location = loc + place + asm_function.stack_size;
-                    self.offsets.insert(
-                        b_name.to_string(),
-                        (stack_location, !in_statement),
-                    );
+                    self.offsets
+                        .insert(b_name.to_string(), (stack_location, !in_statement));
                 }
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
@@ -932,17 +915,10 @@ impl<'a> AssemblyGenerator<'a> {
 
                 asm_function.push_comment("init indexes");
                 range.iter().rev().for_each(|(var, _)| {
-                    // asm_function.push_instruction("mov rax, 0");
-                    // asm_function.push_instruction("push rax");
                     asm_function.push_instructions(vec!["mov rax, 0", "push rax"]);
                     asm_function.add_shadow_type(&Type::Int);
-                    self.offsets.insert(
-                        var.to_string(),
-                        (
-                            asm_function.stack_size,
-                            false,
-                        ),
-                    );
+                    self.offsets
+                        .insert(var.to_string(), (asm_function.stack_size, false));
                 });
                 asm_function.push_comment("loop body");
                 asm_function.push_label(&format!(".jump{}", self.jump_counter));
@@ -968,31 +944,8 @@ impl<'a> AssemblyGenerator<'a> {
                     _ => unreachable!(":)"),
                 }
                 asm_function.remove_shadow();
-
-                // add qword [rsp + (LAST_INDEX * 8)], 1
-                range
-                    .iter()
-                    .enumerate()
-                    .skip(1)
-                    .rev()
-                    .for_each(|(i, (_, _))| {
-                        asm_function.push_instructions(vec![
-                            &format!("add qword [rsp + {}], 1", i * 8),
-                            &format!("mov rax, [rsp + {}]", i * 8),
-                            &format!("cmp rax, [rsp + {}]", 8 * (i + range.len())),
-                            &format!("jl {}", format!(".jump{}", continue_label)),
-                            &format!("mov qword [rsp + {}], 0", i * 8),
-                        ]);
-                    });
-                asm_function.push_instructions(vec![
-                    &format!("add qword [rsp + {}], 1", 0),
-                    &format!("mov rax, [rsp + {}]", 0),
-                    &format!("cmp rax, [rsp + {}]", 8 * range.len()),
-                    &format!("jl {}", format!(".jump{}", continue_label)),
-                ]);
-
+                self.loop_bounds(asm_function, range, continue_label);
                 asm_function.print_shadow_stack();
-
                 asm_function.push_instruction(&format!("add rsp, {}", 8 * range.len()));
                 range.iter().for_each(|_| {
                     asm_function.remove_shadow();
@@ -1010,6 +963,34 @@ impl<'a> AssemblyGenerator<'a> {
         }
     }
 
+    fn loop_bounds(
+        &self,
+        asm_function: &mut AsmFunction<'a>,
+        range: &Vec<(&str, Expression<'a>)>,
+        continue_label: usize,
+    ) {
+        range
+            .iter()
+            .enumerate()
+            .skip(1)
+            .rev()
+            .for_each(|(i, (_, _))| {
+                asm_function.push_instructions(vec![
+                    &format!("add qword [rsp + {}], 1", i * 8),
+                    &format!("mov rax, [rsp + {}]", i * 8),
+                    &format!("cmp rax, [rsp + {}]", 8 * (i + range.len())),
+                    &format!("jl {}", format!(".jump{}", continue_label)),
+                    &format!("mov qword [rsp + {}], 0", i * 8),
+                ]);
+            });
+        asm_function.push_instructions(vec![
+            &format!("add qword [rsp + {}], 1", 0),
+            &format!("mov rax, [rsp + {}]", 0),
+            &format!("cmp rax, [rsp + {}]", 8 * range.len()),
+            &format!("jl {}", format!(".jump{}", continue_label)),
+        ]);
+    }
+
     fn handle_variable(
         &mut self,
         asm_function: &mut AsmFunction<'a>,
@@ -1023,7 +1004,8 @@ impl<'a> AssemblyGenerator<'a> {
                 let (offset, from_main) = self.offsets.get(name).unwrap_or_else(|| {
                     unimplemented!("expression was this: {}", expression.to_string())
                 });
-                asm_function.push_instruction(&format!("sub rsp, {}", expression.resolved_type.usize()));
+                asm_function
+                    .push_instruction(&format!("sub rsp, {}", expression.resolved_type.usize()));
                 let var_offset_reg = if *from_main && in_statement {
                     "r12"
                 } else {
@@ -1048,7 +1030,8 @@ impl<'a> AssemblyGenerator<'a> {
                     unimplemented!("expression was this: {}", expression.to_string())
                 });
                 asm_function.add_shadow_type(&expression.resolved_type);
-                asm_function.push_instruction(&format!("sub rsp, {}", expression.resolved_type.usize()));
+                asm_function
+                    .push_instruction(&format!("sub rsp, {}", expression.resolved_type.usize()));
                 let var_offset_reg = if *from_main && in_statement {
                     "r12"
                 } else {
