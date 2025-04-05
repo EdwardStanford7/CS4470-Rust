@@ -383,7 +383,7 @@ pub enum Type<'a> {
     },
 }
 
-impl<'a> Type<'a> {
+impl Type<'_> {
     pub fn isize(&self) -> isize {
         match self {
             Type::Unresolved => unreachable!(),
@@ -410,7 +410,7 @@ impl<'a> Type<'a> {
             Type::Array {
                 element_type: _,
                 rank,
-            } => 8 + 8 * *rank as usize,
+            } => 8 + 8 * *rank,
             Type::Function { .. } => unreachable!(),
         }
     }

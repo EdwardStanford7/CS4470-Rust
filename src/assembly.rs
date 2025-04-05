@@ -116,12 +116,13 @@ impl<'a> AsmFunction<'a> {
     }
 
     fn pad_shadow(&mut self) {
-        self.push_comment("check align");
         let align = self.stack_size % 16 == 0;
         self.shadow_stack.push_back(Shadow::Padding(align));
         if align {
             self.stack_size += 8;
-            self.push_instruction("sub rsp, 8");
+            self.push_instruction("sub rsp, 8; alignment");
+        } else {
+            self.push_comment("no pad");
         }
     }
 
@@ -359,6 +360,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_assert();
                 asm_function.print_shadow_stack();
                 asm_function.pad_shadow_with(expression);
+                asm_function.print_shadow_stack();
                 self.generate_expression(asm_function, expression, environment, false);
                 let size = expression.resolved_type.usize();
                 let typ_str = expression.resolved_type.to_string();
@@ -384,13 +386,13 @@ impl<'a> AssemblyGenerator<'a> {
                 statements,
                 has_return: _,
             } => {
-                self.fun_name(environment, name, parameters, return_type, statements);
+                self.generate_function(environment, name, parameters, return_type, statements);
             }
             _ => unimplemented!("\n\nfailure for command type {}", command.to_string()),
         }
     }
 
-    fn fun_name(
+    fn generate_function(
         &mut self,
         environment: &TypeEnvironment<'a>,
         name: &&str,
@@ -851,8 +853,9 @@ impl<'a> AssemblyGenerator<'a> {
                         self.assert(asm_function, "jl", "index too large");
                     }
 
+                    //
+
                     asm_function.push_comment("calculating linear index");
-                    asm_function.print_shadow_stack();
                     asm_function.push_instruction("mov rax, 0");
                     for (i, _) in indices.iter().enumerate().rev() {
                         asm_function
@@ -874,6 +877,8 @@ impl<'a> AssemblyGenerator<'a> {
                     asm_function.push_instruction(&format!("sub rsp, {}", element_type.usize()));
                     asm_function.add_shadow_type(element_type);
 
+                    //
+
                     asm_function.push_comment("copying data from array to stack");
                     asm_function.print_shadow_stack();
                     for i in (0..(element_type.usize())).step_by(8).rev() {
@@ -888,8 +893,86 @@ impl<'a> AssemblyGenerator<'a> {
                     unreachable!("Expected array type")
                 }
             }
-            ExpressionType::ArrayLoop { range: _, body: _ } => {
-                unimplemented!("Array loop expr not implemented yet");
+            ExpressionType::ArrayLoop { range, body } => {
+                asm_function.push_comment("array loop start");
+                asm_function.push_assert();
+
+                asm_function.push_instruction("sub rsp, 8"); // Allocate data pointer for array
+                asm_function.add_shadow_type(&Type::Int); // temp type that will be removed and re-contextualized as an array type
+
+                self.check_loop_bounds(asm_function, environment, in_statement, range);
+
+                // Calculate the size of the array and store it in rax
+                asm_function.push_comment("calculate total array heap size");
+                asm_function.push_instruction(&format!("mov rdi, {}", body.resolved_type.usize()));
+                (0..range.len()).for_each(|i| {
+                    asm_function.push_instruction(&format!("imul rdi, [rsp + {}]", i * 8));
+                    self.assert(asm_function, "jno", "overflow computing array size");
+                });
+
+                asm_function.pad_shadow();
+                asm_function.push_instruction("call _jpl_alloc");
+                asm_function.unpad_shadow();
+                asm_function.push_instruction(&format!("mov [rsp + {}], rax", range.len() * 8));
+
+                // Initialize looping variables
+                self.init_indices(asm_function, range);
+
+                // Loop body
+                asm_function.push_comment("loop body");
+                asm_function.push_label(&format!(".jump{}", self.jump_counter));
+                let continue_label = self.jump_counter;
+                self.jump_counter += 1;
+                self.generate_expression(asm_function, body, environment, in_statement);
+
+                // Calculate linear index
+                asm_function.push_comment("calculating linear index");
+                asm_function.push_instruction("mov rax, 0");
+                for i in (0..range.len()).rev() {
+                    asm_function.push_instruction(&format!(
+                        "imul rax, [rsp + {}]",
+                        body.resolved_type.usize() + (range.len() * 8) + (i * 8) // Skip loop body and indices and get to correct bound.
+                    ));
+                    asm_function.push_instruction(&format!("add rax, [rsp + {}]", (i + 1) * 8));
+                }
+                asm_function.push_instruction("imul rax, 8");
+                asm_function.push_instruction(&format!(
+                    "add rax, [rsp + {}]",
+                    body.resolved_type.usize() + range.len() * 2 * 8 // Skip loop body, all indices, and all bounds to get to the data pointer.
+                ));
+
+                // Copy data from stack to heap
+                asm_function.push_comment("copying element from stack to array");
+                for i in (0..body.resolved_type.usize()).step_by(8).rev() {
+                    asm_function.push_instructions(vec![
+                        &format!("mov r10, [rsp + {}]", i),
+                        &format!("mov [rax + {}], r10", i),
+                    ]);
+                }
+
+                for _ in 0..range.len() {
+                    asm_function.remove_shadow();
+                    asm_function.push_instruction("add rsp, 8");
+                }
+
+                // Increment the loop index
+                self.increment_loop_index(asm_function, range, continue_label);
+
+                // De-init loop variables
+                (0..range.len()).for_each(|_| asm_function.remove_shadow());
+                asm_function.push_instruction(&format!("add rsp, {}", 8 * range.len()));
+
+                // Re-contextualize the array type also very sussy
+                (0..=range.len()).for_each(|_| {
+                    // Remove loop bounds and data pointer types
+                    asm_function.remove_shadow();
+                });
+                asm_function.add_shadow_type(&Type::Array {
+                    element_type: Box::new(body.resolved_type.clone()),
+                    rank: range.len(),
+                });
+
+                assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
             }
             ExpressionType::SumLoop { range, body } => {
                 asm_function.push_comment("sum loop start");
@@ -900,12 +983,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_instruction(&format!("sub rsp, {}", resolved_type.usize()));
                 asm_function.add_shadow_type(&resolved_type);
 
-                asm_function.push_comment("make bounds");
-                range.iter().rev().for_each(|(_, expr)| {
-                    self.generate_expression(asm_function, expr, environment, in_statement);
-                    asm_function.push_instructions(vec!["mov rax, [rsp]", &format!("cmp rax, 0")]);
-                    self.assert(asm_function, "jg", "non-positive loop bound");
-                });
+                self.check_loop_bounds(asm_function, environment, in_statement, range);
 
                 asm_function.push_comment("init return");
                 asm_function.push_instructions(vec![
@@ -913,13 +991,8 @@ impl<'a> AssemblyGenerator<'a> {
                     &format!("mov [rsp + {}], rax", 8 * range.len()),
                 ]);
 
-                asm_function.push_comment("init indexes");
-                range.iter().rev().for_each(|(var, _)| {
-                    asm_function.push_instructions(vec!["mov rax, 0", "push rax"]);
-                    asm_function.add_shadow_type(&Type::Int);
-                    self.offsets
-                        .insert(var.to_string(), (asm_function.stack_size, false));
-                });
+                self.init_indices(asm_function, range);
+
                 asm_function.push_comment("loop body");
                 asm_function.push_label(&format!(".jump{}", self.jump_counter));
                 let continue_label = self.jump_counter;
@@ -944,8 +1017,10 @@ impl<'a> AssemblyGenerator<'a> {
                     _ => unreachable!(":)"),
                 }
                 asm_function.remove_shadow();
-                self.loop_bounds(asm_function, range, continue_label);
+
+                self.increment_loop_index(asm_function, range, continue_label);
                 asm_function.print_shadow_stack();
+
                 asm_function.push_instruction(&format!("add rsp, {}", 8 * range.len()));
                 range.iter().for_each(|_| {
                     asm_function.remove_shadow();
@@ -959,11 +1034,40 @@ impl<'a> AssemblyGenerator<'a> {
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
                 asm_function.push_comment("sum loop end");
             }
-            _ => unimplemented!("failure because for expression: {}", expression.to_string()),
+            _ => unimplemented!("failure because expression: {}", expression.to_string()),
         }
     }
 
-    fn loop_bounds(
+    fn init_indices(
+        &mut self,
+        asm_function: &mut AsmFunction<'a>,
+        range: &Vec<(&str, Expression<'_>)>,
+    ) {
+        asm_function.push_comment("init indices");
+        range.iter().rev().for_each(|(var, _)| {
+            asm_function.push_instructions(vec!["mov rax, 0", "push rax"]);
+            asm_function.add_shadow_type(&Type::Int);
+            self.offsets
+                .insert(var.to_string(), (asm_function.stack_size, false));
+        });
+    }
+
+    fn check_loop_bounds(
+        &mut self,
+        asm_function: &mut AsmFunction<'a>,
+        environment: &TypeEnvironment<'a>,
+        in_statement: bool,
+        range: &Vec<(&str, Expression<'a>)>,
+    ) {
+        asm_function.push_comment("make bounds");
+        range.iter().rev().for_each(|(_, expr)| {
+            self.generate_expression(asm_function, expr, environment, in_statement);
+            asm_function.push_instructions(vec!["mov rax, [rsp]", "cmp rax, 0"]);
+            self.assert(asm_function, "jg", "non-positive loop bound");
+        });
+    }
+
+    fn increment_loop_index(
         &self,
         asm_function: &mut AsmFunction<'a>,
         range: &Vec<(&str, Expression<'a>)>,
@@ -979,7 +1083,7 @@ impl<'a> AssemblyGenerator<'a> {
                     &format!("add qword [rsp + {}], 1", i * 8),
                     &format!("mov rax, [rsp + {}]", i * 8),
                     &format!("cmp rax, [rsp + {}]", 8 * (i + range.len())),
-                    &format!("jl {}", format!(".jump{}", continue_label)),
+                    &format!("jl .jump{}", continue_label),
                     &format!("mov qword [rsp + {}], 0", i * 8),
                 ]);
             });
@@ -987,7 +1091,7 @@ impl<'a> AssemblyGenerator<'a> {
             &format!("add qword [rsp + {}], 1", 0),
             &format!("mov rax, [rsp + {}]", 0),
             &format!("cmp rax, [rsp + {}]", 8 * range.len()),
-            &format!("jl {}", format!(".jump{}", continue_label)),
+            &format!("jl .jump{}", continue_label),
         ]);
     }
 

@@ -27,7 +27,7 @@ run: $(BINARY)
 
 test:
 	@clear
-	$(MAKE) -C ./grader test-hw12 PART=all > output.txt || code-insiders output.txt
+	$(MAKE) -C ./grader test-hw12 PART=all > output.txt || code output.txt
 
 test-last:
 	$(MAKE) -C ./grader test-hw1011 PART=all
