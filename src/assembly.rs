@@ -895,12 +895,17 @@ impl<'a> AssemblyGenerator<'a> {
             }
             ExpressionType::ArrayLoop { range, body } => {
                 asm_function.push_comment("array loop start");
+                asm_function.print_shadow_stack();
                 asm_function.push_assert();
 
                 asm_function.push_instruction("sub rsp, 8"); // Allocate data pointer for array
                 asm_function.add_shadow_type(&Type::Int); // temp type that will be removed and re-contextualized as an array type
 
+                asm_function.push_comment("before checking bounds");
+                asm_function.print_shadow_stack();
                 self.check_loop_bounds(asm_function, environment, in_statement, range);
+                asm_function.push_comment("after checking bounds");
+                asm_function.print_shadow_stack();
 
                 // Calculate the size of the array and store it in rax
                 asm_function.push_comment("calculate total array heap size");
@@ -910,13 +915,19 @@ impl<'a> AssemblyGenerator<'a> {
                     self.assert(asm_function, "jno", "overflow computing array size");
                 });
 
+                asm_function.print_shadow_stack();
+
                 asm_function.pad_shadow();
                 asm_function.push_instruction("call _jpl_alloc");
                 asm_function.unpad_shadow();
                 asm_function.push_instruction(&format!("mov [rsp + {}], rax", range.len() * 8));
 
+                asm_function.print_shadow_stack();
+
                 // Initialize looping variables
                 self.init_indices(asm_function, range);
+
+                asm_function.print_shadow_stack();
 
                 // Loop body
                 asm_function.push_comment("loop body");
@@ -925,21 +936,28 @@ impl<'a> AssemblyGenerator<'a> {
                 self.jump_counter += 1;
                 self.generate_expression(asm_function, body, environment, in_statement);
 
+                asm_function.print_shadow_stack();
+
                 // Calculate linear index
                 asm_function.push_comment("calculating linear index");
                 asm_function.push_instruction("mov rax, 0");
-                for i in (0..range.len()).rev() {
+                for i in 0..range.len() {
                     asm_function.push_instruction(&format!(
                         "imul rax, [rsp + {}]",
                         body.resolved_type.usize() + (range.len() * 8) + (i * 8) // Skip loop body and indices and get to correct bound.
                     ));
-                    asm_function.push_instruction(&format!("add rax, [rsp + {}]", (i + 1) * 8));
+                    asm_function.push_instruction(&format!(
+                        "add rax, [rsp + {}]",
+                        i * 8 + body.resolved_type.usize()
+                    ));
                 }
-                asm_function.push_instruction("imul rax, 8");
+                asm_function.push_instruction(&format!("imul rax, {}", body.resolved_type.usize()));
                 asm_function.push_instruction(&format!(
                     "add rax, [rsp + {}]",
                     body.resolved_type.usize() + range.len() * 2 * 8 // Skip loop body, all indices, and all bounds to get to the data pointer.
                 ));
+
+                asm_function.print_shadow_stack();
 
                 // Copy data from stack to heap
                 asm_function.push_comment("copying element from stack to array");
@@ -950,17 +968,26 @@ impl<'a> AssemblyGenerator<'a> {
                     ]);
                 }
 
-                for _ in 0..range.len() {
-                    asm_function.remove_shadow();
-                    asm_function.push_instruction("add rsp, 8");
-                }
+                asm_function.print_shadow_stack();
+
+                // for _ in 0..range.len() {
+                // Deallocate space for loop body
+                asm_function.remove_shadow();
+                asm_function.push_instruction(&format!("add rsp, {}", body.resolved_type.usize()));
+                // }
+
+                asm_function.print_shadow_stack();
 
                 // Increment the loop index
                 self.increment_loop_index(asm_function, range, continue_label);
 
+                asm_function.print_shadow_stack();
+
                 // De-init loop variables
                 (0..range.len()).for_each(|_| asm_function.remove_shadow());
                 asm_function.push_instruction(&format!("add rsp, {}", 8 * range.len()));
+
+                asm_function.print_shadow_stack();
 
                 // Re-contextualize the array type also very sussy
                 (0..=range.len()).for_each(|_| {
@@ -971,6 +998,8 @@ impl<'a> AssemblyGenerator<'a> {
                     element_type: Box::new(body.resolved_type.clone()),
                     rank: range.len(),
                 });
+
+                asm_function.print_shadow_stack();
 
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
             }
