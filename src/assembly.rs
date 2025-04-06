@@ -853,8 +853,6 @@ impl<'a> AssemblyGenerator<'a> {
                         self.assert(asm_function, "jl", "index too large");
                     }
 
-                    //
-
                     asm_function.push_comment("calculating linear index");
                     asm_function.push_instruction("mov rax, 0");
                     for (i, _) in indices.iter().enumerate().rev() {
@@ -876,8 +874,6 @@ impl<'a> AssemblyGenerator<'a> {
 
                     asm_function.push_instruction(&format!("sub rsp, {}", element_type.usize()));
                     asm_function.add_shadow_type(element_type);
-
-                    //
 
                     asm_function.push_comment("copying data from array to stack");
                     asm_function.print_shadow_stack();
@@ -970,34 +966,33 @@ impl<'a> AssemblyGenerator<'a> {
 
                 asm_function.print_shadow_stack();
 
-                // for _ in 0..range.len() {
                 // Deallocate space for loop body
+                asm_function.push_comment("deallocating space for loop body");
                 asm_function.remove_shadow();
                 asm_function.push_instruction(&format!("add rsp, {}", body.resolved_type.usize()));
-                // }
 
                 asm_function.print_shadow_stack();
 
                 // Increment the loop index
+                asm_function.push_comment("incrementing loop index");
                 self.increment_loop_index(asm_function, range, continue_label);
 
                 asm_function.print_shadow_stack();
 
                 // De-init loop variables
+                asm_function.push_comment("de-init loop variables");
                 (0..range.len()).for_each(|_| asm_function.remove_shadow());
                 asm_function.push_instruction(&format!("add rsp, {}", 8 * range.len()));
 
                 asm_function.print_shadow_stack();
 
                 // Re-contextualize the array type also very sussy
+                asm_function.push_comment("re-contextualizing array type");
                 (0..=range.len()).for_each(|_| {
                     // Remove loop bounds and data pointer types
                     asm_function.remove_shadow();
                 });
-                asm_function.add_shadow_type(&Type::Array {
-                    element_type: Box::new(body.resolved_type.clone()),
-                    rank: range.len(),
-                });
+                asm_function.add_shadow_type(&expression.resolved_type);
 
                 asm_function.print_shadow_stack();
 
