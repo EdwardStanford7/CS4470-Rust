@@ -18,3 +18,4 @@ examples/jpli
 output.txt
 .DS_Store
 .zig-cache/
+myjplc
