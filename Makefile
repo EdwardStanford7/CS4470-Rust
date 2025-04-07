@@ -18,8 +18,6 @@ diff-one:
 	cargo run -- grader/$(FO)/$(SU)/$(FI).jpl --mode assembly > my.txt
 	grader/jplc grader/$(FO)/$(SU)/$(FI).jpl -s > ref.txt
 	code-insiders --diff my.txt ref.txt
-	mat test > output.txt
-	code-insiders output.txt
 
 
 run: $(BINARY)
@@ -28,6 +26,10 @@ run: $(BINARY)
 test:
 	@clear
 	$(MAKE) -C ./grader test-hw12 PART=all > output.txt || code output.txt
+
+testi:
+	@clear
+	$(MAKE) -C ./grader test-hw12 PART=all > output.txt || open output.txt
 
 test-last:
 	$(MAKE) -C ./grader test-hw1011 PART=all
@@ -41,7 +43,7 @@ run-all: $(BINARY)
 # $(MAKE) -C ./grader test-hw7 PART=all COMPILE_MODE=" -m typecheck"
 	$(MAKE) -C ./grader test-hw10 PART=all COMPILE_MODE=" -m assembly"
 	$(MAKE) -C ./grader test-hw11 PART=all COMPILE_MODE=" -m assembly"
-	$(MAKE) -C ./grader test-hw12 PART=all COMPILE_MODE=" -m assembly"
+# $(MAKE) -C ./grader test-hw12 PART=all COMPILE_MODE=" -m assembly"
 
 time-all:
 	time $(MAKE) run-all
