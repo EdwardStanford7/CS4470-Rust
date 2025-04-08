@@ -182,9 +182,13 @@ impl<'a> AsmFunction<'a> {
             .chain(int_params)
             .chain(arr_params)
             .collect::<Vec<_>>();
-        _ = all_stack_params.iter().map(|t| self.add_shadow_type(t));
+        self.push_assert();
+        self.push_assert();
+        all_stack_params.iter().for_each(|t| self.add_shadow_type(t));
+        self.pop_assert(all_stack_params.len());
         let padded = self.pad_shadow();
-        _ = all_stack_params.iter().map(|_| self.remove_shadow());
+        _ = all_stack_params.iter().for_each(|_| self.remove_shadow());
+        self.pop_assert(1);
         padded
     }
 
@@ -667,13 +671,15 @@ impl<'a> AssemblyGenerator<'a> {
                 let mut arr_arg_size = 0;
                 match &expression.resolved_type {
                     Type::Int | Type::Bool | Type::Float => {
-                        // MARK: fuzzer/012 doesn't like this pad being here, it's not supposed to pad until later it seems.
-                        asm_function.pad_shadow();
+                        asm_function.push_comment("check call alignment");
+                        asm_function.print_shadow_stack();
+                        asm_function.pad_shadow_with_all(arguments);
+                        asm_function.print_shadow_stack();
                     }
                     Type::Array { .. } => {
-                        asm_function.add_shadow_type(&ret_type);
+                        int_arg_num += 1;
                         asm_function.push_instruction(&format!("sub rsp, {}", ret_type.usize()));
-                        // MARK: sussy but based on the ordering the expected is looking for I don't think there's anything we can do (fuzzer/011)
+                        asm_function.add_shadow_type(&ret_type);
                         if asm_function.pad_shadow_with_all(arguments) {
                             arr_arg_size += 8;
                         }
@@ -684,6 +690,9 @@ impl<'a> AssemblyGenerator<'a> {
                 }
                 for arg in arguments.iter().rev() {
                     if let Type::Array { .. } = arg.resolved_type {
+                        //stack messed up here
+                        asm_function.push_comment("check here");
+                        asm_function.print_shadow_stack();
                         self.generate_expression(asm_function, arg, environment, in_statement);
                     }
                 }
@@ -735,18 +744,9 @@ impl<'a> AssemblyGenerator<'a> {
                 for arg in arguments.iter() {
                     match &arg.resolved_type {
                         Type::Array {
-                            element_type,
+                            element_type:_,
                             rank: _,
                         } => {
-                            match element_type.as_ref() {
-                                Type::Int | Type::Bool | Type::Float => {}
-                                _ => {
-                                    unimplemented!(
-                                        "TODO: element type array not supported: ({})",
-                                        element_type.to_string()
-                                    )
-                                }
-                            }
                             let size = arg.resolved_type.usize();
                             asm_function.push_instruction(&format!("add rsp, {}", size));
                             asm_function.remove_shadow();
@@ -888,6 +888,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.print_shadow_stack();
                 asm_function.push_assert();
 
+                asm_function.push_comment("allocate 8 bytes for pointer");
                 asm_function.push_instruction("sub rsp, 8"); // Allocate data pointer for array
                 asm_function.add_shadow_type(&Type::Int); // temp type that will be removed and re-contextualized as an array type
 

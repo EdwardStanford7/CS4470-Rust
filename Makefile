@@ -27,6 +27,10 @@ test:
 	@clear
 	$(MAKE) -C ./grader test-hw12 PART=all > output.txt || code output.txt
 
+teste:
+	@clear
+	./grader/jplc examples/test.jpl -s > ref.txt && cargo run -- examples/test.jpl --mode assembly > my.txt
+
 testi:
 	@clear
 	$(MAKE) -C ./grader test-hw12 PART=all > output.txt || open output.txt
