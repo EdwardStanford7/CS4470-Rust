@@ -335,11 +335,8 @@ impl<'a> AssemblyGenerator<'a> {
                     ),
                 }
                 asm_function.push_instruction(&format!("add rsp, {}", asm_function.stack_size - 8));
-                match return_type {
-                    Type::Array { .. } => {
+                if matches!(return_type, Type::Array{ .. }) {
                         asm_function.remove_shadow();
-                    }
-                    _ => {}
                 }
                 asm_function.push_instructions(vec!["pop rbp", "ret"]);
             }
@@ -409,22 +406,15 @@ impl<'a> AssemblyGenerator<'a> {
         new_asm_function.add_shadow_type(&Type::Int);
         let mut int_param_num = 0;
         let mut flo_param_num = 0;
-        let mut arr_param_size = 0;
-        match return_type {
-            Type::Array { .. } => {
-                new_asm_function.push_instruction(&format!("push {}", INT_REGS[int_param_num]));
-                new_asm_function.add_shadow_type(&Type::Int);
-                int_param_num += 1;
-            }
-            _ => {}
+        let mut arr_param_loc = 0;
+
+        if matches!(return_type,Type::Array { .. }) {
+            new_asm_function.push_instruction(&format!("push {}", INT_REGS[int_param_num]));
+            new_asm_function.add_shadow_type(&Type::Int);
+            int_param_num += 1;
         }
 
-
-        self.fun_name2(parameters, &mut new_asm_function, &mut int_param_num, &mut flo_param_num, &mut arr_param_size);
-
-
-
-
+        self.fun_name2(parameters, &mut new_asm_function, &mut int_param_num, &mut flo_param_num, &mut arr_param_loc);
 
         for statement in statements {
             self.generate_statement(&mut new_asm_function, statement, environment);
@@ -432,13 +422,7 @@ impl<'a> AssemblyGenerator<'a> {
         self.functions.push(new_asm_function);
     }
 
-
-
-
-
-
-
-    fn fun_name2(&mut self, parameters: &Vec<(LValue<'a>, Type<'a>)>, new_asm_function: &mut AsmFunction<'a>, int_param_num: &mut usize, flo_param_num: &mut usize, arr_param_size: &mut isize) {
+    fn fun_name2(&mut self, parameters: &Vec<(LValue<'a>, Type<'a>)>, new_asm_function: &mut AsmFunction<'a>, int_param_num: &mut usize, flo_param_num: &mut usize, arr_param_loc: &mut isize) {
         for param in parameters {
             match &param.1 {
                 Type::Int | Type::Bool | Type::Float => {
@@ -461,13 +445,11 @@ impl<'a> AssemblyGenerator<'a> {
                     new_asm_function.add_shadow_type(&param.1);
                 }
                 Type::Array {..} => {
-                    //sus
-                    let data_pointer = -*arr_param_size - 16;
-                    self.offsets.insert(param.0.name.to_string(),(data_pointer, false));
-                    *arr_param_size += param.1.isize();
+                    *arr_param_loc -= param.1.isize();
+                    self.offsets.insert(param.0.name.to_string(),(*arr_param_loc, false));
                     if let LValueType::Array { indices } = &param.0.node {
                         for (i, b_name) in indices.iter().enumerate() {
-                            let loc = data_pointer - 8 * i as isize;
+                            let loc = *arr_param_loc - 8 * i as isize;
                             self.offsets.insert(b_name.to_string(), (loc, false));
                         }
                     }
@@ -476,13 +458,6 @@ impl<'a> AssemblyGenerator<'a> {
             }
         }
     }
-
-
-
-
-
-
-
 
     fn handle_let(
         &mut self,
@@ -493,13 +468,12 @@ impl<'a> AssemblyGenerator<'a> {
         in_statement: bool,
     ) {
         asm_function.push_assert();
-        let array_location = asm_function.stack_size;
+        let old_rsp = asm_function.stack_size;
         self.generate_expression(asm_function, rvalue, environment, in_statement);
-        let data_pointer = array_location + rvalue.resolved_type.isize() - 8;
-        self.offsets.insert(variable.name.to_string(), (data_pointer, !in_statement));
+        self.offsets.insert(variable.name.to_string(), (old_rsp, !in_statement));
         if let LValueType::Array { indices } = &variable.node {
             for (i, b_name) in indices.iter().rev().enumerate() {
-                let loc = data_pointer - 8 * i as isize;
+                let loc = old_rsp - 8 * i as isize;
                 self.offsets.insert(b_name.to_string(), (loc, !in_statement));
             }
         }
@@ -679,19 +653,13 @@ impl<'a> AssemblyGenerator<'a> {
                     }
                 }
                 for arg in arguments.iter().rev() {
-                    match arg.resolved_type {
-                        Type::Array { .. } => {
-                            self.generate_expression(asm_function, arg, environment, in_statement);
-                        }
-                        _ => {}
+                    if matches!(arg.resolved_type, Type::Array { .. }) {
+                        self.generate_expression(asm_function, arg, environment, in_statement);
                     }
                 }
                 for arg in arguments.iter().rev() {
-                    match arg.resolved_type {
-                        Type::Array { .. } => {}
-                        _ => {
-                            self.generate_expression(asm_function, arg, environment, in_statement);
-                        }
+                    if !matches!(arg.resolved_type, Type::Array { .. }) {
+                        self.generate_expression(asm_function, arg, environment, in_statement);
                     }
                 }
                 for arg in arguments.iter() {
