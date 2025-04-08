@@ -6,6 +6,10 @@ $(BINARY):	src/*.rs
 	cargo build --release
 	cp target/release/myjplc .
 
+compile: src/*.rs
+	cargo build --release
+	cp target/release/myjplc .
+
 debug: src/*.rs
 	cargo build
 	cp target/debug/myjplc .
