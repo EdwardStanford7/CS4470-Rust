@@ -12,4 +12,10 @@ example/jpli
 Cargo.lock
 .idea/workspace.xml
 test.jpl
+*.txt
+examples/jplc
+examples/jpli
 output.txt
+.DS_Store
+.zig-cache/
+myjplc
