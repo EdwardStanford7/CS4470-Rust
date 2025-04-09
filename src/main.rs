@@ -5,25 +5,10 @@ mod parser;
 mod typechecker;
 mod utils;
 use clap::Parser;
-use clap::ValueEnum;
 use std::io::{self, Write};
 use utils::*;
 
-#[derive(Debug, Clone, ValueEnum, PartialEq)]
-enum CompilationMode {
-    /// Only run the lexer
-    Lex,
-    /// Run lexer and parser
-    Parse,
-    /// Typecheck after parsing
-    Typecheck,
-    /// Generate assembly code
-    Assembly,
-    /// Full compilation pipeline
-    Full,
-}
-
-/// Simple program to greet a person
+// Stupid autograder requires very specific flags
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -31,9 +16,25 @@ struct Args {
     #[arg(required(true))]
     file_name: String,
 
-    /// Compilation mode (lex, parse, typecheck, IR, Assembly, full)
-    #[arg(short, long, default_value = "f")]
-    mode: CompilationMode,
+    /// Lex mode
+    #[arg(short = 'l', long = "lex", default_value = "false", conflicts_with_all = ["parse", "typecheck", "assembly"])]
+    lex: bool,
+
+    /// Parse mode
+    #[arg(short = 'p', long = "parse", default_value = "false", conflicts_with_all = ["lex", "typecheck", "assembly"])]
+    parse: bool,
+
+    /// Typecheck mode
+    #[arg(short = 't', long = "typecheck", default_value = "false", conflicts_with_all = ["lex", "parse", "assembly"])]
+    typecheck: bool,
+
+    /// Assembly mode
+    #[arg(short = 's', long = "assembly", default_value = "false", conflicts_with_all = ["lex", "parse", "typecheck"])]
+    assembly: bool,
+
+    /// Optimization level
+    #[arg(short = 'O', long = "optimization", default_value = "0", conflicts_with_all = ["lex", "parse", "typecheck"])]
+    optimization_level: u8,
 }
 
 enum CompilerError {
@@ -99,7 +100,7 @@ fn compile() -> Result<(), CompilerError> {
     let tokens = lexer::lex(&file_contents)?;
 
     // Print tokens if in lex mode
-    if args.mode == CompilationMode::Lex {
+    if args.lex {
         let stdout = io::stdout();
         let mut buffer = io::BufWriter::new(stdout.lock());
 
@@ -116,7 +117,7 @@ fn compile() -> Result<(), CompilerError> {
     let commands = parser::parse(tokens)?;
 
     // Print AST if in parse mode
-    if args.mode == CompilationMode::Parse {
+    if args.parse {
         let stdout = io::stdout();
         let mut buffer = io::BufWriter::new(stdout.lock());
 
@@ -130,10 +131,10 @@ fn compile() -> Result<(), CompilerError> {
     }
 
     // Typecheck the AST
-    let (commands, environment) = typechecker::typecheck(commands)?;
+    let commands = typechecker::typecheck(commands)?;
 
     // Print typechecked AST if in typecheck mode
-    if args.mode == CompilationMode::Typecheck {
+    if args.typecheck {
         let stdout = io::stdout();
         let mut buffer = io::BufWriter::new(stdout.lock());
 
@@ -146,11 +147,16 @@ fn compile() -> Result<(), CompilerError> {
         return Ok(());
     }
 
+    // Optimize the AST if optimization level is set
+    if args.optimization_level > 0 {
+        // TODO: Implement some optimization logic at the AST level.
+    }
+
     // Generate assembly code
-    let assembly = assembly::generate_assembly(commands, environment);
+    let assembly = assembly::generate_assembly(commands, args.optimization_level);
 
     // Print assembly code if in assembly mode
-    if args.mode == CompilationMode::Assembly {
+    if args.assembly {
         println!(
             "{}\nCompilation succeeded, assembly generation complete.",
             assembly

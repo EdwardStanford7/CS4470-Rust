@@ -1,9 +1,7 @@
 use crate::ast::*;
 use crate::utils::*;
 
-pub fn typecheck(
-    mut commands: Vec<Command<'_>>,
-) -> Result<(Vec<Command<'_>>, TypeEnvironment<'_>), TypeError> {
+pub fn typecheck(mut commands: Vec<Command<'_>>) -> Result<Vec<Command<'_>>, TypeError> {
     let mut environment = TypeEnvironment::new();
 
     populate_built_ins(&mut environment);
@@ -12,7 +10,7 @@ pub fn typecheck(
         typecheck_command(command, &mut environment)?;
     }
 
-    Ok((commands, environment))
+    Ok(commands)
 }
 
 fn populate_built_ins(environment: &mut TypeEnvironment<'_>) {

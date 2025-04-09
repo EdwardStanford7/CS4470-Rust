@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::utils::*;
+// use crate::utils::*;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fmt;
@@ -225,6 +225,7 @@ struct AssemblyGenerator<'a> {
     constants: HashMap<AssemblyValue, String>,
     jump_counter: usize,
     offsets: HashMap<String, (isize, bool)>,
+    optimization_level: u8,
 }
 
 impl Display for AssemblyGenerator<'_> {
@@ -244,21 +245,18 @@ impl Display for AssemblyGenerator<'_> {
 }
 
 impl<'a> AssemblyGenerator<'a> {
-    pub fn new() -> Self {
+    pub fn new(optimization_level: u8) -> Self {
         Self {
             data_section: Vec::new(),
             functions: Vec::new(),
             constants: HashMap::new(),
             offsets: HashMap::new(),
             jump_counter: 1,
+            optimization_level,
         }
     }
 
-    pub fn generate_assembly(
-        &mut self,
-        commands: Vec<Command<'a>>,
-        environment: TypeEnvironment<'a>,
-    ) -> String {
+    pub fn generate_assembly(&mut self, commands: Vec<Command<'a>>) -> String {
         let mut main_function = AsmFunction::new();
         self.offsets.insert("args".to_string(), (-16, false));
         self.offsets.insert("argnum".to_string(), (-16, false));
@@ -271,12 +269,11 @@ impl<'a> AssemblyGenerator<'a> {
             "push r12",
             "mov r12, rbp",
         ]);
-        // main_function.add_shadow_type(&Type::Int); //rbp doesn't count as part of our stack frame because we set new rbp to rsp after pushing it
         main_function.add_shadow_type(&Type::Int); //r12
         main_function.push_comment("end of jpl_main prelude");
         for command in commands {
             main_function.push_assert();
-            self.generate_command(&mut main_function, &command, &environment);
+            self.generate_command(&mut main_function, &command);
             main_function.print_shadow_stack();
             assert!(
                 main_function.pop_assert_opt(vec![0, 1]),
@@ -307,11 +304,10 @@ impl<'a> AssemblyGenerator<'a> {
         &mut self,
         asm_function: &mut AsmFunction<'a>,
         statement: &Statement<'a>,
-        environment: &TypeEnvironment<'a>,
     ) {
         match &statement.node {
             StatementType::Return { value } => {
-                self.generate_expression(asm_function, value, environment, true);
+                self.generate_expression(asm_function, value, true);
                 asm_function.remove_shadow();
                 let return_type = value.resolved_type.clone();
                 match return_type {
@@ -343,18 +339,13 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_instructions(vec!["pop rbp", "ret"]);
             }
             StatementType::Let { variable, rvalue } => {
-                self.handle_let(asm_function, environment, variable, rvalue, true);
+                self.handle_let(asm_function, variable, rvalue, true);
             }
             _ => unimplemented!("\n\nfailure because of statement {}", statement.to_string()),
         }
     }
 
-    fn generate_command(
-        &mut self,
-        asm_function: &mut AsmFunction<'a>,
-        command: &Command<'a>,
-        environment: &TypeEnvironment<'a>,
-    ) {
+    fn generate_command(&mut self, asm_function: &mut AsmFunction<'a>, command: &Command<'a>) {
         match command.node.as_ref() {
             CommandType::Show { expression } => {
                 asm_function.push_comment("show start");
@@ -362,15 +353,13 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.print_shadow_stack();
                 asm_function.pad_shadow_with(expression);
                 asm_function.print_shadow_stack();
-                self.generate_expression(asm_function, expression, environment, false);
-                let size = expression.resolved_type.usize();
-                let typ_str = expression.resolved_type.to_string();
-                let const_name = self.get_constant(AssemblyValue::String(typ_str));
-                asm_function.push_instruction(&format!("lea rdi, [rel {}]", const_name));
+                self.generate_expression(asm_function, expression, false);
+                self.insert_string_constant(asm_function, expression.resolved_type.to_string());
                 asm_function.add_shadow_type(&Type::Int);
                 asm_function.push_instructions(vec!["lea rsi, [rsp]", "call _show"]);
                 asm_function.remove_shadow();
-                asm_function.push_instruction(&format!("add rsp, {}", size));
+                asm_function
+                    .push_instruction(&format!("add rsp, {}", expression.resolved_type.usize()));
                 asm_function.unpad_shadow();
                 asm_function.remove_shadow();
                 asm_function.print_shadow_stack();
@@ -378,7 +367,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_comment("show end");
             }
             CommandType::Let { variable, rvalue } => {
-                self.handle_let(asm_function, environment, variable, rvalue, false);
+                self.handle_let(asm_function, variable, rvalue, false);
             }
             CommandType::Function {
                 name,
@@ -447,7 +436,7 @@ impl<'a> AssemblyGenerator<'a> {
                 new_asm_function.print_shadow_stack();
 
                 for statement in statements {
-                    self.generate_statement(&mut new_asm_function, statement, environment);
+                    self.generate_statement(&mut new_asm_function, statement);
                 }
 
                 self.functions.push(new_asm_function);
@@ -459,13 +448,12 @@ impl<'a> AssemblyGenerator<'a> {
     fn handle_let(
         &mut self,
         asm_function: &mut AsmFunction<'a>,
-        environment: &TypeEnvironment<'a>,
         variable: &LValue<'_>,
         rvalue: &Expression<'a>,
         in_statement: bool,
     ) {
         asm_function.push_assert();
-        self.generate_expression(asm_function, rvalue, environment, in_statement);
+        self.generate_expression(asm_function, rvalue, in_statement);
         self.offsets.insert(
             variable.name.to_string(),
             (asm_function.stack_size, !in_statement),
@@ -494,33 +482,26 @@ impl<'a> AssemblyGenerator<'a> {
         &mut self,
         asm_function: &mut AsmFunction<'a>,
         expression: &Expression<'a>,
-        environment: &TypeEnvironment<'a>,
         in_statement: bool,
     ) {
         match expression.node.as_ref() {
             ExpressionType::Int { value } => {
                 asm_function.push_assert();
-                let constant = self.get_constant(AssemblyValue::Number(value.to_string()));
-                asm_function
-                    .push_instructions(vec![&format!("mov rax, [rel {}]", constant), "push rax"]);
+                self.insert_int_constant(asm_function, *value);
                 asm_function.add_shadow_type(&expression.resolved_type);
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
             }
             ExpressionType::Float { value } => {
                 asm_function.push_assert();
-                let constant = self.get_constant(AssemblyValue::Number(format!("{:?}", value)));
-                asm_function
-                    .push_instructions(vec![&format!("mov rax, [rel {}]", constant), "push rax"]);
+                self.insert_float_constant(asm_function, *value);
                 asm_function.add_shadow_type(&expression.resolved_type);
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
             }
             ExpressionType::True => {
                 asm_function.push_assert();
-                let constant = self.get_constant(AssemblyValue::Number("1".to_string()));
-                asm_function
-                    .push_instructions(vec![&format!("mov rax, [rel {}]", constant), "push rax"]);
+                self.insert_int_constant(asm_function, 1);
                 asm_function.add_shadow_type(&expression.resolved_type);
                 asm_function.print_shadow_stack();
                 asm_function.print_shadow_stack();
@@ -528,9 +509,7 @@ impl<'a> AssemblyGenerator<'a> {
             }
             ExpressionType::False => {
                 asm_function.push_assert();
-                let constant = self.get_constant(AssemblyValue::Number("0".to_string()));
-                asm_function
-                    .push_instructions(vec![&format!("mov rax, [rel {}]", constant), "push rax"]);
+                self.insert_int_constant(asm_function, 0);
                 asm_function.add_shadow_type(&expression.resolved_type);
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
@@ -541,7 +520,7 @@ impl<'a> AssemblyGenerator<'a> {
             } => {
                 asm_function.push_assert();
                 asm_function.push_assert();
-                self.generate_expression(asm_function, expression, environment, in_statement);
+                self.generate_expression(asm_function, expression, in_statement);
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
 
@@ -573,11 +552,11 @@ impl<'a> AssemblyGenerator<'a> {
                     asm_function.pad_shadow();
                 }
                 asm_function.push_assert();
-                self.generate_expression(asm_function, right, environment, in_statement);
+                self.generate_expression(asm_function, right, in_statement);
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
                 asm_function.push_assert();
-                self.generate_expression(asm_function, left, environment, in_statement);
+                self.generate_expression(asm_function, left, in_statement);
 
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
@@ -600,7 +579,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_assert();
                 let element_size = elements[0].resolved_type.usize();
                 for element in elements.iter().rev() {
-                    self.generate_expression(asm_function, element, environment, in_statement);
+                    self.generate_expression(asm_function, element, in_statement);
                 }
                 asm_function
                     .push_instruction(&format!("mov rdi, {}", elements.len() * element_size));
@@ -667,12 +646,12 @@ impl<'a> AssemblyGenerator<'a> {
                         //stack messed up here
                         asm_function.push_comment("check here");
                         asm_function.print_shadow_stack();
-                        self.generate_expression(asm_function, arg, environment, in_statement);
+                        self.generate_expression(asm_function, arg, in_statement);
                     }
                 }
                 for arg in arguments.iter().rev() {
                     if !matches!(arg.resolved_type, Type::Array { .. }) {
-                        self.generate_expression(asm_function, arg, environment, in_statement);
+                        self.generate_expression(asm_function, arg, in_statement);
                     }
                 }
                 for arg in arguments.iter() {
@@ -753,7 +732,7 @@ impl<'a> AssemblyGenerator<'a> {
                 else_branch,
             } => {
                 asm_function.push_assert();
-                self.generate_expression(asm_function, condition, environment, in_statement);
+                self.generate_expression(asm_function, condition, in_statement);
 
                 asm_function.push_instruction("pop rax");
                 asm_function.remove_shadow();
@@ -765,11 +744,11 @@ impl<'a> AssemblyGenerator<'a> {
                 self.jump_counter += 1;
 
                 asm_function.push_instruction(&format!("je {}", else_label));
-                self.generate_expression(asm_function, then_branch, environment, in_statement);
+                self.generate_expression(asm_function, then_branch, in_statement);
                 asm_function.remove_shadow();
                 asm_function.push_instruction(&format!("jmp {}", end_label));
                 asm_function.push_label(&else_label);
-                self.generate_expression(asm_function, else_branch, environment, in_statement);
+                self.generate_expression(asm_function, else_branch, in_statement);
                 asm_function.push_label(&end_label);
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
             }
@@ -780,16 +759,11 @@ impl<'a> AssemblyGenerator<'a> {
                     let element_type = element_type.as_ref();
 
                     asm_function.push_comment(&format!("generating array expression {}", array));
-                    self.generate_expression(asm_function, array, environment, in_statement);
+                    self.generate_expression(asm_function, array, in_statement);
 
                     asm_function.push_comment("generating index expressions");
                     for index_expr in indices.iter().rev() {
-                        self.generate_expression(
-                            asm_function,
-                            index_expr,
-                            environment,
-                            in_statement,
-                        );
+                        self.generate_expression(asm_function, index_expr, in_statement);
                     }
 
                     asm_function.push_comment("generating bounds checks");
@@ -859,7 +833,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_comment("before checking bounds");
                 asm_function.print_shadow_stack();
                 asm_function.push_comment("array loop check bounds");
-                self.check_loop_bounds(asm_function, environment, in_statement, range);
+                self.check_loop_bounds(asm_function, in_statement, range);
                 asm_function.push_comment("after checking bounds");
                 asm_function.print_shadow_stack();
 
@@ -890,7 +864,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_label(&format!(".jump{}", self.jump_counter));
                 let continue_label = self.jump_counter;
                 self.jump_counter += 1;
-                self.generate_expression(asm_function, body, environment, in_statement);
+                self.generate_expression(asm_function, body, in_statement);
 
                 asm_function.print_shadow_stack();
 
@@ -968,7 +942,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.add_shadow_type(&resolved_type);
 
                 asm_function.push_comment("sum loop check bounds");
-                self.check_loop_bounds(asm_function, environment, in_statement, range);
+                self.check_loop_bounds(asm_function, in_statement, range);
 
                 asm_function.push_comment("init return");
                 asm_function.push_instructions(vec![
@@ -982,7 +956,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_label(&format!(".jump{}", self.jump_counter));
                 let continue_label = self.jump_counter;
                 self.jump_counter += 1;
-                self.generate_expression(asm_function, body, environment, in_statement);
+                self.generate_expression(asm_function, body, in_statement);
                 let accumulator_address = 2 * 8 * range.len();
 
                 if matches!(resolved_type, Type::Int) {
@@ -1249,7 +1223,6 @@ impl<'a> AssemblyGenerator<'a> {
     fn check_loop_bounds(
         &mut self,
         asm_function: &mut AsmFunction<'a>,
-        environment: &TypeEnvironment<'a>,
         in_statement: bool,
         range: &Vec<(&str, Expression<'a>)>,
     ) {
@@ -1259,7 +1232,7 @@ impl<'a> AssemblyGenerator<'a> {
                 "generating bounds for {} with expr {}",
                 variable, expr
             ));
-            self.generate_expression(asm_function, expr, environment, in_statement);
+            self.generate_expression(asm_function, expr, in_statement);
             asm_function.push_instructions(vec!["mov rax, [rsp]", "cmp rax, 0"]);
             self.assert(asm_function, "jg", "non-positive loop bound");
         });
@@ -1324,7 +1297,27 @@ impl<'a> AssemblyGenerator<'a> {
         assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
     }
 
-    fn get_constant(&mut self, value: AssemblyValue) -> &str {
+    fn insert_string_constant(&mut self, asm_function: &mut AsmFunction, constant: String) {
+        let const_name = self.insert_asm_constant(AssemblyValue::String(constant));
+        asm_function.push_instruction(&format!("lea rdi, [rel {}]", const_name));
+    }
+
+    fn insert_int_constant(&mut self, asm_function: &mut AsmFunction, number: i64) {
+        if self.optimization_level > 0 && num_traits::cast::ToPrimitive::to_i32(&number).is_some() {
+            asm_function.push_instruction(&format!("push qword {}", number));
+        } else {
+            let const_name = self.insert_asm_constant(AssemblyValue::Number(number.to_string()));
+            asm_function
+                .push_instructions(vec![&format!("mov rax, [rel {}]", const_name), "push rax"]);
+        }
+    }
+
+    fn insert_float_constant(&mut self, asm_function: &mut AsmFunction, number: f64) {
+        let const_name = self.insert_asm_constant(AssemblyValue::Number(format!("{:?}", number)));
+        asm_function.push_instructions(vec![&format!("mov rax, [rel {}]", const_name), "push rax"]);
+    }
+
+    fn insert_asm_constant(&mut self, value: AssemblyValue) -> &str {
         let data_section_len = self.data_section.len();
         let entry = self.constants.entry(value.clone()).or_insert_with(|| {
             self.data_section.push(value.clone());
@@ -1338,20 +1331,14 @@ impl<'a> AssemblyGenerator<'a> {
         self.jump_counter += 1;
         asm_function.push_instruction(&format!("{} {}", cmp_mode, assert_label));
         asm_function.pad_shadow();
-        asm_function.push_instruction(&format!(
-            "lea rdi, [rel {}]",
-            self.get_constant(AssemblyValue::String(message.to_string()))
-        ));
+        self.insert_string_constant(asm_function, message.to_string());
         asm_function.push_instruction("call _fail_assertion");
         asm_function.unpad_shadow();
         asm_function.push_label(&assert_label);
     }
 }
 
-pub fn generate_assembly<'a>(
-    commands: Vec<Command<'a>>,
-    environment: TypeEnvironment<'a>,
-) -> String {
-    let mut generator = AssemblyGenerator::new();
-    generator.generate_assembly(commands, environment)
+pub fn generate_assembly(commands: Vec<Command<'_>>, optimization_level: u8) -> String {
+    let mut generator = AssemblyGenerator::new(optimization_level);
+    generator.generate_assembly(commands) // MARK: string replacement level optimization here?
 }
