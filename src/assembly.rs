@@ -1,3 +1,5 @@
+use regex::Regex;
+
 use crate::ast::*;
 // use crate::utils::*;
 use std::collections::HashMap;
@@ -551,6 +553,45 @@ impl<'a> AssemblyGenerator<'a> {
                 if *operator == "%" && matches!(left.resolved_type, Type::Float) {
                     asm_function.pad_shadow();
                 }
+
+                // Multiplication optimization
+                if self.optimization_level > 0 && *operator == "*" {
+                    if let ExpressionType::Int { value: value_1 } = left.node.as_ref() {
+                        if (Self::is_32_bit(value_1) || (*value_1 as u64).is_power_of_two())
+                            && *value_1 != 0
+                        {
+                            self.generate_expression(asm_function, right, in_statement);
+
+                            if *value_1 != 1 {
+                                asm_function.push_instructions(vec![
+                                    "pop rax",
+                                    &format!("imul rax, {}", value_1),
+                                    "push rax",
+                                ]);
+                            }
+
+                            assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                            return;
+                        }
+                    } else if let ExpressionType::Int { value: value_2 } = right.node.as_ref() {
+                        if (Self::is_32_bit(value_2) || (*value_2 as u64).is_power_of_two())
+                            && *value_2 != 0
+                        {
+                            self.generate_expression(asm_function, left, in_statement);
+                            if *value_2 != 1 {
+                                asm_function.push_instructions(vec![
+                                    "pop rax",
+                                    &format!("imul rax, {}", value_2),
+                                    "push rax",
+                                ]);
+                            }
+
+                            assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                            return;
+                        }
+                    }
+                }
+
                 asm_function.push_assert();
                 self.generate_expression(asm_function, right, in_statement);
                 asm_function.print_shadow_stack();
@@ -792,21 +833,13 @@ impl<'a> AssemblyGenerator<'a> {
                         self.assert(asm_function, "jl", "index too large");
                     }
 
-                    asm_function.push_comment("calculating linear index for array index");
-                    asm_function.push_instruction("mov rax, 0");
-                    for i in 0..indices.len() {
-                        asm_function.push_instruction(&format!(
-                            "imul rax, [rsp + {}]",
-                            (indices.len() * 8) + (i * 8) // Skip loop body and indices and get to correct bound.
-                        ));
-                        asm_function.push_instruction(&format!("add rax, [rsp + {}]", i * 8));
-                    }
-                    asm_function.push_instruction(&format!(
-                        "imul rax, {}",
-                        expression.resolved_type.usize()
-                    ));
-                    asm_function
-                        .push_instruction(&format!("add rax, [rsp + {}]", indices.len() * 2 * 8));
+                    self.calculate_linear_index(
+                        asm_function,
+                        None,
+                        indices.len(),
+                        0,
+                        expression.resolved_type.usize(),
+                    );
 
                     for _ in indices.iter() {
                         asm_function.remove_shadow();
@@ -882,23 +915,13 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.print_shadow_stack();
 
                 // Calculate linear index
-                asm_function.push_comment("calculating linear index");
-                asm_function.push_instruction("mov rax, 0");
-                for i in 0..range.len() {
-                    asm_function.push_instruction(&format!(
-                        "imul rax, [rsp + {}]",
-                        body.resolved_type.usize() + (range.len() * 8) + (i * 8) // Skip loop body and indices and get to correct bound.
-                    ));
-                    asm_function.push_instruction(&format!(
-                        "add rax, [rsp + {}]",
-                        i * 8 + body.resolved_type.usize()
-                    ));
-                }
-                asm_function.push_instruction(&format!("imul rax, {}", body.resolved_type.usize()));
-                asm_function.push_instruction(&format!(
-                    "add rax, [rsp + {}]",
-                    body.resolved_type.usize() + range.len() * 2 * 8 // Skip loop body, all indices, and all bounds to get to the data pointer.
-                ));
+                self.calculate_linear_index(
+                    asm_function,
+                    Some(range),
+                    range.len(),
+                    body.resolved_type.usize(),
+                    body.resolved_type.usize(),
+                );
 
                 asm_function.print_shadow_stack();
 
@@ -1217,7 +1240,7 @@ impl<'a> AssemblyGenerator<'a> {
     fn init_indices(
         &mut self,
         asm_function: &mut AsmFunction<'a>,
-        range: &Vec<(&str, Expression<'_>)>,
+        range: &[(&str, Expression<'_>)],
     ) {
         asm_function.push_comment("init indices");
         //rev good
@@ -1237,7 +1260,7 @@ impl<'a> AssemblyGenerator<'a> {
         &mut self,
         asm_function: &mut AsmFunction<'a>,
         in_statement: bool,
-        range: &Vec<(&str, Expression<'a>)>,
+        range: &[(&str, Expression<'a>)],
     ) {
         asm_function.push_comment("make bounds");
         range.iter().rev().for_each(|(variable, expr)| {
@@ -1251,10 +1274,60 @@ impl<'a> AssemblyGenerator<'a> {
         });
     }
 
+    fn calculate_linear_index(
+        &mut self,
+        asm_function: &mut AsmFunction<'a>,
+        bounds: Option<&Vec<(&'a str, Expression<'a>)>>,
+        rank: usize,
+        offset_size: usize,
+        element_size: usize,
+    ) {
+        asm_function.push_comment("calculating linear index");
+        if self.optimization_level > 0 {
+            asm_function.push_instruction(&format!("mov rax, [rsp + {}]", offset_size));
+
+            for i in 1..rank {
+                if let Some(bounds) = bounds {
+                    if let ExpressionType::Int { value } = bounds[i].1.node.as_ref() {
+                        if Self::is_32_bit(value) || (*value as u64).is_power_of_two() {
+                            asm_function.push_instruction(&format!("imul rax, {}", value));
+                            asm_function.push_instruction(&format!(
+                                "add rax, [rsp + {}]",
+                                i * 8 + offset_size
+                            ));
+                            continue;
+                        }
+                    }
+                }
+
+                asm_function.push_instruction(&format!(
+                    "imul rax, [rsp + {}]",
+                    offset_size + (rank * 8) + (i * 8)
+                ));
+                asm_function.push_instruction(&format!("add rax, [rsp + {}]", i * 8 + offset_size));
+            }
+        } else {
+            asm_function.push_instruction("mov rax, 0");
+            for i in 0..rank {
+                asm_function.push_instruction(&format!(
+                    "imul rax, [rsp + {}]",
+                    offset_size + (rank * 8) + (i * 8) // Skip loop body and indices and get to correct bound.
+                ));
+                asm_function.push_instruction(&format!("add rax, [rsp + {}]", i * 8 + offset_size));
+            }
+        }
+
+        asm_function.push_instruction(&format!("imul rax, {}", element_size));
+        asm_function.push_instruction(&format!(
+            "add rax, [rsp + {}]",
+            offset_size + rank * 2 * 8 // Skip loop body, all indices, and all bounds to get to the data pointer.
+        ));
+    }
+
     fn increment_loop_index(
         &self,
         asm_function: &mut AsmFunction<'a>,
-        range: &Vec<(&str, Expression<'a>)>,
+        range: &[(&str, Expression<'a>)],
         continue_label: usize,
     ) {
         range
@@ -1316,7 +1389,7 @@ impl<'a> AssemblyGenerator<'a> {
     }
 
     fn insert_int_constant(&mut self, asm_function: &mut AsmFunction, number: i64) {
-        if self.optimization_level > 0 && num_traits::cast::ToPrimitive::to_i32(&number).is_some() {
+        if self.optimization_level > 0 && Self::is_32_bit(&number) {
             asm_function.push_instruction(&format!("push qword {}", number));
         } else {
             let const_name = self.insert_asm_constant(AssemblyValue::Number(number.to_string()));
@@ -1349,9 +1422,62 @@ impl<'a> AssemblyGenerator<'a> {
         asm_function.unpad_shadow();
         asm_function.push_label(&assert_label);
     }
+
+    fn is_32_bit(value: &i64) -> bool {
+        num_traits::cast::ToPrimitive::to_i32(value).is_some()
+    }
+}
+
+struct RegexReplacement {
+    pattern: Regex,
+    replacer: Box<dyn Fn(&regex::Captures) -> String>,
+}
+
+fn string_replacement_optimization(code: &str) -> String {
+    // Define all our regex replacements
+    let replacements = vec![
+        // Replace imul with power of 2 by shift
+        RegexReplacement {
+            pattern: Regex::new(r"imul rax, (\d+)").unwrap(),
+            replacer: Box::new(|caps| {
+                let value = caps[1].parse::<u64>().unwrap();
+                // Check if it's a power of 2
+                if value.is_power_of_two() {
+                    let shift = value.trailing_zeros();
+                    format!("shl rax, {}", shift)
+                } else {
+                    // Return original if not a power of 2
+                    caps[0].to_string()
+                }
+            }),
+        },
+        // Remove multiply by 1 instructions entirely.
+        RegexReplacement {
+            pattern: Regex::new(r"imul rax, 1").unwrap(),
+            replacer: Box::new(|_| "".to_string()),
+        },
+    ];
+
+    // Apply all replacements one by one
+    let mut result = code.to_string();
+    for replacement in replacements {
+        result = replacement
+            .pattern
+            .replace_all(&result, |caps: &regex::Captures| {
+                (replacement.replacer)(caps)
+            })
+            .to_string();
+    }
+
+    result
 }
 
 pub fn generate_assembly(commands: Vec<Command<'_>>, optimization_level: u8) -> String {
     let mut generator = AssemblyGenerator::new(optimization_level);
-    generator.generate_assembly(commands) // MARK: string replacement level optimization here?
+    let code = generator.generate_assembly(commands);
+    if optimization_level > 0 {
+        string_replacement_optimization(&code)
+    } else {
+        code
+    }
 }
