@@ -147,11 +147,6 @@ fn compile() -> Result<(), CompilerError> {
         return Ok(());
     }
 
-    // Optimize the AST if optimization level is set
-    if args.optimization_level > 0 {
-        // TODO: Implement some optimization logic at the AST level.
-    }
-
     // Generate assembly code
     let assembly = assembly::generate_assembly(commands, args.optimization_level);
 

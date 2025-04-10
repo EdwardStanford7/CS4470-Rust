@@ -734,6 +734,19 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_assert();
                 self.generate_expression(asm_function, condition, in_statement);
 
+                // Boolean to integer casts
+                if self.optimization_level > 0 {
+                    // Check if the branches are integer literals that can be optimized
+                    if let ExpressionType::Int { value: value_1 } = then_branch.node.as_ref() {
+                        if let ExpressionType::Int { value: value_2 } = else_branch.node.as_ref() {
+                            if *value_1 == 1 && *value_2 == 0 {
+                                assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 asm_function.push_instruction("pop rax");
                 asm_function.remove_shadow();
                 asm_function.push_instruction("cmp rax, 0");
