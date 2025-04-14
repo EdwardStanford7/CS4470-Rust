@@ -13,9 +13,9 @@ FI ?= 001.jpl
 
 diff-one:
 	@clear
-	cargo run -- grader/$(FO)/$(SU)/$(FI).jpl -s > my.txt
-	grader/jplc grader/$(FO)/$(SU)/$(FI).jpl -s > ref.txt
-	code-insiders --diff my.txt ref.txt
+	cargo run -- grader/$(FO)/$(SU)/$(FI).jpl -s -O1 > my.txt
+	grader/jplc grader/$(FO)/$(SU)/$(FI).jpl -s -O1 > ref.txt
+	code --diff my.txt ref.txt
 
 run: $(BINARY)
 	$(BINARY) $(TEST) $(FLAGS)

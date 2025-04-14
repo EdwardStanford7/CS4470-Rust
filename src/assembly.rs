@@ -807,6 +807,19 @@ impl<'a> AssemblyGenerator<'a> {
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
             }
             ExpressionType::ArrayIndex { array, indices } => {
+                if let ExpressionType::Variable { name } = array.node.as_ref() {
+                    let (offset, from_main) = self.offsets.get(*name).unwrap();
+                    if self.optimization_level > 0 && !(*from_main && in_statement) {
+                        asm_function.push_comment("array index optimization");
+                        return self.optimized_array_index(
+                            asm_function,
+                            indices,
+                            expression,
+                            *offset,
+                            in_statement,
+                        );
+                    }
+                }
                 asm_function.push_comment("array index start");
                 if let Type::Array { element_type, rank } = &array.resolved_type {
                     asm_function.push_assert();
@@ -1029,6 +1042,75 @@ impl<'a> AssemblyGenerator<'a> {
             }
             _ => unimplemented!("failure because expression: {}", expression.to_string()),
         }
+    }
+
+    fn optimized_array_index(
+        &mut self,
+        asm_function: &mut AsmFunction<'a>,
+        indices: &Vec<Expression<'a>>,
+        expression: &Expression<'a>,
+        offset: isize,
+        in_statement: bool,
+    ) {
+        asm_function.push_assert();
+        asm_function.push_comment("generating index expressions");
+        for index_expr in indices.iter().rev() {
+            self.generate_expression(asm_function, index_expr, in_statement);
+        }
+
+        let location = asm_function.stack_size - offset;
+
+        asm_function.push_comment("generating bounds checks");
+        asm_function.print_shadow_stack();
+        for (index, _) in indices.iter().enumerate() {
+            asm_function.push_instructions(vec![
+                &format!("mov rax, [rsp + {}];aaa", index as isize * 8),
+                "cmp rax, 0",
+            ]);
+            self.assert(asm_function, "jge", "negative array index");
+            asm_function.push_instruction(&format!(
+                "cmp rax, [rsp + {}];bbbb",
+                location + (index as isize) * 8
+            ));
+            self.assert(asm_function, "jl", "index too large");
+        }
+
+        asm_function.push_instruction(&format!("mov rax, [rsp + {}]", 0));
+
+        for i in 1..indices.len() {
+            asm_function.push_instruction(&format!(
+                "imul rax, [rsp + {}];cccc",
+                location + (i as isize * 8)
+            ));
+            asm_function.push_instruction(&format!("add rax, [rsp + {}];ddd", i as isize * 8));
+        }
+
+        asm_function.push_instruction(&format!("imul rax, {}", expression.resolved_type.usize()));
+        asm_function.push_instruction(&format!(
+            "add rax, [rsp + {}];eeee",            //MARK:wrong
+            location + indices.len() as isize * 8 // Skip loop body, all indices, and all bounds to get to the data pointer.
+        ));
+
+        for _ in indices.iter() {
+            asm_function.remove_shadow();
+        }
+        asm_function.push_instruction(&format!("add rsp, {}", indices.len() as isize * 8));
+
+        asm_function.push_instruction(&format!("sub rsp, {}", expression.resolved_type.usize()));
+        asm_function.add_shadow_type(&expression.resolved_type);
+
+        asm_function.push_comment("copying data from array to stack");
+        asm_function.print_shadow_stack();
+        for i in (0..(expression.resolved_type.usize())).step_by(8).rev() {
+            asm_function.push_instructions(vec![
+                &format!("mov r10, [rax + {}];fff", i),
+                &format!("mov [rsp + {}], r10;ggg", i),
+            ]);
+        }
+
+        asm_function.push_comment("array index end");
+        asm_function.print_shadow_stack();
+        assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
     }
 
     fn generate_int_op(&mut self, asm_function: &mut AsmFunction<'a>, operator: &str) {
