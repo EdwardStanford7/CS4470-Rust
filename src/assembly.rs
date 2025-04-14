@@ -562,6 +562,32 @@ impl<'a> AssemblyGenerator<'a> {
                         {
                             self.generate_expression(asm_function, right, in_statement);
 
+                            if let ExpressionType::Int { value: value_2 } = right.node.as_ref() {
+                                if (Self::is_32_bit(value_2) || (*value_2 as u64).is_power_of_two())
+                                    && *value_2 != 0
+                                    && *value_1 != 1
+                                    && *value_2 != 1
+                                    && !(*value_1 as u64).is_power_of_two()
+                                {
+                                    self.generate_expression(asm_function, left, in_statement);
+                                    asm_function.push_instructions(vec![
+                                        "pop rax",
+                                        "pop r10",
+                                        "imul rax, r10",
+                                        "push rax",
+                                    ]);
+
+                                    asm_function.remove_shadow();
+
+                                    assert!(
+                                        asm_function.pop_assert(1),
+                                        "\n\n{}",
+                                        asm_function.body
+                                    );
+                                    return;
+                                }
+                            }
+
                             if *value_1 != 1 {
                                 asm_function.push_instructions(vec![
                                     "pop rax",
