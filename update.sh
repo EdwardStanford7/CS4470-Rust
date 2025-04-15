@@ -23,37 +23,12 @@ else
 fi
 
 echo "installing grader"
-gh repo clone utah-cs4470-sp25/grader grader_temp
 rm -rf grader
-mkdir grader
-cp -r grader_temp/* grader/
-rm -rf grader_temp
+gh repo clone utah-cs4470-sp25/grader grader
 
 echo "installing runtime"
-gh repo clone utah-cs4470-sp25/runtime rt_temp
 rm -rf rt
-mkdir rt
-cp -r rt_temp/* rt/
-rm -rf rt_temp
+gh repo clone utah-cs4470-sp25/runtime rt
 
 cd rt && make && cd ..
-
-echo "downloading JPLC and JPLI"
-mkdir -p examples
-rm -f examples/jpli examples/jplc grader/jplc
-
-# Get the latest release tag using GitHub CLI
-latest_release=$(gh release list --repo utah-cs4470-sp25/class --json tagName,isLatest -q '.[] | select(.isLatest==true) | .tagName')
-
-# Construct the download URLs with proper variable interpolation
-interpreter_url="https://github.com/utah-cs4470-sp25/class/releases/download/${latest_release}/jpli-macos"
-compiler_url="https://github.com/utah-cs4470-sp25/class/releases/download/${latest_release}/jplc-macos"
-
-curl -LO "$interpreter_url"
-curl -LO "$compiler_url"
-
-mv "jpli-macos" "jpli"
-mv "jplc-macos" "jplc"
-mv jpli examples/
-mv jplc examples/ && cp examples/jplc grader/
-chmod +x examples/jpli examples/jplc grader/jplc
+cd grader && make jplc && cd ..

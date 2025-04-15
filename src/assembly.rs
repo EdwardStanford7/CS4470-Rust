@@ -907,6 +907,25 @@ impl<'a> AssemblyGenerator<'a> {
                 }
             }
             ExpressionType::ArrayLoop { range, body } => {
+                if let ExpressionType::SumLoop {
+                    range: sum_range,
+                    body: sum_body,
+                } = body.node.as_ref()
+                {
+                    if self.optimization_level > 0
+                        && self.bounds_are_static(range)
+                        && self.bounds_are_static(sum_range)
+                    {
+                        self.optimized_array_loop(
+                            asm_function,
+                            range,
+                            sum_range,
+                            sum_body,
+                            in_statement,
+                        );
+                    }
+                }
+
                 asm_function.push_comment("array loop start");
                 asm_function.print_shadow_stack();
                 asm_function.push_assert();
@@ -1068,6 +1087,25 @@ impl<'a> AssemblyGenerator<'a> {
             }
             _ => unimplemented!("failure because expression: {}", expression.to_string()),
         }
+    }
+
+    fn bounds_are_static(&self, range: &[(&str, Expression<'_>)]) -> bool {
+        // MARK: constant propagation needed here
+        range.iter().all(|(_, expr)| match expr.node.as_ref() {
+            ExpressionType::Int { value } => *value != 0,
+            _ => false,
+        })
+    }
+
+    fn optimized_array_loop(
+        &mut self,
+        asm_function: &mut AsmFunction<'a>,
+        array_range: &[(&str, Expression<'_>)],
+        sum_range: &[(&str, Expression<'_>)],
+        sum_body: &Expression<'a>,
+        in_statement: bool,
+    ) {
+        unimplemented!("Optimized array loop not implemented yet.");
     }
 
     fn optimized_array_index(
