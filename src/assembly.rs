@@ -1,7 +1,7 @@
-use regex::Regex;
-
 use crate::ast::*;
-// use crate::utils::*;
+use petgraph::algo::toposort;
+use petgraph::graphmap::DiGraphMap;
+use regex::Regex;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fmt;
@@ -877,6 +877,7 @@ impl<'a> AssemblyGenerator<'a> {
                         None,
                         indices.len(),
                         0,
+                        indices.len() * 8,
                         expression.resolved_type.usize(),
                     );
 
@@ -907,14 +908,13 @@ impl<'a> AssemblyGenerator<'a> {
                 }
             }
             ExpressionType::ArrayLoop { range, body } => {
+                // Check if the array loop can be tensor contraction optimized
                 if let ExpressionType::SumLoop {
                     range: sum_range,
                     body: sum_body,
                 } = body.node.as_ref()
                 {
-                    if self.optimization_level > 0
-                        && self.bounds_are_static(range)
-                        && self.bounds_are_static(sum_range)
+                    if self.optimization_level > 2 && Self::tensor_optimizable_expressions(sum_body)
                     {
                         self.optimized_array_loop(
                             asm_function,
@@ -923,6 +923,7 @@ impl<'a> AssemblyGenerator<'a> {
                             sum_body,
                             in_statement,
                         );
+                        return;
                     }
                 }
 
@@ -978,6 +979,7 @@ impl<'a> AssemblyGenerator<'a> {
                     Some(range),
                     range.len(),
                     body.resolved_type.usize(),
+                    body.resolved_type.usize() + range.len() * 8,
                     body.resolved_type.usize(),
                 );
 
@@ -1003,7 +1005,8 @@ impl<'a> AssemblyGenerator<'a> {
 
                 // Increment the loop index
                 asm_function.push_comment("incrementing loop index");
-                self.increment_loop_index(asm_function, range, continue_label);
+                let ordering: Vec<usize> = (0..range.len()).collect();
+                self.increment_loop_index(asm_function, &ordering, continue_label);
 
                 asm_function.print_shadow_stack();
 
@@ -1014,7 +1017,7 @@ impl<'a> AssemblyGenerator<'a> {
 
                 asm_function.print_shadow_stack();
 
-                // Re-contextualize the array type also very sussy
+                // Re-contextualize the array type
                 asm_function.push_comment("re-contextualizing array type");
                 (0..=range.len()).for_each(|_| {
                     // Remove loop bounds and data pointer types
@@ -1069,7 +1072,8 @@ impl<'a> AssemblyGenerator<'a> {
 
                 asm_function.remove_shadow();
 
-                self.increment_loop_index(asm_function, range, continue_label);
+                let ordering: Vec<usize> = (0..range.len()).collect();
+                self.increment_loop_index(asm_function, &ordering, continue_label);
                 asm_function.print_shadow_stack();
 
                 asm_function.push_instruction(&format!("add rsp, {}", 8 * range.len()));
@@ -1089,23 +1093,227 @@ impl<'a> AssemblyGenerator<'a> {
         }
     }
 
-    fn bounds_are_static(&self, range: &[(&str, Expression<'_>)]) -> bool {
-        // MARK: constant propagation needed here
-        range.iter().all(|(_, expr)| match expr.node.as_ref() {
-            ExpressionType::Int { value } => *value != 0,
+    fn tensor_optimizable_expressions(sum_body: &Expression<'_>) -> bool {
+        match sum_body.node.as_ref() {
+            ExpressionType::Binop {
+                operator: _,
+                left,
+                right,
+            } => {
+                Self::tensor_optimizable_expressions(left)
+                    && Self::tensor_optimizable_expressions(right)
+            }
+            ExpressionType::Int { .. }
+            | ExpressionType::Float { .. }
+            | ExpressionType::Variable { .. } => true,
+            ExpressionType::ArrayIndex { array, indices } => {
+                Self::tensor_optimizable_expressions(array)
+                    && indices
+                        .iter()
+                        .all(|index| Self::tensor_optimizable_expressions(index))
+            }
             _ => false,
-        })
+        }
     }
 
     fn optimized_array_loop(
         &mut self,
         asm_function: &mut AsmFunction<'a>,
-        array_range: &[(&str, Expression<'_>)],
-        sum_range: &[(&str, Expression<'_>)],
+        array_range: &[(&'a str, Expression<'a>)],
+        sum_range: &[(&'a str, Expression<'a>)],
         sum_body: &Expression<'a>,
         in_statement: bool,
     ) {
-        unimplemented!("Optimized array loop not implemented yet.");
+        asm_function.push_comment("tensor contraction optimization");
+
+        let graph = Self::build_traversal_graph(array_range, sum_range, sum_body);
+        asm_function.push_comment(&format!("tensor contraction graph: {:?}", graph));
+        let topological_order: Vec<usize> = toposort(&graph, None)
+            .unwrap()
+            .iter()
+            .map(|item| item.1)
+            .collect();
+
+        asm_function.push_comment(&format!(
+            "tensor contraction topological order: {:?}",
+            topological_order
+        ));
+
+        asm_function.print_shadow_stack();
+        asm_function.push_assert();
+
+        asm_function.push_comment("allocate 8 bytes for pointer");
+        asm_function.push_instruction("sub rsp, 8"); // Allocate data pointer for array
+        asm_function.add_shadow_type(&Type::Int); // temp type that will be removed and re-contextualized as an array type
+
+        // Check bounds for array and sum
+        asm_function.push_comment("check bounds for array and sum");
+        self.check_loop_bounds(asm_function, in_statement, array_range);
+        self.check_loop_bounds(asm_function, in_statement, sum_range);
+
+        // Calculate the size of the array and store it in rax
+        asm_function.push_comment("calculate total array heap size");
+        asm_function.push_instruction(&format!("mov rdi, {}", sum_body.resolved_type.usize()));
+        (0..array_range.len()).for_each(|i| {
+            asm_function
+                .push_instruction(&format!("imul rdi, [rsp + {}]", (i + sum_range.len()) * 8)); // add sum_range length to skip past sum bounds
+            self.assert(asm_function, "jno", "overflow computing array size");
+        });
+
+        asm_function.pad_shadow();
+        asm_function.push_instruction("call _jpl_alloc");
+        asm_function.unpad_shadow();
+        asm_function.push_instruction(&format!(
+            "mov [rsp + {}], rax",
+            (array_range.len() + sum_range.len()) * 8
+        ));
+
+        // Initialize looping variables
+        asm_function.push_comment("init loop variables");
+        self.init_indices(asm_function, array_range);
+        self.init_indices(asm_function, sum_range);
+
+        // Loop body
+        asm_function.push_comment("loop body");
+        asm_function.push_label(&format!(".jump{}", self.jump_counter));
+        let continue_label = self.jump_counter;
+        self.jump_counter += 1;
+        self.generate_expression(asm_function, sum_body, in_statement);
+
+        // Calculate linear index
+        self.calculate_linear_index(
+            asm_function,
+            Some(array_range),
+            array_range.len(),
+            sum_body.resolved_type.usize() + (sum_range.len() * 8), // Skip past sum loop vars
+            sum_body.resolved_type.usize()
+                + ((sum_range.len() + array_range.len() + sum_range.len()) * 8), // Skip past sum loop vars, array loop vars, and sum loop bounds
+            sum_body.resolved_type.usize(),
+        );
+
+        // Copy data from stack to heap
+        asm_function.push_comment("copying element from stack to array");
+        if matches!(sum_body.resolved_type, Type::Float) {
+            // MARK: don't ask me why this is a thing here
+            asm_function.push_instructions(vec![
+                "movsd xmm0, [rsp]",
+                "add rsp, 8",
+                "addsd xmm0, [rax]",
+                "movsd [rax], xmm0",
+            ]);
+        } else {
+            for i in (0..sum_body.resolved_type.usize()).step_by(8).rev() {
+                asm_function.push_instructions(vec![
+                    &format!("mov r10, [rsp + {}]", i),
+                    &format!("mov [rax + {}], r10", i),
+                ]);
+            }
+        }
+
+        // Deallocate space for loop body
+        asm_function.push_comment("deallocating space for loop body");
+        asm_function.remove_shadow();
+        asm_function.push_instruction(&format!("add rsp, {}", sum_body.resolved_type.usize()));
+
+        // Increment the loop index in topological order
+        asm_function.push_comment("incrementing loop index");
+        self.increment_loop_index(asm_function, &topological_order, continue_label);
+
+        // De-init loop variables
+        asm_function.push_comment("de-init array and loop variables");
+        (0..sum_range.len()).for_each(|_| asm_function.remove_shadow());
+        array_range
+            .iter()
+            .for_each(|_| asm_function.remove_shadow());
+        asm_function.push_instruction(&format!(
+            "add rsp, {}",
+            8 * (sum_range.len() + array_range.len()) // sum loops vars, array loop vars, sum loop bounds
+        ));
+
+        // De-init sum bounds
+        asm_function.push_comment("de-init sum bounds");
+        (0..sum_range.len()).for_each(|_| asm_function.remove_shadow());
+        asm_function.push_instruction(&format!(
+            "add rsp, {}",
+            8 * sum_range.len() // sum loops vars, array loop vars, sum loop bounds
+        ));
+
+        // Re-contextualize the array type
+        asm_function.push_comment("re-contextualizing array type");
+        (0..=array_range.len()).for_each(|_| {
+            // Remove loop bounds and data pointer types
+            asm_function.remove_shadow();
+        });
+        asm_function.add_shadow_type(&Type::Array {
+            element_type: Box::new(sum_body.resolved_type.clone()),
+            rank: array_range.len(),
+        });
+
+        assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+    }
+
+    fn build_traversal_graph(
+        array_range: &[(&'a str, Expression<'a>)],
+        sum_range: &[(&'a str, Expression<'a>)],
+        sum_body: &Expression<'a>,
+    ) -> DiGraphMap<(&'a str, usize), ()> {
+        let mut graph: DiGraphMap<(&'a str, usize), ()> =
+            DiGraphMap::with_capacity(array_range.len() + sum_range.len(), 0);
+
+        // Create edges from array range - connecting array indices
+        for i in 0..array_range.len() {
+            let (name_i, _) = array_range[i];
+            for j in (i + 1)..array_range.len() {
+                let (name_j, _) = array_range[j];
+                graph.add_edge((name_i, i), (name_j, j), ());
+            }
+        }
+
+        // Create edges from sum range - connecting sum indices
+        if matches!(sum_body.resolved_type, Type::Float) {
+            for i in 0..sum_range.len() {
+                let (name_i, _) = sum_range[i];
+                for j in (i + 1)..sum_range.len() {
+                    let (name_j, _) = sum_range[j];
+                    graph.add_edge((name_i, i), (name_j, j), ());
+                }
+            }
+        }
+
+        // Extract edges from array indices in the expression
+        Self::extract_edges_from_expression(&mut graph, sum_body);
+
+        graph
+    }
+
+    fn extract_edges_from_expression(
+        graph: &mut DiGraphMap<(&'a str, usize), ()>,
+        expression: &Expression<'a>,
+    ) {
+        match expression.node.as_ref() {
+            ExpressionType::Binop {
+                operator: _,
+                left,
+                right,
+            } => {
+                Self::extract_edges_from_expression(graph, left);
+                Self::extract_edges_from_expression(graph, right);
+            }
+            ExpressionType::ArrayIndex { array: _, indices } => {
+                for i in 0..indices.len() {
+                    if let ExpressionType::Variable { name: name_i } = indices[i].node.as_ref() {
+                        for j in (i + 1)..indices.len() {
+                            if let ExpressionType::Variable { name: name_j } =
+                                indices[j].node.as_ref()
+                            {
+                                graph.add_edge((name_i, i), (name_j, j), ());
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     fn optimized_array_index(
@@ -1128,12 +1336,12 @@ impl<'a> AssemblyGenerator<'a> {
         asm_function.print_shadow_stack();
         for (index, _) in indices.iter().enumerate() {
             asm_function.push_instructions(vec![
-                &format!("mov rax, [rsp + {}];aaa", index as isize * 8),
+                &format!("mov rax, [rsp + {}]", index as isize * 8),
                 "cmp rax, 0",
             ]);
             self.assert(asm_function, "jge", "negative array index");
             asm_function.push_instruction(&format!(
-                "cmp rax, [rsp + {}];bbbb",
+                "cmp rax, [rsp + {}]",
                 location + (index as isize) * 8
             ));
             self.assert(asm_function, "jl", "index too large");
@@ -1143,15 +1351,15 @@ impl<'a> AssemblyGenerator<'a> {
 
         for i in 1..indices.len() {
             asm_function.push_instruction(&format!(
-                "imul rax, [rsp + {}];cccc",
+                "imul rax, [rsp + {}]",
                 location + (i as isize * 8)
             ));
-            asm_function.push_instruction(&format!("add rax, [rsp + {}];ddd", i as isize * 8));
+            asm_function.push_instruction(&format!("add rax, [rsp + {}]", i as isize * 8));
         }
 
         asm_function.push_instruction(&format!("imul rax, {}", expression.resolved_type.usize()));
         asm_function.push_instruction(&format!(
-            "add rax, [rsp + {}];eeee",            //MARK:wrong
+            "add rax, [rsp + {}]",
             location + indices.len() as isize * 8 // Skip loop body, all indices, and all bounds to get to the data pointer.
         ));
 
@@ -1167,8 +1375,8 @@ impl<'a> AssemblyGenerator<'a> {
         asm_function.print_shadow_stack();
         for i in (0..(expression.resolved_type.usize())).step_by(8).rev() {
             asm_function.push_instructions(vec![
-                &format!("mov r10, [rax + {}];fff", i),
-                &format!("mov [rsp + {}], r10;ggg", i),
+                &format!("mov r10, [rax + {}]", i),
+                &format!("mov [rsp + {}], r10", i),
             ]);
         }
 
@@ -1239,7 +1447,6 @@ impl<'a> AssemblyGenerator<'a> {
                 unreachable!();
             }
         }
-        asm_function.push_comment("int op");
     }
 
     fn generate_float_op(&mut self, asm_function: &mut AsmFunction<'a>, operator: &str) {
@@ -1423,14 +1630,15 @@ impl<'a> AssemblyGenerator<'a> {
     fn calculate_linear_index(
         &mut self,
         asm_function: &mut AsmFunction<'a>,
-        bounds: Option<&Vec<(&'a str, Expression<'a>)>>,
+        bounds: Option<&[(&'a str, Expression<'a>)]>,
         rank: usize,
-        offset_size: usize,
+        loop_vars_offset: usize,
+        bounds_offset: usize,
         element_size: usize,
     ) {
         asm_function.push_comment("calculating linear index");
         if self.optimization_level > 0 {
-            asm_function.push_instruction(&format!("mov rax, [rsp + {}]", offset_size));
+            asm_function.push_instruction(&format!("mov rax, [rsp + {}]", loop_vars_offset));
 
             for i in 1..rank {
                 if let Some(bounds) = bounds {
@@ -1439,61 +1647,56 @@ impl<'a> AssemblyGenerator<'a> {
                             asm_function.push_instruction(&format!("imul rax, {}", value));
                             asm_function.push_instruction(&format!(
                                 "add rax, [rsp + {}]",
-                                i * 8 + offset_size
+                                i * 8 + loop_vars_offset
                             ));
                             continue;
                         }
                     }
                 }
 
-                asm_function.push_instruction(&format!(
-                    "imul rax, [rsp + {}]",
-                    offset_size + (rank * 8) + (i * 8)
-                ));
-                asm_function.push_instruction(&format!("add rax, [rsp + {}]", i * 8 + offset_size));
+                asm_function
+                    .push_instruction(&format!("imul rax, [rsp + {}]", bounds_offset + (i * 8)));
+                asm_function
+                    .push_instruction(&format!("add rax, [rsp + {}]", i * 8 + loop_vars_offset));
             }
         } else {
             asm_function.push_instruction("mov rax, 0");
             for i in 0..rank {
                 asm_function.push_instruction(&format!(
                     "imul rax, [rsp + {}]",
-                    offset_size + (rank * 8) + (i * 8) // Skip loop body and indices and get to correct bound.
+                    bounds_offset + (i * 8) // Skip loop body and indices and get to correct bound.
                 ));
-                asm_function.push_instruction(&format!("add rax, [rsp + {}]", i * 8 + offset_size));
+                asm_function
+                    .push_instruction(&format!("add rax, [rsp + {}]", i * 8 + loop_vars_offset));
             }
         }
 
         asm_function.push_instruction(&format!("imul rax, {}", element_size));
         asm_function.push_instruction(&format!(
             "add rax, [rsp + {}]",
-            offset_size + rank * 2 * 8 // Skip loop body, all indices, and all bounds to get to the data pointer.
+            bounds_offset + rank * 8 // Skip loop body, all indices, and all bounds to get to the data pointer.
         ));
     }
 
     fn increment_loop_index(
         &self,
         asm_function: &mut AsmFunction<'a>,
-        range: &[(&str, Expression<'a>)],
+        range: &[usize],
         continue_label: usize,
     ) {
-        range
-            .iter()
-            .enumerate()
-            .skip(1)
-            .rev()
-            .for_each(|(i, (_, _))| {
-                asm_function.push_instructions(vec![
-                    &format!("add qword [rsp + {}], 1", i * 8),
-                    &format!("mov rax, [rsp + {}]", i * 8),
-                    &format!("cmp rax, [rsp + {}]", 8 * (i + range.len())),
-                    &format!("jl .jump{}", continue_label),
-                    &format!("mov qword [rsp + {}], 0", i * 8),
-                ]);
-            });
+        range.iter().skip(1).rev().for_each(|placement| {
+            asm_function.push_instructions(vec![
+                &format!("add qword [rsp + {}], 1", placement * 8),
+                &format!("mov rax, [rsp + {}]", placement * 8),
+                &format!("cmp rax, [rsp + {}]", 8 * (placement + range.len())),
+                &format!("jl .jump{}", continue_label),
+                &format!("mov qword [rsp + {}], 0", placement * 8),
+            ]);
+        });
         asm_function.push_instructions(vec![
-            &format!("add qword [rsp + {}], 1", 0),
-            &format!("mov rax, [rsp + {}]", 0),
-            &format!("cmp rax, [rsp + {}]", 8 * range.len()),
+            &format!("add qword [rsp + {}], 1", range[0] * 8),
+            &format!("mov rax, [rsp + {}]", range[0] * 8),
+            &format!("cmp rax, [rsp + {}]", 8 * (range[0] + range.len())),
             &format!("jl .jump{}", continue_label),
         ]);
     }
