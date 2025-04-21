@@ -1004,9 +1004,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.print_shadow_stack();
 
                 // Increment the loop index
-                asm_function.push_comment("incrementing loop index");
-                let ordering: Vec<usize> = (0..range.len()).collect();
-                self.increment_loop_index(asm_function, &ordering, continue_label);
+                self.increment_loop_index(asm_function, range.len(), continue_label);
 
                 asm_function.print_shadow_stack();
 
@@ -1072,8 +1070,7 @@ impl<'a> AssemblyGenerator<'a> {
 
                 asm_function.remove_shadow();
 
-                let ordering: Vec<usize> = (0..range.len()).collect();
-                self.increment_loop_index(asm_function, &ordering, continue_label);
+                self.increment_loop_index(asm_function, range.len(), continue_label);
                 asm_function.print_shadow_stack();
 
                 asm_function.push_instruction(&format!("add rsp, {}", 8 * range.len()));
@@ -1128,11 +1125,8 @@ impl<'a> AssemblyGenerator<'a> {
 
         let graph = Self::build_traversal_graph(array_range, sum_range, sum_body);
         asm_function.push_comment(&format!("tensor contraction graph: {:?}", graph));
-        let topological_order: Vec<usize> = toposort(&graph, None)
-            .unwrap()
-            .iter()
-            .map(|item| item.1)
-            .collect();
+
+        let topological_order = toposort(&graph, None).unwrap();
 
         asm_function.push_comment(&format!(
             "tensor contraction topological order: {:?}",
@@ -1168,7 +1162,7 @@ impl<'a> AssemblyGenerator<'a> {
             (array_range.len() + sum_range.len()) * 8
         ));
 
-        // Initialize looping variables
+        // Initialize loop variables in topological order
         asm_function.push_comment("init loop variables");
         self.init_indices(asm_function, array_range);
         self.init_indices(asm_function, sum_range);
@@ -1193,31 +1187,78 @@ impl<'a> AssemblyGenerator<'a> {
 
         // Copy data from stack to heap
         asm_function.push_comment("copying element from stack to array");
-        if matches!(sum_body.resolved_type, Type::Float) {
-            // MARK: don't ask me why this is a thing here
-            asm_function.push_instructions(vec![
-                "movsd xmm0, [rsp]",
-                "add rsp, 8",
-                "addsd xmm0, [rax]",
-                "movsd [rax], xmm0",
-            ]);
-        } else {
-            for i in (0..sum_body.resolved_type.usize()).step_by(8).rev() {
+        match sum_body.resolved_type {
+            Type::Int => {
                 asm_function.push_instructions(vec![
-                    &format!("mov r10, [rsp + {}]", i),
-                    &format!("mov [rax + {}], r10", i),
+                    "pop r10",
+                    &format!("add [rax + {}], r10", 8 * (array_range.len() - 1)), // Already popped so minus 8 on the offset
                 ]);
+                asm_function.remove_shadow();
+            }
+            Type::Float => {
+                asm_function.push_instructions(vec![
+                    "movsd xmm0, [rsp]",
+                    "add rsp, 8",
+                    "addsd xmm0, [rax]",
+                    "movsd [rax], xmm0",
+                ]);
+                asm_function.remove_shadow();
+            }
+            _ => {
+                for i in (0..sum_body.resolved_type.usize()).step_by(8).rev() {
+                    asm_function.push_instructions(vec![
+                        &format!("mov r10, [rsp + {}]", i),
+                        &format!("mov [rax + {}], r10", i),
+                    ]);
+                }
+                asm_function.remove_shadow();
+                asm_function
+                    .push_instruction(&format!("add rsp, {}", sum_body.resolved_type.usize()));
             }
         }
 
-        // Deallocate space for loop body
-        asm_function.push_comment("deallocating space for loop body");
-        asm_function.remove_shadow();
-        asm_function.push_instruction(&format!("add rsp, {}", sum_body.resolved_type.usize()));
+        let mut stack_ordering = array_range
+            .iter()
+            .rev()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>();
+        stack_ordering.extend(sum_range.iter().rev().map(|(name, _)| *name));
+        stack_ordering.reverse(); // MARK: I know why this is necessary but I don't know why 4/5 of the tests pass without it
 
-        // Increment the loop index in topological order
-        asm_function.push_comment("incrementing loop index");
-        self.increment_loop_index(asm_function, &topological_order, continue_label);
+        asm_function.push_comment(&format!("stack ordering is {:?}", stack_ordering));
+
+        // Iterate over topological ordering and figure out the offsets based on stack ordering
+        let mut offsets = Vec::new();
+        for name in topological_order.iter().rev() {
+            // MARK: 4/5 tests pass without this double reverse
+            asm_function.push_comment(&format!("checking if {} is in stack ordering", name));
+            if let Some(index) = stack_ordering.iter().position(|&x| x == *name) {
+                offsets.push(index);
+            }
+        }
+
+        asm_function.push_comment(&format!("topological ordering is {:?}", topological_order));
+        asm_function.push_comment(&format!("offsets are {:?}", offsets));
+
+        for offset in offsets.iter().take(offsets.len() - 1) {
+            asm_function.push_instructions(vec![
+                &format!("add qword [rsp + {}], 1", offset * 8),
+                &format!("mov rax, [rsp + {}]", offset * 8),
+                &format!("cmp rax, [rsp + {}]", (offset + offsets.len()) * 8),
+                &format!("jl .jump{}", continue_label),
+                &format!("mov qword [rsp + {}], 0", offset * 8),
+            ])
+        }
+
+        asm_function.push_instructions(vec![
+            &format!("add qword [rsp + {}], 1", offsets.last().unwrap() * 8),
+            &format!("mov rax, [rsp + {}]", offsets.last().unwrap() * 8),
+            &format!(
+                "cmp rax, [rsp + {}]",
+                (offsets.last().unwrap() + offsets.len()) * 8
+            ),
+            &format!("jl .jump{}", continue_label),
+        ]);
 
         // De-init loop variables
         asm_function.push_comment("de-init array and loop variables");
@@ -1256,26 +1297,22 @@ impl<'a> AssemblyGenerator<'a> {
         array_range: &[(&'a str, Expression<'a>)],
         sum_range: &[(&'a str, Expression<'a>)],
         sum_body: &Expression<'a>,
-    ) -> DiGraphMap<(&'a str, usize), ()> {
-        let mut graph: DiGraphMap<(&'a str, usize), ()> =
+    ) -> DiGraphMap<&'a str, ()> {
+        let mut graph: DiGraphMap<&'a str, ()> =
             DiGraphMap::with_capacity(array_range.len() + sum_range.len(), 0);
 
         // Create edges from array range - connecting array indices
-        for i in 0..array_range.len() {
-            let (name_i, _) = array_range[i];
-            for j in (i + 1)..array_range.len() {
-                let (name_j, _) = array_range[j];
-                graph.add_edge((name_i, i), (name_j, j), ());
+        for (i, (name_i, _)) in array_range.iter().enumerate() {
+            for (name_j, _) in array_range.iter().skip(i + 1) {
+                graph.add_edge(name_i, name_j, ());
             }
         }
 
         // Create edges from sum range - connecting sum indices
-        if matches!(sum_body.resolved_type, Type::Float) {
-            for i in 0..sum_range.len() {
-                let (name_i, _) = sum_range[i];
-                for j in (i + 1)..sum_range.len() {
-                    let (name_j, _) = sum_range[j];
-                    graph.add_edge((name_i, i), (name_j, j), ());
+        for (i, (name_i, _)) in sum_range.iter().enumerate() {
+            if matches!(sum_body.resolved_type, Type::Float) {
+                for (name_j, _) in sum_range.iter().skip(i + 1) {
+                    graph.add_edge(name_i, name_j, ());
                 }
             }
         }
@@ -1287,7 +1324,7 @@ impl<'a> AssemblyGenerator<'a> {
     }
 
     fn extract_edges_from_expression(
-        graph: &mut DiGraphMap<(&'a str, usize), ()>,
+        graph: &mut DiGraphMap<&'a str, ()>,
         expression: &Expression<'a>,
     ) {
         match expression.node.as_ref() {
@@ -1302,11 +1339,11 @@ impl<'a> AssemblyGenerator<'a> {
             ExpressionType::ArrayIndex { array: _, indices } => {
                 for i in 0..indices.len() {
                     if let ExpressionType::Variable { name: name_i } = indices[i].node.as_ref() {
-                        for j in (i + 1)..indices.len() {
+                        for j in (0..indices.len()).skip(i + 1) {
                             if let ExpressionType::Variable { name: name_j } =
                                 indices[j].node.as_ref()
                             {
-                                graph.add_edge((name_i, i), (name_j, j), ());
+                                graph.add_edge(name_i, name_j, ());
                             }
                         }
                     }
@@ -1681,22 +1718,25 @@ impl<'a> AssemblyGenerator<'a> {
     fn increment_loop_index(
         &self,
         asm_function: &mut AsmFunction<'a>,
-        range: &[usize],
+        rank: usize,
         continue_label: usize,
     ) {
-        range.iter().skip(1).rev().for_each(|placement| {
+        asm_function.push_comment("incrementing loop index");
+
+        for i in (0..rank).skip(1).rev() {
             asm_function.push_instructions(vec![
-                &format!("add qword [rsp + {}], 1", placement * 8),
-                &format!("mov rax, [rsp + {}]", placement * 8),
-                &format!("cmp rax, [rsp + {}]", 8 * (placement + range.len())),
+                &format!("add qword [rsp + {}], 1", i * 8),
+                &format!("mov rax, [rsp + {}]", i * 8),
+                &format!("cmp rax, [rsp + {}]", 8 * (i + rank)),
                 &format!("jl .jump{}", continue_label),
-                &format!("mov qword [rsp + {}], 0", placement * 8),
+                &format!("mov qword [rsp + {}], 0", i * 8),
             ]);
-        });
+        }
+
         asm_function.push_instructions(vec![
-            &format!("add qword [rsp + {}], 1", range[0] * 8),
-            &format!("mov rax, [rsp + {}]", range[0] * 8),
-            &format!("cmp rax, [rsp + {}]", 8 * (range[0] + range.len())),
+            "add qword [rsp], 1",
+            "mov rax, [rsp]",
+            &format!("cmp rax, [rsp + {}]", 8 * rank),
             &format!("jl .jump{}", continue_label),
         ]);
     }
