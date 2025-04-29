@@ -1,4 +1,6 @@
 use crate::ast::*;
+use crate::utils::Position;
+use crate::utils::TypeEnvironment;
 use petgraph::algo::toposort;
 use petgraph::graphmap::DiGraphMap;
 use regex::Regex;
@@ -108,7 +110,11 @@ impl<'a> AsmFunction<'a> {
             .rev()
             .find(|(_, element)| matches!(element, Shadow::Item(..)))
             .map(|(i, _)| i)
-            .unwrap_or_else(|| unreachable!("popped with no elements"));
+            .unwrap_or_else(|| {
+                self.print_shadow_stack();
+                println!("{}", self.body);
+                unreachable!("popped with no elements")
+            });
         match self.shadow_stack.remove(index).unwrap() {
             Shadow::Item(element) => {
                 self.stack_size -= element.isize();
@@ -228,6 +234,7 @@ struct AssemblyGenerator<'a> {
     jump_counter: usize,
     offsets: HashMap<String, (isize, bool)>,
     optimization_level: u8,
+    environment: TypeEnvironment<'a>,
 }
 
 impl Display for AssemblyGenerator<'_> {
@@ -247,7 +254,7 @@ impl Display for AssemblyGenerator<'_> {
 }
 
 impl<'a> AssemblyGenerator<'a> {
-    pub fn new(optimization_level: u8) -> Self {
+    pub fn new(optimization_level: u8, env: TypeEnvironment<'a>) -> Self {
         Self {
             data_section: Vec::new(),
             functions: Vec::new(),
@@ -255,6 +262,7 @@ impl<'a> AssemblyGenerator<'a> {
             offsets: HashMap::new(),
             jump_counter: 1,
             optimization_level,
+            environment: env,
         }
     }
 
@@ -378,6 +386,19 @@ impl<'a> AssemblyGenerator<'a> {
                 statements,
                 has_return: _,
             } => {
+                if self.optimization_level > 3 {
+                    if let Ok(sym) = self.environment.get_identifier("global", Position::new(0, 0), name) {
+                        match sym {
+                            Type::Function { param_types: _, return_type} => {
+                                match return_type.as_ref() {
+                                    Type::Int { value: Some(_) } | Type::Bool { value: Some(_) } => return,
+                                    _ => {}
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 let mut new_asm_function = AsmFunction::new();
                 new_asm_function.push_label(name);
                 new_asm_function.push_label(&format!("_{}", name));
@@ -486,8 +507,8 @@ impl<'a> AssemblyGenerator<'a> {
         expression: &Expression<'a>,
         in_statement: bool,
     ) {
-        if self.optimization_level > 1 {
-            match &expression.resolved_type {
+        if self.optimization_level > 3 {
+            return match &expression.resolved_type {
                 Type::Bool { value: Some(true) } => {
                     asm_function.push_assert();
                     self.insert_int_constant(asm_function, 1);
@@ -495,7 +516,6 @@ impl<'a> AssemblyGenerator<'a> {
                     asm_function.print_shadow_stack();
                     asm_function.print_shadow_stack();
                     assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
-                    return;
                 }
                 Type::Bool { value: Some(false) } => {
                     asm_function.push_assert();
@@ -503,7 +523,13 @@ impl<'a> AssemblyGenerator<'a> {
                     asm_function.add_shadow_type(&expression.resolved_type);
                     asm_function.print_shadow_stack();
                     assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
-                    return;
+                }
+                Type::Int { value: Some(v) } => {
+                    asm_function.push_assert();
+                    self.insert_int_constant(asm_function, *v);
+                    asm_function.add_shadow_type(&expression.resolved_type);
+                    asm_function.print_shadow_stack();
+                    assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
                 }
                 _ => {}
             }
@@ -1889,8 +1915,8 @@ fn string_replacement_optimization(code: &str) -> String {
     result
 }
 
-pub fn generate_assembly(commands: Vec<Command<'_>>, optimization_level: u8) -> String {
-    let mut generator = AssemblyGenerator::new(optimization_level);
+pub fn generate_assembly(commands: Vec<Command<'_>>, optimization_level: u8, env: TypeEnvironment<'_>) -> String {
+    let mut generator = AssemblyGenerator::new(optimization_level, env);
     let code = generator.generate_assembly(commands);
     if optimization_level > 0 {
         string_replacement_optimization(&code)

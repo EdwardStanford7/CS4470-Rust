@@ -33,7 +33,7 @@ struct Args {
     assembly: bool,
 
     /// Optimization level
-    #[arg(short = 'O', long = "optimization", default_value = "0", conflicts_with_all = ["lex", "parse", "typecheck"])]
+    #[arg(short = 'O', long = "optimization", default_value = "0", conflicts_with_all = ["lex"])]
     optimization_level: u8,
 }
 
@@ -131,7 +131,7 @@ fn compile() -> Result<(), CompilerError> {
     }
 
     // Typecheck the AST
-    let commands = typechecker::typecheck(commands)?;
+    let (commands, env) = typechecker::typecheck(commands, args.optimization_level)?;
 
     // Print typechecked AST if in typecheck mode
     if args.typecheck {
@@ -148,7 +148,7 @@ fn compile() -> Result<(), CompilerError> {
     }
 
     // Generate assembly code
-    let assembly = assembly::generate_assembly(commands, args.optimization_level);
+    let assembly = assembly::generate_assembly(commands, args.optimization_level, env);
 
     // Print assembly code if in assembly mode
     if args.assembly {

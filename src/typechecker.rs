@@ -1,8 +1,14 @@
 use crate::ast::*;
 use crate::utils::*;
 
-pub fn typecheck(mut commands: Vec<Command<'_>>) -> Result<Vec<Command<'_>>, TypeError> {
+static mut OPTIMIZATION_LEVEL: u8 = 0;
+
+pub fn typecheck(mut commands: Vec<Command<'_>>, ol: u8) -> Result<(Vec<Command<'_>>, TypeEnvironment<'_>), TypeError> {
     let mut environment = TypeEnvironment::new();
+    #[allow(unused_assignments)]
+    unsafe {
+        OPTIMIZATION_LEVEL = ol;
+    }
 
     populate_built_ins(&mut environment);
 
@@ -10,7 +16,7 @@ pub fn typecheck(mut commands: Vec<Command<'_>>) -> Result<Vec<Command<'_>>, Typ
         typecheck_command(command, &mut environment)?;
     }
 
-    Ok(commands)
+    Ok((commands,environment))
 }
 
 fn populate_built_ins(environment: &mut TypeEnvironment<'_>) {
@@ -361,14 +367,15 @@ fn typecheck_command<'a>(
 
             // Add function to global environment for recursive calls
             let function_type = Type::Function {
-                param_types,
+                param_types: param_types.clone(),
                 return_type: Box::new(fn_return_type.clone()),
             };
 
             environment.add_identifier("global", name, function_type, command.position)?;
 
             // Check all statements in the function
-            for statement in statements.iter_mut() {
+            let mut first_return = -1;
+            for (i,statement) in statements.iter_mut().enumerate() {
                 match &mut statement.node {
                     StatementType::Let { variable, rvalue } => {
                         let rtype = typecheck_expression(rvalue, name, environment)?;
@@ -395,9 +402,27 @@ fn typecheck_command<'a>(
                                 value.position,
                             ));
                         }
+                        first_return = i as i64;
                         has_return.replace(true);
+                        if unsafe { OPTIMIZATION_LEVEL } > 0 {
+                            match value.resolved_type {
+                                Type::Int { value: Some(_) } => {
+                                    let function_type = Type::Function {
+                                        param_types,
+                                        return_type: Box::new(value.resolved_type.clone()),
+                                    };
+                                    environment.overwrite_identifier("global", name, function_type.clone(), command.position)?;
+                                }
+                                _ => {}
+                            }
+                        }
+                        break;
                     }
                 }
+            }
+
+            if unsafe { OPTIMIZATION_LEVEL } > 0 && has_return.get() {
+                statements.truncate(first_return as usize + 1);
             }
 
             // Check for implicit return
