@@ -365,9 +365,13 @@ impl Display for Statement<'_> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type<'a> {
     Unresolved,
-    Int,
+    Int {
+        value: Option<i64>,
+    },
     Float,
-    Bool,
+    Bool {
+        value: Option<bool>,
+    },
     Void,
     Struct {
         name: &'a str,
@@ -387,9 +391,9 @@ impl Type<'_> {
     pub fn isize(&self) -> isize {
         match self {
             Type::Unresolved => unreachable!(),
-            Type::Int => 8,
+            Type::Int { .. } => 8,
             Type::Float => 8,
-            Type::Bool => 8,
+            Type::Bool { .. } => 8,
             Type::Void => 8,
             Type::Struct { .. } => unreachable!(),
             Type::Array {
@@ -402,9 +406,9 @@ impl Type<'_> {
     pub fn usize(&self) -> usize {
         match self {
             Type::Unresolved => unreachable!(),
-            Type::Int => 8,
+            Type::Int { .. } => 8,
             Type::Float => 8,
-            Type::Bool => 8,
+            Type::Bool { .. } => 8,
             Type::Void => 8,
             Type::Struct { .. } => unreachable!(),
             Type::Array {
@@ -427,9 +431,9 @@ impl Display for Type<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             Type::Unresolved => write!(f, ""),
-            Type::Int => write!(f, "(IntType)"),
+            Type::Int { .. } => write!(f, "(IntType)"),
             Type::Float => write!(f, "(FloatType)"),
-            Type::Bool => write!(f, "(BoolType)"),
+            Type::Bool { .. } => write!(f, "(BoolType)"),
             Type::Void => write!(f, "(VoidType)"),
             Type::Struct { name, elements: _ } => write!(f, "(StructType {})", name),
             Type::Array { element_type, rank } => {
