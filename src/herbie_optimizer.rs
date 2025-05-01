@@ -191,33 +191,52 @@ fn sexp_to_ast<'a>(expr: &SExpr, pos: Position) -> Option<Expression<'a>> {
             resolved_type: Type::Float { value: None },
         },
         SExpr::List(elems) => {
+            // first element must be an atom
             let op = if let SExpr::Atom(o) = &elems[0] { o.as_str() } else { return None; };
+        
             match op {
+                // binary +, -, *, /
                 "+" | "-" | "*" | "/" if elems.len() == 3 => {
-                    let l = sexp_to_ast(&elems[1], pos)?;
-                    let r = sexp_to_ast(&elems[2], pos)?;
+                    let left = sexp_to_ast(&elems[1], pos)?;
+                    let right = sexp_to_ast(&elems[2], pos)?;
                     Expression {
                         position: pos,
                         node: Box::new(ExpressionType::Binop {
                             operator: make_static_str(op),
-                            left: l,
-                            right: r,
+                            left,
+                            right,
                         }),
                         resolved_type: Type::Float { value: None },
                     }
                 }
-                "sin" | "cos" | "tan" | "sqrt" | "exp" | "log" |
-                "asin" | "acos" | "atan" if elems.len() == 2 => {
-                    let a = sexp_to_ast(&elems[1], pos)?;
+        
+                // **new** unary minus
+                "-" if elems.len() == 2 => {
+                    let inner = sexp_to_ast(&elems[1], pos)?;
+                    Expression {
+                        position: pos,
+                        node: Box::new(ExpressionType::Unop {
+                            operator: make_static_str("-"),
+                            expression: inner,
+                        }),
+                        resolved_type: Type::Float { value: None },
+                    }
+                }
+        
+                // function calls like (sin x)
+                "sin" | "cos" | "tan" | "sqrt" | "exp" |
+                "log" | "asin" | "acos" | "atan" if elems.len() == 2 => {
+                    let arg = sexp_to_ast(&elems[1], pos)?;
                     Expression {
                         position: pos,
                         node: Box::new(ExpressionType::Call {
                             function: make_static_str(op),
-                            arguments: vec![a],
+                            arguments: vec![arg],
                         }),
                         resolved_type: Type::Float { value: None },
                     }
                 }
+        
                 _ => return None,
             }
         }
@@ -244,37 +263,99 @@ fn parse_sexp<'a>(input: &str, position: Position) -> Option<Expression<'a>> {
     sexp_to_ast(&sexpr, position)
 }
 
-// Run Herbie to optimize the expression
 fn run_herbie(fpcore: &str) -> Option<String> {
-    if fpcore.contains("(FPCore () ") { return None; }
-    let mut child = ProcessCommand::new("racket")
+    println!("--- Herbie Debug START ---\nFPCore:\n{}\n-------------------------", fpcore);
+
+    if fpcore.contains("(FPCore () ") {
+        println!("Herbie Debug: empty-var-list case, returning None");
+        return None;
+    }
+
+    let mut child = match ProcessCommand::new("racket")
         .arg("-l").arg("herbie").arg("shell")
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-        .spawn().ok()?;
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => { println!("Herbie Debug: spawned PID {}", c.id()); c }
+        Err(err) => {
+            println!("Herbie Debug: spawn error: {}", err);
+            return None;
+        }
+    };
 
-    { let stdin = child.stdin.as_mut()?;
-      stdin.write_all(fpcore.as_bytes()).ok()?;
-      stdin.write_all(b"\nexit\n").ok()?; }
+    {
+        let stdin = child.stdin.as_mut().expect("Herbie Debug: no stdin");
+        println!("Herbie Debug: sending FPCore...");
+        stdin.write_all(fpcore.as_bytes()).unwrap();
+        stdin.write_all(b"\nexit\n").unwrap();
+    }
 
-    let output = child.wait_with_output().ok()?;
+    let output = match child.wait_with_output() {
+        Ok(o) => { println!("Herbie Debug: exited with {}", o.status); o }
+        Err(e) => {
+            println!("Herbie Debug: wait error: {}", e);
+            return None;
+        }
+    };
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout.lines()
-        .map(str::trim)
-        .filter(|l| l.starts_with('(') && !l.contains("FPCore") && !l.contains("herbie>"))
-        .last()
-        .map(String::from)
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("--- Herbie stdout ---\n{}\n--- end stdout ---", stdout);
+    println!("--- Herbie stderr ---\n{}\n--- end stderr ---", stderr);
+
+    let opt = stdout
+    .lines()
+    .map(str::trim)
+    .filter(|l| l.starts_with('(') && !l.contains("FPCore") && !l.contains("herbie>"))
+    .last()
+    .map(|s| {
+        // drop exactly one trailing ')'
+        if s.ends_with(')') {
+            s[..s.len()-1].to_string()
+        } else {
+            s.to_string()
+        }
+    });
+println!("Herbie Debug: selected optimization (cleaned): {:?}\n--- Debug END ---", opt);
+
+    opt
 }
 
 // Apply Herbie optimization to a Let command
 pub fn apply_herbie_optimization(command: &mut Command) {
+    // Entering the optimizer
+    println!("▶ apply_herbie called");
+
     if let CommandType::Let { rvalue, .. } = &mut *command.node {
+        // Before optimization
+        println!("  • rvalue before: {:?}", rvalue);
+
         if is_herbie_viable(rvalue) {
             let fpcore = create_fpcore(rvalue);
+            println!("  • FPCore string: {}", fpcore);
+
             if let Some(opt) = run_herbie(&fpcore) {
-                if let Some(new_expr) = parse_sexp(&opt, rvalue.position) {
-                    *rvalue = new_expr;
+                println!("  • raw Herbie output: {}", opt);
+
+                match parse_sexp(&opt, rvalue.position) {
+                    Some(new_expr) => {
+                        println!("  • parsed new_expr: {:?}", new_expr);
+                        *rvalue = new_expr;
+                        println!("  • rvalue after:  {:?}", rvalue);
+                    }
+                    None => {
+                        println!("  ⚠ parse_sexp returned None—syntax mismatch");
+                    }
                 }
+            } else {
+                println!("  ⚠ run_herbie returned None");
             }
+        } else {
+            println!("  ⚠ is_herbie_viable returned false");
         }
+    } else {
+        println!("  • not a Let command, skipping");
     }
 }
