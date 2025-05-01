@@ -26,10 +26,10 @@ fn populate_built_ins(environment: &mut TypeEnvironment<'_>) {
     let rgba = Type::Struct {
         name: "rgba",
         elements: vec![
-            ("r", Type::Float),
-            ("g", Type::Float),
-            ("b", Type::Float),
-            ("a", Type::Float),
+            ("r", Type::Float{value:None}),
+            ("g", Type::Float{value:None}),
+            ("b", Type::Float{value:None}),
+            ("a", Type::Float{value:None}),
         ],
     };
 
@@ -42,22 +42,22 @@ fn populate_built_ins(environment: &mut TypeEnvironment<'_>) {
 
     // Function types
     let one_float_to_float = Type::Function {
-        param_types: vec![Type::Float],
-        return_type: Box::new(Type::Float),
+        param_types: vec![Type::Float{ value:None }],
+        return_type: Box::new(Type::Float{ value:None }),
     };
 
     let two_floats_to_float = Type::Function {
-        param_types: vec![Type::Float, Type::Float],
-        return_type: Box::new(Type::Float),
+        param_types: vec![Type::Float{ value:None }, Type::Float{ value:None }],
+        return_type: Box::new(Type::Float{ value:None }),
     };
 
     let to_float = Type::Function {
         param_types: vec![Type::Int{value: None}],
-        return_type: Box::new(Type::Float),
+        return_type: Box::new(Type::Float{ value:None }),
     };
 
     let to_int = Type::Function {
-        param_types: vec![Type::Float],
+        param_types: vec![Type::Float{ value:None }],
         return_type: Box::new(Type::Int{value: None}),
     };
 
@@ -182,7 +182,7 @@ fn typecheck_type<'a>(
 fn types_equal(t1: &Type<'_>, t2: &Type<'_>) -> bool {
     match (t1, t2) {
         (Type::Int{..}, Type::Int{..})
-        | (Type::Float, Type::Float)
+        | (Type::Float{..}, Type::Float{..})
         | (Type::Bool{..}, Type::Bool{..})
         | (Type::Void, Type::Void) => true,
         (
@@ -404,17 +404,16 @@ fn typecheck_command<'a>(
                         }
                         first_return = i as i64;
                         has_return.replace(true);
-                        if unsafe { OPTIMIZATION_LEVEL } > 0 {
-                            match value.resolved_type {
-                                Type::Int { value: Some(_) } => {
-                                    let function_type = Type::Function {
-                                        param_types,
-                                        return_type: Box::new(value.resolved_type.clone()),
-                                    };
-                                    environment.overwrite_identifier("global", name, function_type.clone(), command.position)?;
-                                }
-                                _ => {}
+                        println!("{:?}", ret_type);
+                        match ret_type {
+                            Type::Int { value: Some(_) } | Type::Float{ value: Some(_) } | Type::Bool { value: Some(_) } => {
+                                let function_type = Type::Function {
+                                    param_types,
+                                    return_type: Box::new(ret_type.clone()),
+                                };
+                                environment.overwrite_identifier("global", name, function_type.clone(), command.position)?;
                             }
+                            _ => {}
                         }
                         break;
                     }
@@ -449,9 +448,9 @@ fn typecheck_expression<'a>(
             expression.resolved_type = Type::Int{value:Some(*v)};
             Ok(expression.resolved_type.clone())
         }
-        ExpressionType::Float { value: _ } => {
-            expression.resolved_type = Type::Float;
-            Ok(Type::Float)
+        ExpressionType::Float { value } => {
+            expression.resolved_type = Type::Float{ value: Some(*value) };
+            Ok(expression.resolved_type.clone())
         }
         ExpressionType::True => {
             expression.resolved_type = Type::Bool{value: Some(true)};
@@ -721,7 +720,7 @@ fn typecheck_expression<'a>(
             let requires_boolean = matches!(*operator, "&&" | "||");
             let requires_comparable = matches!(*operator, "==" | "!=");
 
-            if requires_numeric && !matches!(left_type, Type::Int{..} | Type::Float) {
+            if requires_numeric && !matches!(left_type, Type::Int{..} | Type::Float{..}) {
                 return Err(TypeError::new(
                     "Left and right hand operators need to be int or float".to_string(),
                     expression.position,
@@ -732,7 +731,7 @@ fn typecheck_expression<'a>(
                     expression.position,
                 ));
             } else if requires_comparable
-                && !matches!(left_type, Type::Int{..} | Type::Float | Type::Bool{..})
+                && !matches!(left_type, Type::Int{..} | Type::Float{..} | Type::Bool{..})
             {
                 return Err(TypeError::new(
                     "Left and right hand operators need to be int, float or bool".to_string(),
@@ -777,6 +776,22 @@ fn typecheck_expression<'a>(
                             _ => Type::Bool { value: None }
                         }
                     }
+                    Type::Float{value: Some(vl)} => {
+                        match right_type {
+                            Type::Float{value: Some(vr)} => {
+                                match *operator {
+                                    "==" => Type::Bool{value: Some(vl == vr)},
+                                    "!=" => Type::Bool{value: Some(vl != vr)},
+                                    "<" => Type::Bool{value: Some(vl < vr)},
+                                    ">" => Type::Bool{value: Some(vl > vr)},
+                                    "<=" => Type::Bool{value: Some(vl <= vr)},
+                                    ">=" => Type::Bool{value: Some(vl >= vr)},
+                                    _ => Type::Bool { value: None }
+                                }
+                            }
+                            _ => Type::Bool { value: None }
+                        }
+                    }
                     _ => Type::Bool { value: None }
                 };
             let intprop = match left_type.clone() {
@@ -804,6 +819,37 @@ fn typecheck_expression<'a>(
                                             ));
                                         }
                                         Type::Int{value: Some(vl % vr)}
+                                    },
+                                    _ => left_type.clone()
+                                }
+                            },
+                            _ => left_type.clone()
+                        }
+                    }
+                    Type::Float{value: Some(vl)} => {
+                        match right_type {
+                            Type::Float{value: Some(vr)} => {
+                                match *operator {
+                                    "+" => Type::Float{value: Some(vl + vr)},
+                                    "-" => Type::Float{value: Some(vl - vr)},
+                                    "*" => Type::Float{value: Some(vl * vr)},
+                                    "/" => {
+                                        if vr == 0.0 {
+                                            return Err(TypeError::new(
+                                                "Division by zero".to_string(),
+                                                expression.position,
+                                            ));
+                                        }
+                                        Type::Float{value: Some(vl / vr)}
+                                    },
+                                    "%" => {
+                                        if vr == 0.0 {
+                                            return Err(TypeError::new(
+                                                "Mod by zero".to_string(),
+                                                expression.position,
+                                            ));
+                                        }
+                                        Type::Float{value: Some(vl % vr)}
                                     },
                                     _ => left_type.clone()
                                 }
@@ -935,7 +981,7 @@ fn typecheck_expression<'a>(
             environment.remove_scope(loop_scope);
 
             // Check if body type is numeric (int or float)
-            if !matches!(body_type, Type::Int{..} | Type::Float) {
+            if !matches!(body_type, Type::Int{..} | Type::Float{..}) {
                 return Err(TypeError::new(
                     "Cannot sum over elements that are not int or float".to_string(),
                     body.position,

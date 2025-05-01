@@ -362,13 +362,15 @@ impl Display for Statement<'_> {
 
 // -------------------------------------------------------------------------------------------- Type Nodes -----------------------------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Type<'a> {
     Unresolved,
     Int {
         value: Option<i64>,
     },
-    Float,
+    Float {
+        value: Option<f64>,
+    },
     Bool {
         value: Option<bool>,
     },
@@ -392,7 +394,7 @@ impl Type<'_> {
         match self {
             Type::Unresolved => unreachable!(),
             Type::Int { .. } => 8,
-            Type::Float => 8,
+            Type::Float { .. } => 8,
             Type::Bool { .. } => 8,
             Type::Void => 8,
             Type::Struct { .. } => unreachable!(),
@@ -407,7 +409,7 @@ impl Type<'_> {
         match self {
             Type::Unresolved => unreachable!(),
             Type::Int { .. } => 8,
-            Type::Float => 8,
+            Type::Float { .. } => 8,
             Type::Bool { .. } => 8,
             Type::Void => 8,
             Type::Struct { .. } => unreachable!(),
@@ -432,7 +434,7 @@ impl Display for Type<'_> {
         match &self {
             Type::Unresolved => write!(f, ""),
             Type::Int { .. } => write!(f, "(IntType)"),
-            Type::Float => write!(f, "(FloatType)"),
+            Type::Float{ .. } => write!(f, "(FloatType)"),
             Type::Bool { .. } => write!(f, "(BoolType)"),
             Type::Void => write!(f, "(VoidType)"),
             Type::Struct { name, elements: _ } => write!(f, "(StructType {})", name),

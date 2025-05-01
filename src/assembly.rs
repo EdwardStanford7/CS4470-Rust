@@ -76,7 +76,7 @@ impl<'a> AsmFunction<'a> {
     }
 
     fn push_comment(&mut self, string: &str) {
-        _ = write!(&mut self.body, "\n\t; {}", string);
+        // _ = write!(&mut self.body, "\n\t; {}", string);
     }
 
     fn push_instructions(&mut self, strings: Vec<&str>) {
@@ -180,7 +180,7 @@ impl<'a> AsmFunction<'a> {
                         total_stack_param_size += 8;
                     }
                 }
-                Type::Float => {
+                Type::Float{ .. } => {
                     float_params += 1;
                     if float_params > FLO_REGS.len() {
                         total_stack_param_size += 8;
@@ -314,6 +314,7 @@ impl<'a> AssemblyGenerator<'a> {
         &mut self,
         asm_function: &mut AsmFunction<'a>,
         statement: &Statement<'a>,
+
     ) {
         match &statement.node {
             StatementType::Return { value } => {
@@ -324,7 +325,7 @@ impl<'a> AssemblyGenerator<'a> {
                     Type::Int { .. } | Type::Bool { .. } => {
                         asm_function.push_instruction("pop rax");
                     }
-                    Type::Float => {
+                    Type::Float{ .. } => {
                         asm_function.push_instructions(vec!["movsd xmm0, [rsp]", "add rsp, 8"]);
                     }
                     Type::Array {
@@ -416,7 +417,7 @@ impl<'a> AssemblyGenerator<'a> {
 
                 for param in parameters {
                     match &param.1 {
-                        Type::Int { .. } | Type::Bool { .. } | Type::Float => {
+                        Type::Int { .. } | Type::Bool { .. } | Type::Float{ .. } => {
                             if matches!(param.1, Type::Int { .. } | Type::Bool { .. }) {
                                 new_asm_function
                                     .push_instruction(&format!("push {}", INT_REGS[int_param_num]));
@@ -475,6 +476,16 @@ impl<'a> AssemblyGenerator<'a> {
         rvalue: &Expression<'a>,
         in_statement: bool,
     ) {
+        // self.environment
+        //check env. if var is has a const value then skip
+        if self.optimization_level > 3 {
+            if let Ok(sym) = self.environment.get_identifier("global", Position::new(0, 0), variable.name) {
+                match sym {
+                    Type::Int { value: Some(_) } | Type::Float{ value: Some(_) } | Type::Bool { value: Some(_) } => return,
+                    _ => {}
+                }
+            }
+        }
         asm_function.push_assert();
         self.generate_expression(asm_function, rvalue, in_statement);
         self.offsets.insert(
@@ -508,7 +519,7 @@ impl<'a> AssemblyGenerator<'a> {
         in_statement: bool,
     ) {
         if self.optimization_level > 3 {
-            return match &expression.resolved_type {
+            match &expression.resolved_type {
                 Type::Bool { value: Some(true) } => {
                     asm_function.push_assert();
                     self.insert_int_constant(asm_function, 1);
@@ -516,6 +527,7 @@ impl<'a> AssemblyGenerator<'a> {
                     asm_function.print_shadow_stack();
                     asm_function.print_shadow_stack();
                     assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                    return
                 }
                 Type::Bool { value: Some(false) } => {
                     asm_function.push_assert();
@@ -523,6 +535,7 @@ impl<'a> AssemblyGenerator<'a> {
                     asm_function.add_shadow_type(&expression.resolved_type);
                     asm_function.print_shadow_stack();
                     assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                    return
                 }
                 Type::Int { value: Some(v) } => {
                     asm_function.push_assert();
@@ -530,6 +543,15 @@ impl<'a> AssemblyGenerator<'a> {
                     asm_function.add_shadow_type(&expression.resolved_type);
                     asm_function.print_shadow_stack();
                     assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                    return
+                }
+                Type::Float { value: Some(v) } => {
+                    asm_function.push_assert();
+                    self.insert_float_constant(asm_function, *v);
+                    asm_function.add_shadow_type(&expression.resolved_type);
+                    asm_function.print_shadow_stack();
+                    assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                    return
                 }
                 _ => {}
             }
@@ -576,7 +598,7 @@ impl<'a> AssemblyGenerator<'a> {
 
                 if matches!(expression.resolved_type, Type::Int { .. }) {
                     asm_function.push_instructions(vec!["pop rax", "neg rax", "push rax"]);
-                } else if matches!(expression.resolved_type, Type::Float) {
+                } else if matches!(expression.resolved_type, Type::Float{ .. }) {
                     asm_function.push_instructions(vec![
                         "movsd xmm1, [rsp]",
                         "add rsp, 8",
@@ -598,7 +620,7 @@ impl<'a> AssemblyGenerator<'a> {
                 right,
             } => {
                 asm_function.push_assert();
-                if *operator == "%" && matches!(left.resolved_type, Type::Float) {
+                if *operator == "%" && matches!(left.resolved_type, Type::Float{ .. }) {
                     asm_function.pad_shadow();
                 }
 
@@ -677,12 +699,12 @@ impl<'a> AssemblyGenerator<'a> {
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
                 match expression.resolved_type {
                     Type::Int { .. } => self.generate_int_op(asm_function, operator),
-                    Type::Float => self.generate_float_op(asm_function, operator),
+                    Type::Float{ .. } => self.generate_float_op(asm_function, operator),
                     Type::Bool { .. } => match left.resolved_type {
                         Type::Int { .. } => {
                             self.generate_bool_op(asm_function, operator, Type::Int { value: None })
                         }
-                        Type::Float => self.generate_bool_op(asm_function, operator, Type::Float),
+                        Type::Float{ .. } => self.generate_bool_op(asm_function, operator, Type::Float{value:None}),
                         Type::Bool { .. } => self.generate_bool_op(
                             asm_function,
                             operator,
@@ -744,7 +766,7 @@ impl<'a> AssemblyGenerator<'a> {
                 let mut flo_arg_num = 0;
                 let mut arr_arg_size = 0;
                 match &expression.resolved_type {
-                    Type::Int { .. } | Type::Bool { .. } | Type::Float => {
+                    Type::Int { .. } | Type::Bool { .. } | Type::Float{ .. } => {
                         asm_function.push_comment("check call alignment");
                         asm_function.print_shadow_stack();
                         asm_function.pad_shadow_with_all(arguments);
@@ -783,7 +805,7 @@ impl<'a> AssemblyGenerator<'a> {
                             int_arg_num += 1;
                             asm_function.remove_shadow();
                         }
-                        Type::Float => {
+                        Type::Float{ .. } => {
                             asm_function.push_instruction(&format!(
                                 "movsd {}, [rsp]",
                                 FLO_REGS[flo_arg_num]
@@ -802,7 +824,7 @@ impl<'a> AssemblyGenerator<'a> {
                     }
                 }
                 match &expression.resolved_type {
-                    Type::Int { .. } | Type::Bool { .. } | Type::Float => {}
+                    Type::Int { .. } | Type::Bool { .. } | Type::Float{ .. } => {}
                     Type::Array { .. } => {
                         asm_function
                             .push_instruction(&format!("lea rdi, [rsp + {}]", arr_arg_size));
@@ -822,7 +844,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.unpad_shadow();
 
                 match &expression.resolved_type {
-                    Type::Int { .. } | Type::Bool { .. } | Type::Float => {
+                    Type::Int { .. } | Type::Bool { .. } | Type::Float{ .. } => {
                         asm_function.add_shadow_type(&ret_type);
                     }
                     Type::Array { .. } => {}
@@ -834,7 +856,7 @@ impl<'a> AssemblyGenerator<'a> {
                     Type::Int { .. } | Type::Bool { .. } => {
                         asm_function.push_instruction("push rax");
                     }
-                    Type::Float => {
+                    Type::Float{ .. } => {
                         asm_function.push_instructions(vec!["sub rsp, 8", "movsd [rsp], xmm0"]);
                     }
                     Type::Array { .. } => {
@@ -1113,7 +1135,7 @@ impl<'a> AssemblyGenerator<'a> {
                         "pop rax",
                         &format!("add [rsp + {}], rax", accumulator_address),
                     ]);
-                } else if matches!(resolved_type, Type::Float) {
+                } else if matches!(resolved_type, Type::Float{ .. }) {
                     asm_function.push_instructions(vec![
                         "movsd xmm0, [rsp]",
                         "add rsp, 8",
@@ -1249,7 +1271,7 @@ impl<'a> AssemblyGenerator<'a> {
                 ]);
                 asm_function.remove_shadow();
             }
-            Type::Float => {
+            Type::Float{ .. } => {
                 asm_function.push_instructions(vec![
                     "movsd xmm0, [rsp]",
                     "add rsp, 8",
@@ -1364,7 +1386,7 @@ impl<'a> AssemblyGenerator<'a> {
 
         // Create edges from sum range - connecting sum indices
         for (i, (name_i, _)) in sum_range.iter().enumerate() {
-            if matches!(sum_body.resolved_type, Type::Float) {
+            if matches!(sum_body.resolved_type, Type::Float{ .. }) {
                 for (name_j, _) in sum_range.iter().skip(i + 1) {
                     graph.add_edge(name_i, name_j, ());
                 }
@@ -1575,7 +1597,7 @@ impl<'a> AssemblyGenerator<'a> {
         }
         asm_function.remove_shadow();
         asm_function.remove_shadow();
-        asm_function.add_shadow_type(&Type::Float);
+        asm_function.add_shadow_type(&Type::Float{value:None});
     }
 
     fn generate_bool_op(
@@ -1586,7 +1608,7 @@ impl<'a> AssemblyGenerator<'a> {
     ) {
         match left_type {
             Type::Int { .. } => self.generate_int_comparison(asm_function, operator),
-            Type::Float => self.generate_float_comparison(asm_function, operator),
+            Type::Float{ .. } => self.generate_float_comparison(asm_function, operator),
             Type::Bool { .. } => self.generate_bool_comparison(asm_function, operator),
             _ => unreachable!(),
         }
