@@ -486,28 +486,27 @@ fn typecheck_expression<'a>(
                     expression.position,
                 ));
             }
-
-            // Check the type of the first element
-            let first_type =
-                typecheck_expression(elements.get_mut(0).unwrap(), scope, environment)?;
-
-            // Check all other elements have the same type
+            let first_type = typecheck_expression(elements.get_mut(0).unwrap(), scope, environment)?;
             for (i, element) in elements.iter_mut().enumerate().skip(1) {
                 let element_type = typecheck_expression(element, scope, environment)?;
-
                 if !types_equal(&first_type, &element_type) {
                     return Err(TypeError::new(
-                         format!(
+                        format!(
                             "All elements of array literal must have the same type, element {} differs",
                             i
                         ),
-                        expression.position));
+                        expression.position,
+                    ));
                 }
             }
-
-            // Create and return array type
+            let elem_base = match first_type {
+                Type::Int { .. }   => Type::Int   { value: None },
+                Type::Float { .. } => Type::Float { value: None },
+                Type::Bool { .. }  => Type::Bool  { value: None },
+                other              => other.clone(),
+            };
             let array_type = Type::Array {
-                element_type: Box::new(first_type),
+                element_type: Box::new(elem_base.clone()),
                 rank: 1,
             };
             expression.resolved_type = array_type.clone();
@@ -515,9 +514,7 @@ fn typecheck_expression<'a>(
         }
         ExpressionType::ArrayIndex { array, indices } => {
             let array_type = typecheck_expression(array, scope, environment)?;
-
             if let Type::Array { element_type, rank } = array_type {
-                // Check number of indices
                 if rank != indices.len() {
                     return Err(TypeError::new(
                         format!(
@@ -528,22 +525,24 @@ fn typecheck_expression<'a>(
                         expression.position,
                     ));
                 }
-
-                // Check that all indices are integers
                 for index in indices.iter_mut() {
                     let index_type = typecheck_expression(index, scope, environment)?;
-                    if !types_equal(&index_type, &Type::Int{value: None}) {
+                    if !types_equal(&index_type, &Type::Int { value: None }) {
                         return Err(TypeError::new(
                             "Array indices must be integers".to_string(),
                             index.position,
                         ));
                     }
                 }
-
-                // Return element type
-                let element_type = *element_type;
-                expression.resolved_type = element_type.clone();
-                Ok(element_type)
+                let elt = *element_type;
+                let elt_base = match elt {
+                    Type::Int { .. }   => Type::Int   { value: None },
+                    Type::Float { .. } => Type::Float { value: None },
+                    Type::Bool { .. }  => Type::Bool  { value: None },
+                    other              => other.clone(),
+                };
+                expression.resolved_type = elt_base.clone();
+                Ok(elt_base)
             } else {
                 Err(TypeError::new(
                     "Expression is not an array and cannot be indexed".to_string(),

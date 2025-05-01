@@ -33,6 +33,7 @@ impl Display for Shadow<'_> {
 }
 
 struct AsmFunction<'a> {
+    name: String,
     body: String,
     stack_size: isize,
     shadow_stack: VecDeque<Shadow<'a>>,
@@ -42,6 +43,7 @@ struct AsmFunction<'a> {
 impl<'a> AsmFunction<'a> {
     fn new() -> Self {
         Self {
+            name: String::new(),
             body: String::new(),
             stack_size: 0,
             shadow_stack: VecDeque::new(),
@@ -401,6 +403,7 @@ impl<'a> AssemblyGenerator<'a> {
                     }
                 }
                 let mut new_asm_function = AsmFunction::new();
+                new_asm_function.name.push_str(name);
                 new_asm_function.push_label(name);
                 new_asm_function.push_label(&format!("_{}", name));
                 new_asm_function.push_instructions(vec!["push rbp", "mov rbp, rsp"]);
@@ -474,14 +477,14 @@ impl<'a> AssemblyGenerator<'a> {
         asm_function: &mut AsmFunction<'a>,
         variable: &LValue<'_>,
         rvalue: &Expression<'a>,
-        in_statement: bool,
+        in_statement: bool, 
     ) {
-        // self.environment
-        //check env. if var is has a const value then skip
         if self.optimization_level > 3 {
-            if let Ok(sym) = self.environment.get_identifier("global", Position::new(0, 0), variable.name) {
+            if let Ok(sym) = self.environment.get_identifier(if in_statement { &asm_function.name } else {"global"} , Position::new(0, 0), variable.name) {
                 match sym {
-                    Type::Int { value: Some(_) } | Type::Float{ value: Some(_) } | Type::Bool { value: Some(_) } => return,
+                    Type::Int { value: Some(_) } | Type::Float{ value: Some(_) } | Type::Bool { value: Some(_) } => {
+                        return
+                    }
                     _ => {}
                 }
             }
@@ -1828,7 +1831,9 @@ impl<'a> AssemblyGenerator<'a> {
         let (offset, from_main) = self
             .offsets
             .get(name)
-            .unwrap_or_else(|| unimplemented!("expression was this: {}", expression.to_string()));
+            .unwrap_or_else(|| {
+                unimplemented!("expression was this: {}", expression.to_string())
+            });
 
         asm_function.push_comment(&format!("loading variable {} with offset {}", name, offset));
 

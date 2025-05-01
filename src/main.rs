@@ -104,7 +104,7 @@ fn compile() -> Result<(), CompilerError> {
     let (commands, _) = typechecker::typecheck(commands, args.optimization_level)?;
 
     let mut optimized = Vec::with_capacity(commands.len());
-    for (i, cmd) in commands.into_iter().enumerate() {
+    for cmd in commands.into_iter() {
         let mut cmd = cmd;
         if args.herbie {
             herbie_optimizer::apply_herbie_optimization(&mut cmd);
