@@ -204,6 +204,33 @@ fn sexp_to_ast<'a>(sexp: &Sexp, pos: Position) -> Option<Expression<'a>> {
                         resolved_type: Type::Float { value: None },
                     })
                 }
+                ("fma", 4) => {
+                    println!("[AST] desugaring fma → (a * b) + c");
+                    // parse the three arguments
+                    let a = sexp_to_ast(&list[1], pos)?;
+                    let b = sexp_to_ast(&list[2], pos)?;
+                    let c = sexp_to_ast(&list[3], pos)?;
+                    // build a * b
+                    let mul = Expression {
+                        position: pos,
+                        node: Box::new(ExpressionType::Binop {
+                            operator: Box::leak("*".to_string().into_boxed_str()),
+                            left: a,
+                            right: b,
+                        }),
+                        resolved_type: Type::Float { value: None },
+                    };
+                    // build (a * b) + c
+                    Some(Expression {
+                        position: pos,
+                        node: Box::new(ExpressionType::Binop {
+                            operator: Box::leak("+".to_string().into_boxed_str()),
+                            left: mul,
+                            right: c,
+                        }),
+                        resolved_type: Type::Float { value: None },
+                    })
+                }
                 _ => {
                     println!("[AST] unhandled '{}'/arity {}", op, list.len());
                     None
