@@ -1,0 +1,4 @@
+let yy = 5.0
+let x = 4.0
+let z = sqrt(x+1.0) - sqrt(x) + sqrt(yy)
+show z

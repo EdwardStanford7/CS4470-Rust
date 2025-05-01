@@ -578,45 +578,52 @@ fn typecheck_expression<'a>(
                 ))
             }
         }
-        ExpressionType::Call {
-            function,
-            arguments,
-        } => {
+        ExpressionType::Call { function, arguments } => {
+            // First do normal lookup & arg‐type checking…
             let func_type = environment.get_identifier(scope, expression.position, function)?;
-
-            if let Type::Function {
-                param_types,
-                return_type,
-            } = func_type
-            {
-                // Check number of arguments
-                if param_types.len() != arguments.len() {
-                    return Err(TypeError::new(
-                        format!("Incorrect number of parameters for function {}", function),
-                        expression.position,
-                    ));
-                }
-
-                // Check each argument type
-                for (i, (arg, param_type)) in
-                    arguments.iter_mut().zip(param_types.iter()).enumerate()
-                {
-                    let arg_type = typecheck_expression(arg, scope, environment)?;
-                    if !types_equal(&arg_type, param_type) {
+            if let Type::Function { param_types, return_type } = func_type {
+                // Type‐check all args
+                for (arg, expected) in arguments.iter_mut().zip(param_types.iter()) {
+                    let arg_t = typecheck_expression(arg, scope, environment)?;
+                    if !types_equal(&arg_t, expected) {
                         return Err(TypeError::new(
-                            format!(
-                                "Incorrect type of parameter {} for function {}",
-                                i, function
-                            ),
+                            format!("Incorrect type for parameter of {}", function),
                             arg.position,
                         ));
                     }
                 }
-
-                // Return function's return type
-                let return_type = *return_type;
-                expression.resolved_type = return_type.clone();
-                Ok(return_type)
+        
+                // --- CONSTANT FOLDING FOR BUILTINS ---
+                // If all args are Float(Some(v)) we can compute at compile time.
+                let mut const_args = Vec::new();
+                for arg in &*arguments {
+                    if let Type::Float { value: Some(v) } = arg.resolved_type {
+                        const_args.push(v);
+                    } else {
+                        const_args.clear();
+                        break;
+                    }
+                }
+                if !const_args.is_empty() {
+                    let folded = match function.as_ref() {
+                        "sin"    => const_args[0].sin(),
+                        "cos"    => const_args[0].cos(),
+                        "tan"    => const_args[0].tan(),
+                        "sqrt"   => const_args[0].sqrt(),
+                        "exp"    => const_args[0].exp(),
+                        "log"    => const_args[0].ln(),
+                        "pow"    => const_args[0].powf(const_args[1]),
+                        _        => return Ok(*return_type.clone()),
+                    };
+                    let folded_type = Type::Float { value: Some(folded) };
+                    expression.resolved_type = folded_type.clone();
+                    return Ok(folded_type);
+                }
+                // ------------------------------------
+        
+                // Otherwise, fall back to non‐constant return type
+                expression.resolved_type = (*return_type).clone();
+                Ok((*return_type).clone())
             } else {
                 Err(TypeError::new(
                     format!("{} is not a function", function),
