@@ -97,49 +97,21 @@ fn main() {
 
 fn compile() -> Result<(), CompilerError> {
     let args = Args::parse();
-    println!("Args: {:?}", args);
-
     let file_contents = std::fs::read_to_string(&args.file_name)?;
-    println!("Read {} bytes from `{}`", file_contents.len(), args.file_name);
 
     let tokens = lexer::lex(&file_contents)?;
     let commands = parser::parse(tokens)?;
-    let (commands, env) = typechecker::typecheck(commands, args.optimization_level)?;
-    println!("Typecheck complete, {} commands, herbie={}", commands.len(), args.herbie);
+    let (commands, _) = typechecker::typecheck(commands, args.optimization_level)?;
 
     let mut optimized = Vec::with_capacity(commands.len());
     for (i, cmd) in commands.into_iter().enumerate() {
-        println!("Command[{}] before: {}", i, cmd);
         let mut cmd = cmd;
         if args.herbie {
-            println!("  → applying herbie_optimizer");
             herbie_optimizer::apply_herbie_optimization(&mut cmd);
-            println!("  → after herbie: {}", cmd);
         }
         optimized.push(cmd);
     }
-    // After your optimization loop, add:
 
-println!("--- DEBUG: optimized_commands after applying Herbie ---");
-for (i, cmd) in optimized.iter().enumerate() {
-    println!("  cmd[{}]: {}", i, cmd);
-}
-
-// Then immediately before your typecheck‐mode print return:
-if args.typecheck {
-    println!("--- DEBUG: entering typecheck print branch ---");
-    let stdout = io::stdout();
-    let mut buffer = io::BufWriter::new(stdout.lock());
-
-    for command in &optimized {
-        writeln!(buffer, "{}", command)?;
-    }
-
-    writeln!(buffer, "Compilation succeeded, typechecking complete.")?;
-    buffer.flush()?;
-    return Ok(());
-}
-    
     let args = Args::parse();
 
     // Open file and read contents
