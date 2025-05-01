@@ -4,7 +4,8 @@ mod lexer;
 mod parser;
 mod typechecker;
 mod utils;
-use clap::Parser;
+mod herbie_optimizer;
+use clap::{Parser, ArgAction};
 use std::io::{self, Write};
 use utils::*;
 
@@ -33,8 +34,12 @@ struct Args {
     assembly: bool,
 
     /// Optimization level
-    #[arg(short = 'O', long = "optimization", default_value = "0", conflicts_with_all = ["lex", "parse", "typecheck"])]
+    #[arg(short = 'O', long = "optimization", default_value = "0", conflicts_with_all = ["lex", "herbie"])]
     optimization_level: u8,
+
+    /// Enable Herbie optimization
+    #[arg(short = 'H', long = "herbie", action = ArgAction::SetTrue, default_value_t = false, conflicts_with_all = ["optimization_level"])]
+    herbie: bool,
 }
 
 enum CompilerError {
@@ -92,6 +97,22 @@ fn main() {
 
 fn compile() -> Result<(), CompilerError> {
     let args = Args::parse();
+    let file_contents = std::fs::read_to_string(&args.file_name)?;
+
+    let tokens = lexer::lex(&file_contents)?;
+    let commands = parser::parse(tokens)?;
+    let (commands, _) = typechecker::typecheck(commands, args.optimization_level)?;
+
+    let mut optimized = Vec::with_capacity(commands.len());
+    for cmd in commands.into_iter() {
+        let mut cmd = cmd;
+        if args.herbie {
+            herbie_optimizer::apply_herbie_optimization(&mut cmd);
+        }
+        optimized.push(cmd);
+    }
+
+    let args = Args::parse();
 
     // Open file and read contents
     let file_contents = std::fs::read_to_string(&args.file_name)?;
@@ -131,14 +152,24 @@ fn compile() -> Result<(), CompilerError> {
     }
 
     // Typecheck the AST
-    let commands = typechecker::typecheck(commands)?;
+    let (commands, env) = typechecker::typecheck(commands, args.optimization_level)?;
+
+    // Create new vector for optimized commands
+    let mut optimized_commands = Vec::with_capacity(commands.len());
+    for command in commands {
+        let mut opt_command = command;
+        if args.herbie {
+            herbie_optimizer::apply_herbie_optimization(&mut opt_command);
+        }
+        optimized_commands.push(opt_command);
+    }
 
     // Print typechecked AST if in typecheck mode
     if args.typecheck {
         let stdout = io::stdout();
         let mut buffer = io::BufWriter::new(stdout.lock());
 
-        for command in &commands {
+        for command in &optimized_commands {
             writeln!(buffer, "{}", command)?;
         }
 
@@ -148,7 +179,7 @@ fn compile() -> Result<(), CompilerError> {
     }
 
     // Generate assembly code
-    let assembly = assembly::generate_assembly(commands, args.optimization_level);
+    let assembly = assembly::generate_assembly(optimized_commands, args.optimization_level, env);
 
     // Print assembly code if in assembly mode
     if args.assembly {

@@ -1,0 +1,6 @@
+let x = 1.0
+let y = 2.0
+let z = 3.0
+let w = 4.0
+let a = log(exp(x) + sqrt(y) * sin(z)) / (1.0 + pow(cos(w), 2.0))
+show a

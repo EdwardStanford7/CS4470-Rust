@@ -253,6 +253,24 @@ impl<'a> TypeEnvironment<'a> {
         }
     }
 
+    pub fn overwrite_identifier(
+        &mut self,
+        scope: &'a str,
+        name: &'a str,
+        typ: Type<'a>,
+        position: Position,
+    ) -> Result<(), TypeError> {
+        if let Some((_, identifiers)) = self.environments.get_mut(scope) {
+            identifiers.insert(name, typ);
+            Ok(())
+        } else {
+            Err(TypeError {
+                message: format!("Scope {} is not defined", scope),
+                position,
+            })
+        }
+    }
+
     pub fn get_identifier(
         &self,
         scope: &'a str,

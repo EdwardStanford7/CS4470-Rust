@@ -754,17 +754,17 @@ impl<'a> Parser<'a> {
 
     fn parse_int_type(&mut self) -> Result<Type<'a>, ParseError> {
         self.expect_token(TokenType::Int)?;
-        Ok(Type::Int)
+        Ok(Type::Int{ value: None })
     }
 
     fn parse_float_type(&mut self) -> Result<Type<'a>, ParseError> {
         self.expect_token(TokenType::Float)?;
-        Ok(Type::Float)
+        Ok(Type::Float{ value: None })
     }
 
     fn parse_bool_type(&mut self) -> Result<Type<'a>, ParseError> {
         self.expect_token(TokenType::Bool)?;
-        Ok(Type::Bool)
+        Ok(Type::Bool{ value: None})
     }
 
     fn parse_void_type(&mut self) -> Result<Type<'a>, ParseError> {
