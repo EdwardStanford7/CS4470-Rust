@@ -554,6 +554,42 @@ impl<'a> AssemblyGenerator<'a> {
                     asm_function.pad_shadow();
                 }
 
+                // Short circuiting operators
+                if *operator == "||" || *operator == "&&" {
+                    asm_function.push_assert();
+                    self.generate_expression(asm_function, left, in_statement);
+                    assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+
+                    let jump_label = format!(".jump{}", self.jump_counter);
+                    self.jump_counter += 1;
+
+                    asm_function.push_instructions(vec![
+                        "pop rax",
+                        "cmp rax, 0",
+                        &format!(
+                            "{} {}",
+                            if *operator == "&&" { "je" } else { "jne" },
+                            jump_label
+                        ),
+                    ]);
+
+                    asm_function.remove_shadow();
+
+                    asm_function.push_assert();
+                    self.generate_expression(asm_function, right, in_statement);
+                    assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+
+                    asm_function.push_instruction("pop rax");
+                    asm_function.push_label(&jump_label);
+                    asm_function.push_instruction("push rax");
+
+                    asm_function.remove_shadow();
+                    asm_function.add_shadow_type(&Type::Bool);
+
+                    assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                    return;
+                }
+
                 // Multiplication optimization
                 if self.optimization_level > 0 && *operator == "*" {
                     if let ExpressionType::Int { value: value_1 } = left.node.as_ref() {
@@ -620,13 +656,11 @@ impl<'a> AssemblyGenerator<'a> {
 
                 asm_function.push_assert();
                 self.generate_expression(asm_function, right, in_statement);
-                asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
                 asm_function.push_assert();
                 self.generate_expression(asm_function, left, in_statement);
-
-                asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+
                 match expression.resolved_type {
                     Type::Int => self.generate_int_op(asm_function, operator),
                     Type::Float => self.generate_float_op(asm_function, operator),
@@ -638,7 +672,6 @@ impl<'a> AssemblyGenerator<'a> {
                     },
                     _ => unreachable!(),
                 };
-                asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
             }
             ExpressionType::ArrayLiteral { elements } => {
@@ -1461,6 +1494,9 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.push_instructions(vec!["pop rax", "pop r10", "cmp r10, 0"]);
                 asm_function.remove_shadow();
                 asm_function.remove_shadow();
+
+                asm_function.push_comment("checking for division by zero");
+                asm_function.print_shadow_stack();
 
                 self.assert(
                     asm_function,

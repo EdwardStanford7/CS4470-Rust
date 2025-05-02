@@ -22,7 +22,7 @@ run: $(BINARY)
 
 test:
 	@clear
-	$(MAKE) -C ./grader test-hw14 PART=all > output.txt || code output.txt
+	$(MAKE) -C ./grader test-hw15 PART=all > output.txt || code output.txt
 
 teste:
 	@clear
@@ -44,6 +44,7 @@ run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw12 PART=all
 	$(MAKE) -C ./grader test-hw13 PART=all
 	$(MAKE) -C ./grader test-hw14 PART=all
+	$(MAKE) -C ./grader test-hw15 PART=all
 
 clean:
 	cargo clean
