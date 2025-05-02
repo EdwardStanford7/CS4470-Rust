@@ -7,6 +7,7 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Write;
+use std::os::macos::raw::stat;
 use std::vec;
 
 const INT_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
@@ -312,7 +313,7 @@ impl<'a> AssemblyGenerator<'a> {
                 self.generate_expression(asm_function, value, true);
                 asm_function.remove_shadow();
                 let return_type = value.resolved_type.clone();
-                match return_type {
+                match &return_type {
                     Type::Int | Type::Bool => {
                         asm_function.push_instruction("pop rax");
                     }
@@ -326,6 +327,14 @@ impl<'a> AssemblyGenerator<'a> {
                         // sussy
                         asm_function.push_instruction("mov rax, [rbp - 8]");
                         for i in (0..rank + 1).rev() {
+                            asm_function.push_instruction(&format!("mov r10, [rsp + {}]", i * 8));
+                            asm_function.push_instruction(&format!("mov [rax + {}], r10", i * 8));
+                        }
+                        asm_function.add_shadow_type(&return_type);
+                    }
+                    Type::Struct { name: _, elements } => {
+                        asm_function.push_instruction("mov rax, [rbp - 8]");
+                        for i in (0..elements.len()).rev() {
                             asm_function.push_instruction(&format!("mov r10, [rsp + {}]", i * 8));
                             asm_function.push_instruction(&format!("mov [rax + {}], r10", i * 8));
                         }
@@ -386,6 +395,13 @@ impl<'a> AssemblyGenerator<'a> {
                 new_asm_function.push_label(&format!("_{}", name));
                 new_asm_function.push_instructions(vec!["push rbp", "mov rbp, rsp"]);
 
+                let uses_rdi = Self::uses_rdi(&mut new_asm_function, statements);
+                new_asm_function.push_comment(&format!("function uses rdi: {}", uses_rdi));
+                if uses_rdi {
+                    new_asm_function.push_instruction("push rdi");
+                    new_asm_function.add_shadow_type(&Type::Int);
+                }
+
                 let mut int_param_num = 0;
                 let mut flo_param_num = 0;
                 let mut arr_param_size = 0;
@@ -442,6 +458,10 @@ impl<'a> AssemblyGenerator<'a> {
 
                 for statement in statements {
                     self.generate_statement(&mut new_asm_function, statement);
+                }
+
+                if uses_rdi {
+                    new_asm_function.remove_shadow();
                 }
 
                 self.functions.push(new_asm_function);
@@ -502,6 +522,10 @@ impl<'a> AssemblyGenerator<'a> {
 
                 asm_function.pop_assert(1);
             }
+            CommandType::Struct {
+                name: _,
+                elements: _,
+            } => {}
             _ => unimplemented!("\n\nfailure for command type {}", command.to_string()),
         }
     }
@@ -796,6 +820,17 @@ impl<'a> AssemblyGenerator<'a> {
                             arr_arg_size += 8;
                         }
                     }
+                    Type::Struct {
+                        name: _,
+                        elements: _,
+                    } => {
+                        int_arg_num += 1;
+                        asm_function.push_instruction(&format!("sub rsp, {}", ret_type.usize()));
+                        asm_function.add_shadow_type(&ret_type);
+                        if asm_function.pad_shadow_with_all(arguments) {
+                            arr_arg_size += 8;
+                        }
+                    }
                     _ => {
                         unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
                     }
@@ -833,6 +868,12 @@ impl<'a> AssemblyGenerator<'a> {
                         Type::Array { .. } => {
                             arr_arg_size += arg.resolved_type.usize();
                         }
+                        Type::Struct {
+                            name: _,
+                            elements: _,
+                        } => {
+                            arr_arg_size += arg.resolved_type.usize();
+                        }
                         _ => unimplemented!(
                             "arg type not supported: {}",
                             arg.resolved_type.to_string()
@@ -842,6 +883,13 @@ impl<'a> AssemblyGenerator<'a> {
                 match &expression.resolved_type {
                     Type::Int | Type::Bool | Type::Float => {}
                     Type::Array { .. } => {
+                        asm_function
+                            .push_instruction(&format!("lea rdi, [rsp + {}]", arr_arg_size));
+                    }
+                    Type::Struct {
+                        name: _,
+                        elements: _,
+                    } => {
                         asm_function
                             .push_instruction(&format!("lea rdi, [rsp + {}]", arr_arg_size));
                     }
@@ -864,6 +912,10 @@ impl<'a> AssemblyGenerator<'a> {
                         asm_function.add_shadow_type(&ret_type);
                     }
                     Type::Array { .. } => {}
+                    Type::Struct {
+                        name: _,
+                        elements: _,
+                    } => {}
                     _ => {
                         unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
                     }
@@ -877,6 +929,12 @@ impl<'a> AssemblyGenerator<'a> {
                     }
                     Type::Array { .. } => {
                         asm_function.push_comment("array value in stack allocated placeholder");
+                    }
+                    Type::Struct {
+                        name: _,
+                        elements: _,
+                    } => {
+                        asm_function.push_comment("struct value in stack allocated placeholder");
                     }
                     _ => {
                         unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
@@ -1114,9 +1172,6 @@ impl<'a> AssemblyGenerator<'a> {
                     asm_function.remove_shadow();
                 });
                 asm_function.add_shadow_type(&expression.resolved_type);
-
-                asm_function.print_shadow_stack();
-
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
             }
             ExpressionType::SumLoop { range, body } => {
@@ -1177,6 +1232,22 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
                 asm_function.push_comment("sum loop end");
+            }
+            ExpressionType::StructLiteral { name: _, fields } => {
+                asm_function.push_comment("struct literal start");
+                asm_function.push_assert();
+
+                for field in fields.iter().rev() {
+                    self.generate_expression(asm_function, field, in_statement);
+                }
+
+                for _ in fields.iter() {
+                    asm_function.remove_shadow();
+                }
+
+                asm_function.add_shadow_type(&expression.resolved_type);
+                assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                asm_function.push_comment("struct literal end");
             }
             _ => unimplemented!("failure because expression: {}", expression.to_string()),
         }
@@ -1934,6 +2005,40 @@ impl<'a> AssemblyGenerator<'a> {
             }
             _ => typ.to_string(),
         }
+    }
+
+    fn uses_rdi(asm_function: &mut AsmFunction, statements: &[Statement<'a>]) -> bool {
+        statements.iter().any(|statement| match &statement.node {
+            StatementType::Return { value } => Self::expr_uses_rdi(asm_function, value),
+            StatementType::Let {
+                variable: _,
+                rvalue,
+            } => Self::expr_uses_rdi(asm_function, rvalue),
+            _ => {
+                unimplemented!()
+            }
+        })
+    }
+
+    fn expr_uses_rdi(asm_function: &mut AsmFunction, expr: &Expression<'a>) -> bool {
+        let uses = match expr.node.as_ref() {
+            ExpressionType::ArrayIndex { .. } => true,
+            ExpressionType::ArrayLoop { .. } => true,
+            ExpressionType::SumLoop { .. } => true,
+            ExpressionType::Binop { left, right, .. } => {
+                Self::expr_uses_rdi(asm_function, left) || Self::expr_uses_rdi(asm_function, right)
+            }
+            ExpressionType::StructLiteral { name: _, fields } => fields
+                .iter()
+                .any(|field| Self::expr_uses_rdi(asm_function, field)),
+            _ => false,
+        };
+
+        asm_function.push_comment(&format!(
+            "checking if expression uses rdi: {}\n\t; result: {}",
+            expr, uses
+        ));
+        uses
     }
 }
 
