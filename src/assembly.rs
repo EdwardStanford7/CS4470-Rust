@@ -169,7 +169,7 @@ impl<'a> AsmFunction<'a> {
 
         for param in arguments {
             match param.resolved_type {
-                Type::Int | Type::Bool => {
+                Type::Int | Type::Bool | Type::Void => {
                     int_params += 1;
                     if int_params > INT_REGS.len() {
                         total_stack_param_size += 8;
@@ -332,9 +332,9 @@ impl<'a> AssemblyGenerator<'a> {
                         }
                         asm_function.add_shadow_type(&return_type);
                     }
-                    Type::Struct { name: _, elements } => {
+                    Type::Struct { .. } => {
                         asm_function.push_instruction("mov rax, [rbp - 8]");
-                        for i in (0..elements.len()).rev() {
+                        for i in (0..return_type.isize() / 8).rev() {
                             asm_function.push_instruction(&format!("mov r10, [rsp + {}]", i * 8));
                             asm_function.push_instruction(&format!("mov [rax + {}], r10", i * 8));
                         }
@@ -388,25 +388,18 @@ impl<'a> AssemblyGenerator<'a> {
                 parameters,
                 return_type,
                 statements,
-                has_return: _,
+                has_return,
             } => {
                 let mut new_asm_function = AsmFunction::new();
                 new_asm_function.push_label(name);
                 new_asm_function.push_label(&format!("_{}", name));
                 new_asm_function.push_instructions(vec!["push rbp", "mov rbp, rsp"]);
 
-                let uses_rdi = Self::uses_rdi(&mut new_asm_function, statements);
-                new_asm_function.push_comment(&format!("function uses rdi: {}", uses_rdi));
-                if uses_rdi {
-                    new_asm_function.push_instruction("push rdi");
-                    new_asm_function.add_shadow_type(&Type::Int);
-                }
-
                 let mut int_param_num = 0;
                 let mut flo_param_num = 0;
                 let mut arr_param_size = 0;
 
-                if matches!(return_type, Type::Array { .. }) {
+                if matches!(return_type, Type::Array { .. } | Type::Struct { .. }) {
                     new_asm_function.push_instruction(&format!("push {}", INT_REGS[int_param_num]));
                     new_asm_function.add_shadow_type(&Type::Int);
                     int_param_num += 1;
@@ -414,8 +407,8 @@ impl<'a> AssemblyGenerator<'a> {
 
                 for param in parameters {
                     match &param.1 {
-                        Type::Int | Type::Bool | Type::Float => {
-                            if matches!(param.1, Type::Int | Type::Bool) {
+                        Type::Int | Type::Bool | Type::Float | Type::Void => {
+                            if matches!(param.1, Type::Int | Type::Bool | Type::Void) {
                                 new_asm_function
                                     .push_instruction(&format!("push {}", INT_REGS[int_param_num]));
                                 int_param_num += 1;
@@ -460,8 +453,14 @@ impl<'a> AssemblyGenerator<'a> {
                     self.generate_statement(&mut new_asm_function, statement);
                 }
 
-                if uses_rdi {
-                    new_asm_function.remove_shadow();
+                if !has_return.get() {
+                    self.insert_int_constant(&mut new_asm_function, 1);
+                    new_asm_function.push_instructions(vec![
+                        "pop rax",
+                        &format!("add rsp, {}", new_asm_function.stack_size),
+                        "pop rbp",
+                        "ret",
+                    ]);
                 }
 
                 self.functions.push(new_asm_function);
@@ -584,7 +583,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.print_shadow_stack();
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
             }
-            ExpressionType::True => {
+            ExpressionType::True | ExpressionType::Void => {
                 asm_function.push_assert();
                 self.insert_int_constant(asm_function, 1);
                 asm_function.add_shadow_type(&expression.resolved_type);
@@ -806,24 +805,13 @@ impl<'a> AssemblyGenerator<'a> {
                 let mut flo_arg_num = 0;
                 let mut arr_arg_size = 0;
                 match &expression.resolved_type {
-                    Type::Int | Type::Bool | Type::Float => {
+                    Type::Int | Type::Bool | Type::Float | Type::Void => {
                         asm_function.push_comment("check call alignment");
                         asm_function.print_shadow_stack();
                         asm_function.pad_shadow_with_all(arguments);
                         asm_function.print_shadow_stack();
                     }
-                    Type::Array { .. } => {
-                        int_arg_num += 1;
-                        asm_function.push_instruction(&format!("sub rsp, {}", ret_type.usize()));
-                        asm_function.add_shadow_type(&ret_type);
-                        if asm_function.pad_shadow_with_all(arguments) {
-                            arr_arg_size += 8;
-                        }
-                    }
-                    Type::Struct {
-                        name: _,
-                        elements: _,
-                    } => {
+                    Type::Array { .. } | Type::Struct { .. } => {
                         int_arg_num += 1;
                         asm_function.push_instruction(&format!("sub rsp, {}", ret_type.usize()));
                         asm_function.add_shadow_type(&ret_type);
@@ -832,7 +820,7 @@ impl<'a> AssemblyGenerator<'a> {
                         }
                     }
                     _ => {
-                        unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
+                        unreachable!("\n\nfailure for call return type {}", ret_type.to_string())
                     }
                 }
                 for arg in arguments.iter().rev() {
@@ -850,7 +838,7 @@ impl<'a> AssemblyGenerator<'a> {
                 }
                 for arg in arguments.iter() {
                     match &arg.resolved_type {
-                        Type::Int | Type::Bool => {
+                        Type::Int | Type::Bool | Type::Void => {
                             asm_function
                                 .push_instruction(&format!("pop {}", INT_REGS[int_arg_num]));
                             int_arg_num += 1;
@@ -865,13 +853,7 @@ impl<'a> AssemblyGenerator<'a> {
                             flo_arg_num += 1;
                             asm_function.remove_shadow();
                         }
-                        Type::Array { .. } => {
-                            arr_arg_size += arg.resolved_type.usize();
-                        }
-                        Type::Struct {
-                            name: _,
-                            elements: _,
-                        } => {
+                        Type::Array { .. } | Type::Struct { .. } => {
                             arr_arg_size += arg.resolved_type.usize();
                         }
                         _ => unimplemented!(
@@ -881,20 +863,13 @@ impl<'a> AssemblyGenerator<'a> {
                     }
                 }
                 match &expression.resolved_type {
-                    Type::Int | Type::Bool | Type::Float => {}
-                    Type::Array { .. } => {
-                        asm_function
-                            .push_instruction(&format!("lea rdi, [rsp + {}]", arr_arg_size));
-                    }
-                    Type::Struct {
-                        name: _,
-                        elements: _,
-                    } => {
+                    Type::Int | Type::Bool | Type::Float | Type::Void => {}
+                    Type::Array { .. } | Type::Struct { .. } => {
                         asm_function
                             .push_instruction(&format!("lea rdi, [rsp + {}]", arr_arg_size));
                     }
                     _ => {
-                        unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
+                        unreachable!("\n\nfailure for call return type {}", ret_type.to_string())
                     }
                 }
                 asm_function.push_instruction(&format!("call _{}", function));
@@ -908,33 +883,23 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.unpad_shadow();
 
                 match &expression.resolved_type {
-                    Type::Int | Type::Bool | Type::Float => {
+                    Type::Int | Type::Bool | Type::Float | Type::Void => {
                         asm_function.add_shadow_type(&ret_type);
                     }
-                    Type::Array { .. } => {}
-                    Type::Struct {
-                        name: _,
-                        elements: _,
-                    } => {}
+                    Type::Array { .. } | Type::Struct { .. } => {}
                     _ => {
-                        unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
+                        unreachable!("\n\nfailure for call return type {}", ret_type.to_string())
                     }
                 }
                 match &expression.resolved_type {
-                    Type::Int | Type::Bool => {
+                    Type::Int | Type::Bool | Type::Void => {
                         asm_function.push_instruction("push rax");
                     }
                     Type::Float => {
                         asm_function.push_instructions(vec!["sub rsp, 8", "movsd [rsp], xmm0"]);
                     }
-                    Type::Array { .. } => {
+                    Type::Array { .. } | Type::Struct { .. } => {
                         asm_function.push_comment("array value in stack allocated placeholder");
-                    }
-                    Type::Struct {
-                        name: _,
-                        elements: _,
-                    } => {
-                        asm_function.push_comment("struct value in stack allocated placeholder");
                     }
                     _ => {
                         unimplemented!("\n\nfailure for call return type {}", ret_type.to_string())
