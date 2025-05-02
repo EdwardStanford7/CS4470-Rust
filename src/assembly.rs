@@ -356,7 +356,10 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.pad_shadow_with(expression);
                 asm_function.print_shadow_stack();
                 self.generate_expression(asm_function, expression, false);
-                self.insert_string_constant(asm_function, expression.resolved_type.to_string());
+                self.insert_string_constant(
+                    asm_function,
+                    Self::get_show_format_string(&expression.resolved_type),
+                );
                 asm_function.add_shadow_type(&Type::Int);
                 asm_function.push_instructions(vec!["lea rsi, [rsp]", "call _show"]);
                 asm_function.remove_shadow();
@@ -442,6 +445,62 @@ impl<'a> AssemblyGenerator<'a> {
                 }
 
                 self.functions.push(new_asm_function);
+            }
+            CommandType::Read {
+                source,
+                destination,
+            } => {
+                asm_function.push_comment("read start");
+                asm_function.push_assert();
+
+                asm_function.push_instruction("sub rsp, 24");
+                let array_type = Type::Array {
+                    element_type: Box::new(Type::Struct {
+                        name: "rgba",
+                        elements: vec![
+                            ("r", Type::Int),
+                            ("g", Type::Int),
+                            ("b", Type::Int),
+                            ("a", Type::Int),
+                        ],
+                    }),
+                    rank: 2,
+                };
+                asm_function.add_shadow_type(&array_type);
+
+                asm_function.push_instruction("lea rdi, [rsp]");
+                asm_function.pad_shadow();
+                asm_function.push_instruction(&format!(
+                    "lea rsi, [rel {}]",
+                    self.insert_asm_constant(AssemblyValue::String(source.to_string()))
+                ));
+                asm_function.push_instruction("call _read_image");
+                asm_function.unpad_shadow();
+
+                self.offsets.insert(
+                    destination.name.to_string(),
+                    (asm_function.stack_size, true),
+                );
+                asm_function.push_comment(&format!(
+                    "saving variable {} with offset {}",
+                    destination.name, asm_function.stack_size
+                ));
+
+                if let LValueType::Array { indices } = &destination.node {
+                    for (i, b_name) in indices.iter().enumerate() {
+                        self.offsets.insert(
+                            b_name.to_string(),
+                            (asm_function.stack_size - 8 * i as isize, true),
+                        );
+                        asm_function.push_comment(&format!(
+                            "saving variable {} with offset {}",
+                            b_name,
+                            asm_function.stack_size + 8 * i as isize
+                        ));
+                    }
+                }
+
+                asm_function.pop_assert(1);
             }
             _ => unimplemented!("\n\nfailure for command type {}", command.to_string()),
         }
@@ -1785,10 +1844,13 @@ impl<'a> AssemblyGenerator<'a> {
         in_statement: bool,
     ) {
         asm_function.push_assert();
-        let (offset, from_main) = self
-            .offsets
-            .get(name)
-            .unwrap_or_else(|| unimplemented!("expression was this: {}", expression.to_string()));
+        let (offset, from_main) = self.offsets.get(name).unwrap_or_else(|| {
+            unimplemented!(
+                "\n\texpression was this: {}\n\tcurrent offsets are: {:?}",
+                expression.to_string(),
+                self.offsets
+            )
+        });
 
         asm_function.push_comment(&format!("loading variable {} with offset {}", name, offset));
 
@@ -1850,6 +1912,28 @@ impl<'a> AssemblyGenerator<'a> {
 
     fn is_32_bit(value: &i64) -> bool {
         num_traits::cast::ToPrimitive::to_i32(value).is_some()
+    }
+
+    fn get_show_format_string(typ: &Type) -> String {
+        match typ {
+            Type::Struct { name: _, elements } => {
+                let mut format_string = "(TupleType".to_string();
+                for (_, typ) in elements {
+                    format_string.push(' ');
+                    format_string.push_str(&Self::get_show_format_string(typ));
+                }
+                format_string.push(')');
+                format_string
+            }
+            Type::Array { element_type, rank } => {
+                format!(
+                    "(ArrayType {} {})",
+                    Self::get_show_format_string(element_type),
+                    rank
+                )
+            }
+            _ => typ.to_string(),
+        }
     }
 }
 

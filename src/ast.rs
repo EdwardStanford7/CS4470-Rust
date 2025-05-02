@@ -54,22 +54,22 @@ impl Display for Command<'_> {
                 source,
                 destination,
             } => {
-                write!(f, "(ReadCmd {} {})", source, destination)
+                write!(f, "(ReadCmd \"{}\" {})", source, destination)
             }
             CommandType::Write {
                 source,
                 destination,
             } => {
-                write!(f, "(WriteCmd {} {})", source, destination)
+                write!(f, "(WriteCmd {} \"{}\")", source, destination)
             }
             CommandType::Let { variable, rvalue } => {
                 write!(f, "(LetCmd {} {})", variable, rvalue)
             }
             CommandType::Assert { condition, message } => {
-                write!(f, "(AssertCmd {} {})", condition, message)
+                write!(f, "(AssertCmd {} \"{}\")", condition, message)
             }
             CommandType::Print { message } => {
-                write!(f, "(PrintCmd {})", message)
+                write!(f, "(PrintCmd \"{}\")", message)
             }
             CommandType::Show { expression } => {
                 write!(f, "(ShowCmd {})", expression)
@@ -351,7 +351,7 @@ impl Display for Statement<'_> {
                 write!(f, "(LetStmt {} {})", variable, rvalue)
             }
             StatementType::Assert { condition, message } => {
-                write!(f, "(AssertStmt {} {})", condition, message)
+                write!(f, "(AssertStmt {} \"{}\")", condition, message)
             }
             StatementType::Return { value } => {
                 write!(f, "(ReturnStmt {})", value)
@@ -391,7 +391,13 @@ impl Type<'_> {
             Type::Float => 8,
             Type::Bool => 8,
             Type::Void => 8,
-            Type::Struct { .. } => unreachable!(),
+            Type::Struct { name: _, elements } => {
+                let mut size = 0;
+                for (_, typ) in elements {
+                    size += typ.isize();
+                }
+                size
+            }
             Type::Array {
                 element_type: _,
                 rank,
@@ -406,7 +412,13 @@ impl Type<'_> {
             Type::Float => 8,
             Type::Bool => 8,
             Type::Void => 8,
-            Type::Struct { .. } => unreachable!(),
+            Type::Struct { name: _, elements } => {
+                let mut size = 0;
+                for (_, typ) in elements {
+                    size += typ.usize();
+                }
+                size
+            }
             Type::Array {
                 element_type: _,
                 rank,

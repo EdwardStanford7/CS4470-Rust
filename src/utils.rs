@@ -93,7 +93,7 @@ impl Display for TokenType<'_> {
             TokenType::IntVal(contents) => write!(f, "INTVAL '{}'", contents),
             TokenType::FloatVal(contents) => write!(f, "FLOATVAL '{}'", contents),
             TokenType::Variable(contents) => write!(f, "VARIABLE '{}'", contents),
-            TokenType::String(contents) => write!(f, "STRING '{}'", contents),
+            TokenType::String(contents) => write!(f, "STRING '\"{}\"'", contents),
             TokenType::Op(contents) => write!(f, "OP '{}'", contents),
             TokenType::Array => write!(f, "ARRAY 'array'"),
             TokenType::Assert => write!(f, "ASSERT 'assert'"),

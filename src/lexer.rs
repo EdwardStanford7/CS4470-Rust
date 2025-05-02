@@ -266,7 +266,7 @@ impl<'a> Lexer<'a> {
 
         Ok(Token {
             position: self.current_position(),
-            token_type: TokenType::String(&self.program[start..self.position]),
+            token_type: TokenType::String(&self.program[(start + 1)..(self.position - 1)]),
         })
     }
 
