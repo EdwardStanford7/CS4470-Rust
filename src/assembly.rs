@@ -528,6 +528,22 @@ impl<'a> AssemblyGenerator<'a> {
 
                 asm_function.pop_assert(1);
             }
+            CommandType::Write {
+                source,
+                destination,
+            } => {
+                asm_function.push_comment("write start");
+                asm_function.push_assert();
+                asm_function.pad_shadow_with(source);
+                self.generate_expression(asm_function, source, false);
+                self.insert_string_constant(asm_function, destination.to_string());
+                asm_function.push_instruction("call _write_image");
+                asm_function.remove_shadow();
+                asm_function
+                    .push_instruction(&format!("add rsp, {}", source.resolved_type.usize()));
+                asm_function.unpad_shadow();
+                asm_function.pop_assert(0);
+            }
             CommandType::Struct {
                 name: _,
                 elements: _,
