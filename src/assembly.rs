@@ -141,7 +141,7 @@ impl<'a> AsmFunction<'a> {
         match self.shadow_stack.remove(index).unwrap() {
             Shadow::Padding(true) => {
                 self.stack_size -= 8;
-                self.push_instruction("add rsp, 8")
+                self.push_instruction("add rsp, 8; unpad")
             }
             Shadow::Padding(false) => self.push_comment("no unpad"),
             _ => unreachable!(),
@@ -553,6 +553,41 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.unpad_shadow();
                 asm_function.pop_assert(0);
             }
+            CommandType::Time { command } => {
+                asm_function.push_comment("time start");
+                asm_function.push_assert();
+
+                asm_function.pad_shadow();
+                asm_function.push_instruction("call _get_time");
+                asm_function.unpad_shadow();
+                asm_function.push_instructions(vec!["sub rsp, 8", "movsd [rsp], xmm0"]);
+                asm_function.add_shadow_type(&Type::Float);
+
+                let stack_size = asm_function.stack_size;
+
+                self.generate_command(asm_function, command);
+
+                asm_function.pad_shadow();
+                asm_function.push_instruction("call _get_time");
+                asm_function.unpad_shadow();
+                asm_function.push_instructions(vec![
+                    "sub rsp, 8",
+                    "movsd [rsp], xmm0",
+                    "movsd xmm0, [rsp]",
+                    "add rsp, 8",
+                    &format!(
+                        "movsd xmm1, [rsp + {}]",
+                        asm_function.stack_size - stack_size,
+                    ),
+                    "subsd xmm0, xmm1",
+                ]);
+
+                asm_function.pad_shadow();
+                asm_function.push_instruction("call _print_time");
+                asm_function.unpad_shadow();
+
+                asm_function.pop_assert(0);
+            }
             CommandType::Struct {
                 name: _,
                 elements: _,
@@ -566,7 +601,6 @@ impl<'a> AssemblyGenerator<'a> {
                 self.assert(asm_function, "jne", message);
                 assert!(asm_function.pop_assert(0), "\n\n{}", asm_function.body);
             }
-            _ => unimplemented!("\n\nfailure for command type {}", command.to_string()),
         }
     }
 
