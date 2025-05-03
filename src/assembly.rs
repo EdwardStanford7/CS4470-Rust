@@ -7,7 +7,6 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Write;
-use std::os::macos::raw::stat;
 use std::vec;
 
 const INT_REGS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
@@ -314,7 +313,7 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.remove_shadow();
                 let return_type = value.resolved_type.clone();
                 match &return_type {
-                    Type::Int | Type::Bool => {
+                    Type::Int | Type::Bool | Type::Void => {
                         asm_function.push_instruction("pop rax");
                     }
                     Type::Float => {
@@ -340,7 +339,7 @@ impl<'a> AssemblyGenerator<'a> {
                         }
                         asm_function.add_shadow_type(&return_type);
                     }
-                    _ => unimplemented!(
+                    _ => unreachable!(
                         "\n\nfailure for function return type {}",
                         return_type.to_string()
                     ),
@@ -352,7 +351,15 @@ impl<'a> AssemblyGenerator<'a> {
             StatementType::Let { variable, rvalue } => {
                 self.handle_let(asm_function, variable, rvalue, true);
             }
-            _ => unimplemented!("\n\nfailure because of statement {}", statement.to_string()),
+            StatementType::Assert { condition, message } => {
+                asm_function.push_comment("assert start");
+                asm_function.push_assert();
+                self.generate_expression(asm_function, condition, true);
+                asm_function.push_instructions(vec!["pop rax", "cmp rax, 0"]);
+                asm_function.remove_shadow();
+                self.assert(asm_function, "jne", message);
+                assert!(asm_function.pop_assert(0), "\n\n{}", asm_function.body);
+            }
         }
     }
 
@@ -525,6 +532,15 @@ impl<'a> AssemblyGenerator<'a> {
                 name: _,
                 elements: _,
             } => {}
+            CommandType::Assert { condition, message } => {
+                asm_function.push_comment("assert start");
+                asm_function.push_assert();
+                self.generate_expression(asm_function, condition, false);
+                asm_function.push_instructions(vec!["pop rax", "cmp rax, 0"]);
+                asm_function.remove_shadow();
+                self.assert(asm_function, "jne", message);
+                assert!(asm_function.pop_assert(0), "\n\n{}", asm_function.body);
+            }
             _ => unimplemented!("\n\nfailure for command type {}", command.to_string()),
         }
     }
@@ -2010,40 +2026,6 @@ impl<'a> AssemblyGenerator<'a> {
             }
             _ => typ.to_string(),
         }
-    }
-
-    fn uses_rdi(asm_function: &mut AsmFunction, statements: &[Statement<'a>]) -> bool {
-        statements.iter().any(|statement| match &statement.node {
-            StatementType::Return { value } => Self::expr_uses_rdi(asm_function, value),
-            StatementType::Let {
-                variable: _,
-                rvalue,
-            } => Self::expr_uses_rdi(asm_function, rvalue),
-            _ => {
-                unimplemented!()
-            }
-        })
-    }
-
-    fn expr_uses_rdi(asm_function: &mut AsmFunction, expr: &Expression<'a>) -> bool {
-        let uses = match expr.node.as_ref() {
-            ExpressionType::ArrayIndex { .. } => true,
-            ExpressionType::ArrayLoop { .. } => true,
-            ExpressionType::SumLoop { .. } => true,
-            ExpressionType::Binop { left, right, .. } => {
-                Self::expr_uses_rdi(asm_function, left) || Self::expr_uses_rdi(asm_function, right)
-            }
-            ExpressionType::StructLiteral { name: _, fields } => fields
-                .iter()
-                .any(|field| Self::expr_uses_rdi(asm_function, field)),
-            _ => false,
-        };
-
-        asm_function.push_comment(&format!(
-            "checking if expression uses rdi: {}\n\t; result: {}",
-            expr, uses
-        ));
-        uses
     }
 }
 

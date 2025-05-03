@@ -138,11 +138,16 @@ fn typecheck_type<'a>(
     position: Position,
 ) -> Result<Type<'a>, TypeError> {
     match &typ {
-        Type::Array {
-            element_type,
-            rank: _,
-        } => {
-            typecheck_type(element_type.as_ref().clone(), scope, environment, position)?;
+        Type::Array { element_type, rank } => {
+            return Ok(Type::Array {
+                element_type: Box::new(typecheck_type(
+                    element_type.as_ref().clone(),
+                    scope,
+                    environment,
+                    position,
+                )?),
+                rank: *rank,
+            });
         }
         Type::Struct { name, elements: _ } => {
             match environment.get_identifier(scope, position, name) {
@@ -343,7 +348,7 @@ fn typecheck_command<'a>(
             has_return,
         } => {
             // Check return type
-            let fn_return_type =
+            *return_type =
                 typecheck_type(return_type.clone(), "global", environment, command.position)?;
 
             // Create parameter types list
@@ -362,7 +367,7 @@ fn typecheck_command<'a>(
             // Add function to global environment for recursive calls
             let function_type = Type::Function {
                 param_types,
-                return_type: Box::new(fn_return_type.clone()),
+                return_type: Box::new(return_type.clone()),
             };
 
             environment.add_identifier("global", name, function_type, command.position)?;
@@ -388,7 +393,7 @@ fn typecheck_command<'a>(
                     }
                     StatementType::Return { value } => {
                         let ret_type = typecheck_expression(value, name, environment)?;
-                        if !types_equal(&fn_return_type, &ret_type) {
+                        if !types_equal(return_type, &ret_type) {
                             return Err(TypeError::new(
                                 "Type of expression does not match return type of function"
                                     .to_string(),
@@ -401,7 +406,7 @@ fn typecheck_command<'a>(
             }
 
             // Check for implicit return
-            if !has_return.get() && !types_equal(&fn_return_type, &Type::Void) {
+            if !has_return.get() && !types_equal(return_type, &Type::Void) {
                 return Err(TypeError::new(
                     "Implicit return type (void) does not match return type of function"
                         .to_string(),
