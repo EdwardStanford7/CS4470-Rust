@@ -544,6 +544,15 @@ impl<'a> AssemblyGenerator<'a> {
                 asm_function.unpad_shadow();
                 asm_function.pop_assert(0);
             }
+            CommandType::Print { message } => {
+                asm_function.push_comment("print start");
+                asm_function.push_assert();
+                self.insert_string_constant(asm_function, message.to_string());
+                asm_function.pad_shadow();
+                asm_function.push_instruction("call _print");
+                asm_function.unpad_shadow();
+                asm_function.pop_assert(0);
+            }
             CommandType::Struct {
                 name: _,
                 elements: _,
