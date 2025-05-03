@@ -1214,7 +1214,47 @@ impl<'a> AssemblyGenerator<'a> {
                 assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
                 asm_function.push_comment("struct literal end");
             }
-            _ => unimplemented!("failure because expression: {}", expression.to_string()),
+            ExpressionType::Dot {
+                struct_variable,
+                field,
+            } => {
+                asm_function.push_comment("dot start");
+                asm_function.push_assert();
+                self.generate_expression(asm_function, struct_variable, in_statement);
+
+                let mut offset_into_struct = 0;
+                let mut field_type = Type::Unresolved;
+                if let Type::Struct { name: _, elements } = &struct_variable.resolved_type {
+                    for element in elements {
+                        if element.0 == *field {
+                            field_type = element.1.clone();
+                            break;
+                        }
+                        offset_into_struct += element.1.usize();
+                    }
+                }
+
+                asm_function.push_comment("getting field from struct");
+                for i in (0..field_type.usize()).step_by(8).rev() {
+                    asm_function.push_instructions(vec![
+                        &format!("mov r10, [rsp + {}]", offset_into_struct + i),
+                        &format!(
+                            "mov [rsp + {}], r10",
+                            struct_variable.resolved_type.usize() - field_type.usize() + i
+                        ),
+                    ]);
+                }
+                asm_function.push_instruction(&format!(
+                    "add rsp, {}",
+                    struct_variable.resolved_type.usize() - field_type.usize()
+                ));
+
+                asm_function.remove_shadow(); // remove struct type from sha
+                asm_function.add_shadow_type(&field_type); // add field type to shadow stack
+
+                assert!(asm_function.pop_assert(1), "\n\n{}", asm_function.body);
+                asm_function.push_comment("dot end");
+            }
         }
     }
 
