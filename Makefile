@@ -17,12 +17,24 @@ diff-one:
 	grader/jplc grader/$(FO)/$(SU)/$(FI).jpl -s -O1 > ref.txt
 	code --diff my.txt ref.txt
 
+diff-onei:
+	@clear
+	cargo run -- grader/$(FO)/$(SU)/$(FI).jpl -s -O1 > my.txt
+	grader/jplc grader/$(FO)/$(SU)/$(FI).jpl -s -O1 > ref.txt
+	code-insiders --diff my.txt ref.txt
+
+diff-testi:
+	@clear
+	cargo run -- test.jpl -s -O1 > my.txt
+	grader/jplc test.jpl -s -O1 > ref.txt
+	code-insiders --diff my.txt ref.txt
+
 run: $(BINARY)
 	$(BINARY) $(TEST) $(FLAGS)
 
 test:
 	@clear
-	$(MAKE) -C ./grader test-hw15 PART=all > output.txt || code output.txt
+	($(MAKE) -C ./grader test-hw15 PART=all > output.txt || code output.txt) || grep "Passed" output.txt
 
 teste:
 	@clear
@@ -30,7 +42,7 @@ teste:
 
 testi:
 	@clear
-	$(MAKE) -C ./grader test-hw12 PART=all > output.txt || open output.txt
+	$(MAKE) -C ./grader test-hw15 PART=all > output.txt || open output.txt
 
 run-all: $(BINARY)
 	$(MAKE) -C ./grader test-hw2 PART=all

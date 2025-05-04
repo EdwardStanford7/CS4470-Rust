@@ -798,7 +798,7 @@ impl<'a> AssemblyGenerator<'a> {
                             return;
                         }
                     } else if let ExpressionType::Int { value: value_2 } = right.node.as_ref() {
-                        if (Self::is_32_bit(value_2) || (*value_2 as u64).is_power_of_two())
+                        if (Self::is_32_bit(value_2) && (*value_2 as u64).is_power_of_two())
                             && *value_2 != 0
                         {
                             self.generate_expression(asm_function, left, in_statement);
