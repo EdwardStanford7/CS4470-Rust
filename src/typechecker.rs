@@ -357,9 +357,10 @@ fn typecheck_command<'a>(
             environment.add_scope(name, "global");
 
             // Add parameters to local scope
-            for (param, param_type) in parameters {
+            for (param, param_type) in parameters.iter_mut() {
                 let type_value =
                     typecheck_type(param_type.clone(), "global", environment, param.position)?;
+                *param_type = type_value.clone();
                 param_types.push(type_value.clone());
                 bind_lvalue(param, type_value, name, environment)?;
             }

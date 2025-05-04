@@ -180,7 +180,7 @@ impl<'a> AsmFunction<'a> {
                         total_stack_param_size += 8;
                     }
                 }
-                Type::Array { .. } => {
+                Type::Array { .. } | Type::Struct { .. } => {
                     total_stack_param_size += param.resolved_type.isize();
                 }
                 _ => unreachable!(),
@@ -437,7 +437,6 @@ impl<'a> AssemblyGenerator<'a> {
                             ));
                         }
                         Type::Array { .. } => {
-                            //sus
                             let data_pointer = -arr_param_size - 16;
                             self.offsets
                                 .insert(param.0.name.to_string(), (data_pointer, false));
@@ -448,6 +447,12 @@ impl<'a> AssemblyGenerator<'a> {
                                     self.offsets.insert(b_name.to_string(), (loc, false));
                                 }
                             }
+                        }
+                        Type::Struct { .. } => {
+                            let data_pointer = -arr_param_size - 16;
+                            self.offsets
+                                .insert(param.0.name.to_string(), (data_pointer, false));
+                            arr_param_size += param.1.isize();
                         }
                         _ => todo!("struct param types ({})", param.1.to_string()),
                     }
@@ -900,14 +905,16 @@ impl<'a> AssemblyGenerator<'a> {
                 }
                 for arg in arguments.iter().rev() {
                     if let Type::Array { .. } = arg.resolved_type {
-                        //stack messed up here
-                        asm_function.push_comment("check here");
+                        asm_function.print_shadow_stack();
+                        self.generate_expression(asm_function, arg, in_statement);
+                    }
+                    if let Type::Struct { .. } = arg.resolved_type {
                         asm_function.print_shadow_stack();
                         self.generate_expression(asm_function, arg, in_statement);
                     }
                 }
                 for arg in arguments.iter().rev() {
-                    if !matches!(arg.resolved_type, Type::Array { .. }) {
+                    if !matches!(arg.resolved_type, Type::Array { .. }|Type::Struct { .. }) {
                         self.generate_expression(asm_function, arg, in_statement);
                     }
                 }
@@ -949,7 +956,7 @@ impl<'a> AssemblyGenerator<'a> {
                 }
                 asm_function.push_instruction(&format!("call _{}", function));
                 for arg in arguments.iter() {
-                    if matches!(arg.resolved_type, Type::Array { .. }) {
+                    if matches!(arg.resolved_type, Type::Array { .. } | Type::Struct { .. }) {
                         asm_function
                             .push_instruction(&format!("add rsp, {}", arg.resolved_type.usize()));
                         asm_function.remove_shadow();
@@ -2098,7 +2105,7 @@ fn string_replacement_optimization(code: &str) -> String {
     let replacements = vec![
         // Replace imul with power of 2 by shift
         RegexReplacement {
-            pattern: Regex::new(r"imul rax, (\d+)").unwrap(),
+            pattern: Regex::new(r"\bimul rax, (\d+)\b").unwrap(),
             replacer: Box::new(|caps| {
                 let value = caps[1].parse::<u64>().unwrap();
                 // Check if it's a power of 2
@@ -2113,7 +2120,7 @@ fn string_replacement_optimization(code: &str) -> String {
         },
         // Remove multiply by 1 instructions entirely.
         RegexReplacement {
-            pattern: Regex::new(r"imul rax, 1").unwrap(),
+            pattern: Regex::new(r"\bimul rax, 1\b").unwrap(),
             replacer: Box::new(|_| "".to_string()),
         },
     ];
