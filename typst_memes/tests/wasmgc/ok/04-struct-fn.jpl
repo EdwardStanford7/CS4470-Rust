@@ -1,0 +1,16 @@
+struct pair {
+  x: int
+  y: float
+}
+
+fn add(a: int, b: int): int {
+  return a + b
+}
+
+fn scale(p: float, k: float): float {
+  return p * k
+}
+
+let p = pair{add(2, 3), scale(2.0, 4.0)}
+show p.x
+show p.y

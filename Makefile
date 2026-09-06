@@ -1,4 +1,7 @@
 TEST = test.jpl
+# zig build-exe's MachO linker can't handle the Darwin 27 SDK's libSystem.tbd,
+# so emit an object and let clang link it. Override ZIG to use another toolchain.
+ZIG ?= $(HOME)/Downloads/zig-aarch64-macos-0.16.0-dev.1363+d2b1aa48a/zig
 FLAGS = -O -whole-module-optimization -cross-module-optimization -lto=llvm-full
 LINUXFLAGS =  -static-stdlib
 DEBUGFLAGS = -g -sanitize=address,undefined
@@ -40,9 +43,12 @@ check-ref:
 	./main t2.jpl -l > output.txt
 	(diff output.txt steoutput.expected > diff.txt) || code-insiders diff.txt
 
-hyp:
+zig-main:
+	$(ZIG) build-obj src/main.zig -OReleaseFast -lc
+	clang main.o -o main
+
+hyp: zig-main
 	@clear
-	zig build-exe src/main.zig -OReleaseFast
 	hyperfine --warmup 3 './main t2.jpl -l'
 
 hyp-smol:

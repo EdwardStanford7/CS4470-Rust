@@ -1,0 +1,2 @@
+read image "in.png" to pixels[h, w]
+write image pixels to "out.png"

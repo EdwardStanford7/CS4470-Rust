@@ -1,0 +1,18 @@
+struct pair {
+  x: int
+  y: float
+}
+
+fn add(a: int, b: int): int {
+  return a + b
+}
+
+fn noop(): void {
+  assert true, "ok"
+}
+
+let p = pair{add(1, 2), sqrt(4.0)}
+show p.x
+let xs[n] = [10, 20, 30]
+show xs[1]
+let z = noop()

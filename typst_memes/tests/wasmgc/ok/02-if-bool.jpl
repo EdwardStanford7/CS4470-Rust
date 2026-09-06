@@ -1,0 +1,6 @@
+let a = true
+let b = false
+show a && b
+show a || b
+show if 3 < 5 then 100 else 200
+show !a

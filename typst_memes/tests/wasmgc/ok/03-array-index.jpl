@@ -1,0 +1,3 @@
+let xs = [10, 20, 30, 40]
+show xs[0]
+show xs[3]

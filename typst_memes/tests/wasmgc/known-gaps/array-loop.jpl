@@ -1,0 +1,4 @@
+let sq = array[i: 5] i * i
+show sq[4]
+let total = sum[i: 5] i
+show total

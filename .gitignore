@@ -5,3 +5,4 @@ rt
 .zig-cache
 **/*.o
 main
+xv6-*

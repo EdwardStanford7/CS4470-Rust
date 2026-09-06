@@ -11,7 +11,17 @@ pub fn panic(reason: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noretur
     std.process.exit(0);
 }
 
-var outw: std.fs.File.Writer = undefined;
+const Out = struct {
+    fn write(_: Out, bytes: []const u8) !usize {
+        return std.posix.write(1, bytes);
+    }
+    fn print(_: Out, comptime fmt: []const u8, args: anytype) !void {
+        var buf: [512]u8 = undefined;
+        const s = try std.fmt.bufPrint(&buf, fmt, args);
+        _ = try std.posix.write(1, s);
+    }
+};
+var outw: Out = .{};
 var lex_types: []defs.tipe = undefined;
 var lex_values: []defs.value = undefined;
 var imp: []u8 = undefined;
@@ -19,7 +29,6 @@ var v1: []u8 = undefined;
 var v2: []u8 = undefined;
 
 pub fn main() !void {
-    outw = std.io.getStdOut().writer();
     // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     // _ = gpa.allocator();
 
@@ -38,7 +47,7 @@ pub fn main() !void {
         _ = outw.write("did not find a flag\n") catch unreachable;
         return;
     }
-    const imp0 = std.fs.cwd().readFileAlloc(std.heap.page_allocator, v1, 1000000000) catch unreachable;
+    const imp0 = std.fs.cwd().readFileAlloc(v1, std.heap.page_allocator, .limited(1000000000)) catch unreachable;
     imp = std.heap.page_allocator.realloc(imp0, imp0.len + 1) catch unreachable;
     imp[imp0.len] = 255;
 

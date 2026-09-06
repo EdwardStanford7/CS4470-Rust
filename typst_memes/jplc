@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+mode=wat
+opt=0
+program=
+for arg in "$@"; do
+  case "$arg" in
+    -l|--lex) mode=lex ;;
+    -p|--parse) mode=parse ;;
+    -t|--typecheck) mode=typecheck ;;
+    -i|--intermediate) mode=c ;;
+    -s|--assembly) mode=wat ;;
+    -O0) opt=0 ;;
+    -O1) opt=1 ;;
+    -O2) opt=2 ;;
+    -O3) opt=3 ;;
+    -O*) opt=1 ;;
+    *) program=$arg ;;
+  esac
+done
+if [ -z "$program" ]; then
+  printf '%s\n' 'Compilation failed: missing input file'
+  exit 0
+fi
+case "$program" in /*) ;; *) program=$(cd "$(dirname "$program")" && pwd)/$(basename "$program") ;; esac
+tmp_err=${TMPDIR:-/tmp}/typst-jplc-$$.err
+if json=$(typst query --root / --input program="$program" --input mode="$mode" --input opt="$opt" "$here/cli-query.typ" '<compiler-output>' --field value --one 2>"$tmp_err"); then
+  printf '%s' "$json" | jq -r .
+  case "$mode" in
+    lex) printf '%s\n' 'Compilation succeeded, lexical analysis complete.' ;;
+    parse) printf '%s\n' 'Compilation succeeded, parsing complete.' ;;
+    typecheck) printf '%s\n' 'Compilation succeeded: type analysis complete' ;;
+    c) printf '%s\n' 'Compilation succeeded: intermediate code generation complete' ;;
+    wat) printf '%s\n' 'Compilation succeeded, assembly generation complete.' ;;
+  esac
+else
+  first=$(sed -n '1s/^error: //p' "$tmp_err")
+  printf 'Compilation failed: %s\n' "${first:-Typst evaluation failed}"
+fi
+rm -f "$tmp_err"

@@ -1,0 +1,5 @@
+let x = 1 + 2 * 3
+show x
+let y = 7.0 / 2.0
+show y
+show 10 % 3
