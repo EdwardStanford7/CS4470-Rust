@@ -474,7 +474,7 @@ impl<'a> Lexer<'a> {
     }
 }
 
-pub fn lex(program: &str) -> Result<Vec<Token>, LexError> {
+pub fn lex(program: &'_ str) -> Result<Vec<Token<'_>>, LexError> {
     let mut lexer = Lexer::new(program);
     lexer.lex()
 }
