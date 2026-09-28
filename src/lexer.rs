@@ -4,6 +4,7 @@ use core::str;
 /// Represents the state of the lexer and provides helper methods
 struct Lexer<'a> {
     program: &'a str,
+    bytes: &'a [u8],
     position: usize,
     line: usize,
     column: usize,
@@ -14,6 +15,7 @@ impl<'a> Lexer<'a> {
     fn new(program: &'a str) -> Self {
         Lexer {
             program,
+            bytes: program.as_bytes(),
             position: 0,
             line: 1,
             column: 0,
@@ -28,21 +30,13 @@ impl<'a> Lexer<'a> {
     /// Get the current byte
     /// Returns 0 if the position is at the end of the program
     fn current_byte(&self) -> u8 {
-        self.program
-            .as_bytes()
-            .get(self.position)
-            .cloned()
-            .unwrap_or(0)
+        self.bytes.get(self.position).cloned().unwrap_or(0)
     }
 
     /// Get the next byte
     /// Returns 0 if the position is at the end of the program
     fn peek_byte(&self) -> u8 {
-        self.program
-            .as_bytes()
-            .get(self.position + 1)
-            .cloned()
-            .unwrap_or(0)
+        self.bytes.get(self.position + 1).cloned().unwrap_or(0)
     }
 
     /// Advance position by one character
