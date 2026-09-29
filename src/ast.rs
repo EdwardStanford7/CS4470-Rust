@@ -1,5 +1,8 @@
 use crate::utils::Position;
-use std::{cell::Cell, fmt::Display};
+use std::{
+    cell::Cell,
+    fmt::{self, Display},
+};
 
 // -------------------------------------------------------------------------------------------- Command Nodes -----------------------------------------------------------------------------------------------
 
@@ -84,29 +87,30 @@ impl Display for Command<'_> {
                 statements,
                 has_return: _,
             } => {
-                let mut result = format!("(FnCmd {} ((", name);
+                write!(f, "(FnCmd {} ((", name)?;
                 let mut first = true;
                 for (var, typ) in parameters {
                     if !first {
-                        result.push(' ');
+                        write!(f, " ")?;
                     }
-                    result.push_str(&format!("{}{}", var, type_to_string(typ)));
+                    write!(f, "{}", var)?;
+                    write_type_suffix(f, typ)?;
                     first = false;
                 }
-                result.push_str(&format!(")){}", type_to_string(return_type)));
+                write!(f, "))")?;
+                write_type_suffix(f, return_type)?;
                 for stmt in statements {
-                    result.push_str(&format!(" {}", stmt));
+                    write!(f, " {}", stmt)?;
                 }
-                result.push(')');
-                write!(f, "{}", result)
+                write!(f, ")")
             }
             CommandType::Struct { name, elements } => {
-                let mut result = format!("(StructCmd {}", name);
+                write!(f, "(StructCmd {}", name)?;
                 for (field, typ) in elements {
-                    result.push_str(&format!(" {}{}", field, type_to_string(typ)));
+                    write!(f, " {}", field)?;
+                    write_type_suffix(f, typ)?;
                 }
-                result.push(')');
-                write!(f, "{}", result)
+                write!(f, ")")
             }
         }
     }
@@ -181,144 +185,123 @@ pub enum ExpressionType<'a> {
 impl Display for Expression<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.node.as_ref() {
-            ExpressionType::Int { value } => write!(
-                f,
-                "(IntExpr{} {})",
-                type_to_string(&self.resolved_type),
-                value
-            ),
+            ExpressionType::Int { value } => {
+                write!(f, "(IntExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {})", value)
+            }
             ExpressionType::Float { value } => {
-                write!(
-                    f,
-                    "(FloatExpr{} {})",
-                    type_to_string(&self.resolved_type),
-                    *value as i64
-                )
+                write!(f, "(FloatExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {})", *value as i64)
             }
-            ExpressionType::True => write!(f, "(TrueExpr{})", type_to_string(&self.resolved_type)),
+            ExpressionType::True => {
+                write!(f, "(TrueExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, ")")
+            }
             ExpressionType::False => {
-                write!(f, "(FalseExpr{})", type_to_string(&self.resolved_type))
+                write!(f, "(FalseExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, ")")
             }
-            ExpressionType::Void => write!(f, "(VoidExpr{})", type_to_string(&self.resolved_type)),
+            ExpressionType::Void => {
+                write!(f, "(VoidExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, ")")
+            }
             ExpressionType::Variable { name } => {
-                write!(
-                    f,
-                    "(VarExpr{} {})",
-                    type_to_string(&self.resolved_type),
-                    name
-                )
+                write!(f, "(VarExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {})", name)
             }
             ExpressionType::ArrayLiteral { elements } => {
-                let mut result =
-                    format!("(ArrayLiteralExpr{}", type_to_string(&self.resolved_type));
+                write!(f, "(ArrayLiteralExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
                 for element in elements {
-                    result.push_str(&format!(" {}", element));
+                    write!(f, " {}", element)?;
                 }
-                result.push(')');
-                write!(f, "{}", result)
+                write!(f, ")")
             }
             ExpressionType::ArrayIndex { array, indices } => {
-                let mut result = format!(
-                    "(ArrayIndexExpr{} {}",
-                    type_to_string(&self.resolved_type),
-                    array
-                );
+                write!(f, "(ArrayIndexExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {}", array)?;
                 for index in indices {
-                    result.push_str(&format!(" {}", index));
+                    write!(f, " {}", index)?;
                 }
-                result.push(')');
-                write!(f, "{}", result)
+                write!(f, ")")
             }
             ExpressionType::Dot {
                 struct_variable,
                 field,
             } => {
-                write!(
-                    f,
-                    "(DotExpr{} {} {})",
-                    type_to_string(&self.resolved_type),
-                    struct_variable,
-                    field
-                )
+                write!(f, "(DotExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {} {})", struct_variable, field)
             }
             ExpressionType::Call {
                 function,
                 arguments,
             } => {
-                let mut result = format!(
-                    "(CallExpr{} {}",
-                    type_to_string(&self.resolved_type),
-                    function
-                );
+                write!(f, "(CallExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {}", function)?;
                 for arg in arguments {
-                    result.push_str(&format!(" {}", arg));
+                    write!(f, " {}", arg)?;
                 }
-                result.push(')');
-                write!(f, "{}", result)
+                write!(f, ")")
             }
             ExpressionType::StructLiteral { name, fields } => {
-                let mut result = format!(
-                    "(StructLiteralExpr{} {}",
-                    type_to_string(&self.resolved_type),
-                    name
-                );
+                write!(f, "(StructLiteralExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {}", name)?;
                 for field in fields {
-                    result.push_str(&format!(" {}", field));
+                    write!(f, " {}", field)?;
                 }
-                result.push(')');
-                write!(f, "{}", result)
+                write!(f, ")")
             }
             ExpressionType::Unop {
                 operator,
                 expression,
             } => {
-                write!(
-                    f,
-                    "(UnopExpr{} {} {})",
-                    type_to_string(&self.resolved_type),
-                    operator,
-                    expression
-                )
+                write!(f, "(UnopExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {} {})", operator, expression)
             }
             ExpressionType::Binop {
                 operator,
                 left,
                 right,
-            } => write!(
-                f,
-                "(BinopExpr{} {} {} {})",
-                type_to_string(&self.resolved_type),
-                left,
-                operator,
-                right
-            ),
+            } => {
+                write!(f, "(BinopExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {} {} {})", left, operator, right)
+            }
             ExpressionType::If {
                 condition,
                 then_branch,
                 else_branch,
-            } => write!(
-                f,
-                "(IfExpr{} {} {} {})",
-                type_to_string(&self.resolved_type),
-                condition,
-                then_branch,
-                else_branch
-            ),
+            } => {
+                write!(f, "(IfExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
+                write!(f, " {} {} {})", condition, then_branch, else_branch)
+            }
             ExpressionType::ArrayLoop { range, body } => {
-                let mut result = format!("(ArrayLoopExpr{}", type_to_string(&self.resolved_type));
+                write!(f, "(ArrayLoopExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
                 for (var, expr) in range {
-                    result.push_str(&format!(" {} {}", var, expr));
+                    write!(f, " {} {}", var, expr)?;
                 }
-                result.push_str(&format!(" {})", body));
-                write!(f, "{}", result)
+                write!(f, " {})", body)
             }
             ExpressionType::SumLoop { range, body } => {
-                let mut result = format!("(SumLoopExpr{}", type_to_string(&self.resolved_type));
+                write!(f, "(SumLoopExpr")?;
+                write_type_suffix(f, &self.resolved_type)?;
                 for (var, expr) in range {
-                    result.push_str(&format!(" {} {}", var, expr));
+                    write!(f, " {} {}", var, expr)?;
                 }
-                result.push_str(&format!(" {})", body));
-                write!(f, "{}", result)
+                write!(f, " {})", body)
             }
         }
     }
@@ -428,10 +411,10 @@ impl Type<'_> {
     }
 }
 
-fn type_to_string(typ: &Type<'_>) -> String {
+fn write_type_suffix(f: &mut fmt::Formatter<'_>, typ: &Type<'_>) -> fmt::Result {
     match typ {
-        Type::Unresolved => "".to_string(),
-        _ => format!(" {}", typ),
+        Type::Unresolved => Ok(()),
+        _ => write!(f, " {}", typ),
     }
 }
 
@@ -473,12 +456,11 @@ impl Display for LValue<'_> {
         match &self.node {
             LValueType::Variable => write!(f, "(VarLValue {})", self.name),
             LValueType::Array { indices } => {
-                let mut result = format!("(ArrayLValue {}", self.name);
+                write!(f, "(ArrayLValue {}", self.name)?;
                 for idx in indices {
-                    result.push_str(&format!(" {}", idx));
+                    write!(f, " {}", idx)?;
                 }
-                result.push(')');
-                write!(f, "{}", result)
+                write!(f, ")")
             }
         }
     }
