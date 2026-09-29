@@ -5,6 +5,7 @@ mod parser;
 mod typechecker;
 mod utils;
 use clap::Parser;
+use std::fmt::Write as _;
 use std::io::{self, Write};
 use utils::*;
 
@@ -90,6 +91,21 @@ fn main() {
     }
 }
 
+/// Render compiler diagnostics in memory, then write them to stdout once.
+fn print_diagnostics<T: std::fmt::Display>(
+    items: &[T],
+    success_message: &str,
+) -> Result<(), CompilerError> {
+    let mut output = String::new();
+    for item in items {
+        writeln!(output, "{}", item).expect("writing to a String is infallible");
+    }
+    writeln!(output, "{}", success_message).expect("writing to a String is infallible");
+
+    io::stdout().lock().write_all(output.as_bytes())?;
+    Ok(())
+}
+
 fn compile() -> Result<(), CompilerError> {
     let args = Args::parse();
 
@@ -101,15 +117,7 @@ fn compile() -> Result<(), CompilerError> {
 
     // Print tokens if in lex mode
     if args.lex {
-        let stdout = io::stdout();
-        let mut buffer = io::BufWriter::new(stdout.lock());
-
-        for token in &tokens {
-            writeln!(buffer, "{}", token)?;
-        }
-
-        writeln!(buffer, "Compilation succeeded, lexical analysis complete.")?;
-        buffer.flush()?;
+        print_diagnostics(&tokens, "Compilation succeeded, lexical analysis complete.")?;
         return Ok(());
     }
 
@@ -118,15 +126,7 @@ fn compile() -> Result<(), CompilerError> {
 
     // Print AST if in parse mode
     if args.parse {
-        let stdout = io::stdout();
-        let mut buffer = io::BufWriter::new(stdout.lock());
-
-        for command in &commands {
-            writeln!(buffer, "{}", command)?;
-        }
-
-        writeln!(buffer, "Compilation succeeded, parsing complete.")?;
-        buffer.flush()?;
+        print_diagnostics(&commands, "Compilation succeeded, parsing complete.")?;
         return Ok(());
     }
 
@@ -135,15 +135,7 @@ fn compile() -> Result<(), CompilerError> {
 
     // Print typechecked AST if in typecheck mode
     if args.typecheck {
-        let stdout = io::stdout();
-        let mut buffer = io::BufWriter::new(stdout.lock());
-
-        for command in &commands {
-            writeln!(buffer, "{}", command)?;
-        }
-
-        writeln!(buffer, "Compilation succeeded, typechecking complete.")?;
-        buffer.flush()?;
+        print_diagnostics(&commands, "Compilation succeeded, typechecking complete.")?;
         return Ok(());
     }
 
