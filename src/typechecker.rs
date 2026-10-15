@@ -150,12 +150,8 @@ fn typecheck_type<'a>(
             });
         }
         Type::Struct { name, elements: _ } => {
-            match environment.get_identifier(scope, position, name) {
-                Ok(struct_type) => {
-                    return Ok(struct_type);
-                }
-                Err(err) => return Err(err),
-            }
+            let struct_type = environment.get_identifier(scope, position, name)?;
+            return Ok(struct_type);
         }
         Type::Function {
             param_types,

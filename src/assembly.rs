@@ -152,8 +152,7 @@ impl<'a> AsmFunction<'a> {
         self.push_comment(&format!(
             "shadow stack #{}#: {}",
             self.stack_size,
-            &self
-                .shadow_stack
+            self.shadow_stack
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>()
@@ -914,7 +913,7 @@ impl<'a> AssemblyGenerator<'a> {
                     }
                 }
                 for arg in arguments.iter().rev() {
-                    if !matches!(arg.resolved_type, Type::Array { .. }|Type::Struct { .. }) {
+                    if !matches!(arg.resolved_type, Type::Array { .. } | Type::Struct { .. }) {
                         self.generate_expression(asm_function, arg, in_statement);
                     }
                 }
